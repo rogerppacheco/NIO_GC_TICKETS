@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Demandas do PDV · {{ parceiro.nome }}{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Demandas do PDV</h1>
+    <p>Todas as demandas de {{ parceiro.codigo_pdv }} — {{ parceiro.nome }}
+      · você: {{ contato.nome }}</p>
+  </div>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    <a class="btn btn-primary" href="{% url 'abrir_demanda_form' %}">Nova demanda</a>
+    <a class="btn btn-secondary" href="{% url 'portal_parceiro' %}">Início</a>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="table-scroll">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Protocolo</th>
+          <th>Aberto por</th>
+          <th>Tipo</th>
+          <th>Pedido</th>
+          <th>Situação</th>
+          <th>STATUS</th>
+          <th>Aberto em</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tickets %}
+        <tr>
+          <td><a class="protocolo" href="{% url 'consulta_protocolo' t.protocolo %}">{{ t.protocolo }}</a></td>
+          <td>{{ t.contato.nome|default:t.solicitante_nome|default:"—" }}</td>
+          <td>{{ t.get_tipo_display }}</td>
+          <td>{{ t.pedido|default:"—" }}</td>
+          <td><span class="pill {{ t.status }}">{{ t.get_status_display }}</span></td>
+          <td>{{ t.resultado_status|default:"—" }}</td>
+          <td>{{ t.criado_em|date:"d/m/Y H:i" }}</td>
+          <td><a class="btn btn-secondary" href="{% url 'consulta_protocolo' t.protocolo %}">Ver retorno</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8">Nenhuma demanda neste PDV ainda.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

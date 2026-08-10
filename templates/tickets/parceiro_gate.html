@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Abrir demanda · NIO GC Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Abrir demanda</h1>
+    {% if passo == "contato" and parceiro %}
+      <p>PDV <strong>{{ parceiro.codigo_pdv }} — {{ parceiro.nome }}</strong> · escolha quem está solicitando.</p>
+    {% else %}
+      <p>Escolha o PDV (com token, se houver) e o contato autorizado.</p>
+    {% endif %}
+  </div>
+</div>
+<div class="panel" style="max-width:560px">
+  <div class="panel-b">
+    {% if passo == "contato" and parceiro %}
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="passo" value="contato">
+        <input type="hidden" name="parceiro" value="{{ parceiro.id }}">
+        <div style="margin-bottom:0.85rem">
+          <label for="contato">Seu nome / contato</label>
+          <select name="contato" id="contato" required>
+            <option value="">Selecione...</option>
+            {% for c in contatos %}
+              <option value="{{ c.id }}">{{ c.nome }}{% if c.cargo %} — {{ c.cargo }}{% endif %}</option>
+            {% empty %}
+              <option value="" disabled>Nenhum contato ativo</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+          <button class="btn btn-primary" type="submit">Continuar</button>
+          <a class="btn btn-secondary" href="{% url 'abrir_demanda' %}">Trocar PDV</a>
+        </div>
+      </form>
+    {% else %}
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="passo" value="parceiro">
+        <div style="margin-bottom:0.85rem">
+          <label for="parceiro">Parceiro / PDV</label>
+          <select name="parceiro" id="parceiro" required>
+            <option value="">Selecione...</option>
+            {% for p in parceiros %}
+              <option value="{{ p.id }}">{{ p.codigo_pdv }} — {{ p.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div style="margin-bottom:0.85rem">
+          <label for="token_pdv">Token do PDV</label>
+          <input type="text" name="token_pdv" id="token_pdv" placeholder="Informe se o PDV exige token">
+          <div class="help">Um único token vale para todos os contatos deste PDV.</div>
+        </div>
+        <button class="btn btn-primary" type="submit">Continuar</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,32 @@
+from django.urls import path
+
+from . import views
+
+urlpatterns = [
+    path("", views.home, name="home"),
+    path("login/", views.StaffLoginView.as_view(), name="login"),
+    path("logout/", views.StaffLogoutView.as_view(), name="logout"),
+    path("dashboard/", views.dashboard, name="dashboard"),
+    path("fila/", views.fila, name="fila"),
+    path("tickets/novo/", views.ticket_criar, name="ticket_criar"),
+    path("tickets/<str:protocolo>/", views.ticket_detalhe, name="ticket_detalhe"),
+    path("abrir/", views.abrir_demanda, name="abrir_demanda"),
+    path("abrir/formulario/", views.abrir_demanda_form, name="abrir_demanda_form"),
+    path("abrir/inicio/", views.portal_parceiro, name="portal_parceiro"),
+    path("abrir/minhas/", views.minhas_demandas, name="minhas_demandas"),
+    path("abrir/sair/", views.portal_sair, name="portal_sair"),
+    path("consulta/", views.consulta_busca, name="consulta_busca"),
+    path("consulta/<str:protocolo>/", views.consulta_protocolo, name="consulta_protocolo"),
+    path("parceiros/", views.parceiros_lista, name="parceiros"),
+    path("parceiros/novo/", views.parceiro_form, name="parceiro_novo"),
+    path("parceiros/<int:pk>/", views.parceiro_form, name="parceiro_editar"),
+    path("parceiros/<int:pk>/inativar/", views.parceiro_inativar, name="parceiro_inativar"),
+    path("parceiros/<int:pk>/reativar/", views.parceiro_reativar, name="parceiro_reativar"),
+    path("parceiros/<int:pk>/excluir/", views.parceiro_excluir, name="parceiro_excluir"),
+    path("contatos/<int:pk>/toggle/", views.contato_toggle, name="contato_toggle"),
+    path("contatos/<int:pk>/excluir/", views.contato_excluir, name="contato_excluir"),
+    path("contatos/<int:pk>/token/", views.contato_gerar_token, name="contato_gerar_token"),
+    path("mascaras/", views.mascaras_lista, name="mascaras"),
+    path("mascaras/nova/", views.mascara_form, name="mascara_nova"),
+    path("mascaras/<int:pk>/", views.mascara_form, name="mascara_editar"),
+]

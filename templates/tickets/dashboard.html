@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · NIO GC Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Dashboard</h1>
+    <p>Visão rápida da fila de demandas dos parceiros.</p>
+  </div>
+  <a class="btn btn-primary" href="{% url 'ticket_criar' %}">Nova demanda</a>
+</div>
+
+<div class="cards">
+  <div class="card"><div class="label">Total</div><div class="value">{{ total }}</div></div>
+  <div class="card"><div class="label">Abertos</div><div class="value">{{ abertos }}</div></div>
+  <div class="card"><div class="label">Novos</div><div class="value">{{ novos }}</div></div>
+  <div class="card"><div class="label">Resolvidos</div><div class="value">{{ por_status.resolvido|default:0 }}</div></div>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-h"><h2>Recentes</h2><a href="{% url 'fila' %}">Ver fila</a></div>
+    <table class="table">
+      <thead><tr><th>Protocolo</th><th>Parceiro</th><th>Status</th><th>Quando</th></tr></thead>
+      <tbody>
+        {% for t in recentes %}
+        <tr>
+          <td><a class="protocolo" href="{% url 'ticket_detalhe' t.protocolo %}">{{ t.protocolo }}</a></td>
+          <td>{{ t.parceiro.nome }}</td>
+          <td><span class="pill {{ t.status }}">{{ t.get_status_display }}</span></td>
+          <td>{{ t.criado_em|date:"d/m H:i" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4">Nenhum ticket ainda.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h2>Por tipo</h2></div>
+    <div class="panel-b">
+      {% for row in por_tipo %}
+        <div style="display:flex;justify-content:space-between;padding:0.45rem 0;border-bottom:1px solid var(--line)">
+          <span>{{ row.tipo }}</span><strong>{{ row.c }}</strong>
+        </div>
+      {% empty %}
+        <p class="help">Sem dados.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

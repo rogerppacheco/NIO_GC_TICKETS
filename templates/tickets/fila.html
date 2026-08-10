@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Fila · NIO GC Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Fila de demandas</h1>
+    <p>{{ abertos_count }} abertos · substitui a planilha de acompanhamento</p>
+  </div>
+  <a class="btn btn-primary" href="{% url 'ticket_criar' %}">Nova demanda</a>
+</div>
+
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-b">
+    <form method="get" class="form-grid">
+      <div>{{ form.q.label_tag }}{{ form.q }}</div>
+      <div>{{ form.status.label_tag }}{{ form.status }}</div>
+      <div>{{ form.tipo.label_tag }}{{ form.tipo }}</div>
+      <div>{{ form.parceiro.label_tag }}{{ form.parceiro }}</div>
+      <div class="full"><button class="btn btn-secondary" type="submit">Filtrar</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="panel">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Protocolo</th>
+        <th>Parceiro</th>
+        <th>Tipo</th>
+        <th>Pedido</th>
+        <th>Fila</th>
+        <th>STATUS</th>
+        <th>Criado</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tickets %}
+      <tr>
+        <td><a class="protocolo" href="{% url 'ticket_detalhe' t.protocolo %}">{{ t.protocolo }}</a></td>
+        <td>{{ t.parceiro.nome }}</td>
+        <td>{{ t.get_tipo_display }}</td>
+        <td>{{ t.pedido|default:"—" }}</td>
+        <td><span class="pill {{ t.status }}">{{ t.get_status_display }}</span></td>
+        <td>{{ t.resultado_status|default:"—" }}</td>
+        <td>{{ t.criado_em|date:"d/m/Y H:i" }}</td>
+        <td><a class="btn btn-primary" href="{% url 'ticket_detalhe' t.protocolo %}">Responder</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8">Nenhuma demanda encontrada.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

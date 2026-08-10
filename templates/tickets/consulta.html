@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{{ ticket.protocolo }} · Consulta{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Protocolo {{ ticket.protocolo }}</h1>
+    <p>{{ ticket.parceiro.nome }} · {{ ticket.get_tipo_display }}</p>
+  </div>
+    <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+    <span class="pill {{ ticket.status }}">{{ ticket.get_status_display }}</span>
+    <a class="btn btn-secondary" href="{% url 'consulta_busca' %}">Outro protocolo</a>
+    {% if portal_contato %}
+      <a class="btn btn-secondary" href="{% url 'minhas_demandas' %}">Demandas do PDV</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-h"><h2>Retorno da NIO</h2></div>
+    <div class="panel-b">
+      {% if ticket.resultado_status or ticket.resposta_publica %}
+        {% if ticket.resultado_status %}
+          <p><label>STATUS</label>{{ ticket.resultado_status }}</p>
+        {% endif %}
+        {% if ticket.resposta_publica %}
+          <p><label>RETORNO</label>{{ ticket.resposta_publica|linebreaksbr }}</p>
+        {% endif %}
+        {% if ticket.retorno_dados.senha_resetada %}
+          <p><label>Senha resetada</label><span class="mono">{{ ticket.retorno_dados.senha_resetada }}</span></p>
+        {% endif %}
+        {% if ticket.retorno_dados.endereco_consultado %}
+          <p><label>Endereço consultado</label>{{ ticket.retorno_dados.endereco_consultado|linebreaksbr }}</p>
+        {% endif %}
+        {% if ticket.retorno_dados.status_agendamento %}
+          <p><label>Status / agendamento</label>{{ ticket.retorno_dados.status_agendamento|linebreaksbr }}</p>
+        {% endif %}
+      {% else %}
+        <p class="help">Ainda sem retorno. Acompanhe por este protocolo — a equipe NIO responde pela fila interna.</p>
+      {% endif %}
+      <hr style="border:none;border-top:1px solid var(--line);margin:1rem 0">
+      <p><strong>Pedido:</strong> {{ ticket.pedido|default:"—" }}</p>
+      <p><strong>Documento:</strong> {{ ticket.documento_cliente|default:"—" }}</p>
+      {% if ticket.tt %}<p><strong>TT:</strong> {{ ticket.tt }}</p>{% endif %}
+      {% if ticket.descricao %}<p><strong>Descrição:</strong><br>{{ ticket.descricao|linebreaksbr }}</p>{% endif %}
+      <p class="help">Aberto em {{ ticket.criado_em|date:"d/m/Y H:i" }}</p>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h2>Histórico</h2></div>
+    <div class="panel-b thread">
+      {% for m in mensagens %}
+        <div class="bubble">
+          <div class="meta">{{ m.autor_nome|default:"Sistema" }} · {{ m.criado_em|date:"d/m/Y H:i" }}</div>
+          {{ m.corpo|linebreaksbr }}
+        </div>
+      {% empty %}
+        <p class="help">Sem mensagens ainda.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

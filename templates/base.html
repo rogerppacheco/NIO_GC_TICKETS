@@ -1,0 +1,58 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}NIO GC Tickets{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="{% url 'home' %}">
+        <span>NIO</span> GC Tickets
+        <small>demandas parceiros</small>
+      </a>
+      <nav class="nav">
+        {% if user.is_authenticated %}
+          <a href="{% url 'dashboard' %}">Dashboard</a>
+          <a href="{% url 'fila' %}">Fila {% if nav_novos %}<span class="badge">{{ nav_novos }}</span>{% endif %}</a>
+          <a href="{% url 'ticket_criar' %}">Nova demanda</a>
+          <a href="{% url 'parceiros' %}">Parceiros</a>
+          <a href="{% url 'mascaras' %}">Máscaras</a>
+          <form method="post" action="{% url 'logout' %}" class="logout-form">
+            {% csrf_token %}
+            <button type="submit" class="nav-btn">Sair</button>
+          </form>
+        {% else %}
+          {% if portal_contato %}
+            <a href="{% url 'portal_parceiro' %}">Portal</a>
+            <a href="{% url 'minhas_demandas' %}">Demandas do PDV</a>
+            <a href="{% url 'abrir_demanda_form' %}">Nova demanda</a>
+            <a href="{% url 'consulta_busca' %}">Consultar</a>
+            <a href="{% url 'portal_sair' %}">Trocar PDV</a>
+          {% else %}
+            <a href="{% url 'abrir_demanda' %}">Abrir demanda</a>
+            <a href="{% url 'consulta_busca' %}">Consultar protocolo</a>
+            <a href="{% url 'login' %}">Área interna</a>
+          {% endif %}
+        {% endif %}
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    {% if messages %}
+      <ul class="messages">
+        {% for message in messages %}
+          <li class="{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <script src="{% static 'js/viacep.js' %}"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,310 @@
+from __future__ import annotations
+
+from django import forms
+from django.contrib.auth.forms import AuthenticationForm
+
+from .demanda_campos import LABELS_SIMPLES, campos_resposta, montar_texto_retorno, schema_tipo
+from .models import (
+    Anexo,
+    ContatoParceiro,
+    Mascara,
+    Mensagem,
+    Parceiro,
+    StatusTicket,
+    Ticket,
+    TipoDemanda,
+)
+
+
+class MultiFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+
+class LoginForm(AuthenticationForm):
+    username = forms.CharField(label="Usuário", widget=forms.TextInput(attrs={"autofocus": True}))
+    password = forms.CharField(label="Senha", widget=forms.PasswordInput)
+
+
+class ParceiroForm(forms.ModelForm):
+    class Meta:
+        model = Parceiro
+        fields = [
+            "codigo_pdv",
+            "nome",
+            "ativo",
+            "token_acesso",
+        ]
+        help_texts = {
+            "token_acesso": "Um único token para todos os contatos deste PDV (opcional).",
+        }
+        widgets = {
+            "token_acesso": forms.TextInput(
+                attrs={
+                    "placeholder": "Digite ou escolha uma sugestão",
+                    "autocomplete": "off",
+                    "class": "mono",
+                }
+            ),
+        }
+
+
+class ContatoParceiroForm(forms.ModelForm):
+    class Meta:
+        model = ContatoParceiro
+        fields = ["nome", "email", "telefone", "cargo", "ativo"]
+        labels = {
+            "telefone": "WhatsApp / telefone",
+        }
+
+    def clean_ativo(self):
+        # checkbox: se ausente no POST, fica False
+        return self.data.get("ativo") in {"on", "true", "1", True, "True"}
+
+
+class TicketCreateForm(forms.ModelForm):
+    evidencias = forms.FileField(
+        required=False,
+        widget=MultiFileInput(attrs={"multiple": True}),
+        label="Evidências (anexo)",
+    )
+
+    class Meta:
+        model = Ticket
+        fields = [
+            "parceiro",
+            "tipo",
+            "solicitante_nome",
+            "solicitante_contato",
+            "pedido",
+            "documento_cliente",
+            "tt",
+            "tt_vendedor",
+            "tt_backoffice",
+            "cep",
+            "logradouro",
+            "numero_fachada",
+            "complemento",
+            "bairro",
+            "cidade",
+            "uf",
+            "endereco_completo",
+            "data_desejada",
+            "turno",
+            "descricao",
+            "observacoes",
+        ]
+        widgets = {
+            "tipo": forms.Select(attrs={"id": "id_tipo", "class": "tipo-demanda"}),
+            "data_desejada": forms.DateInput(attrs={"type": "date"}),
+            "descricao": forms.Textarea(attrs={"rows": 3, "placeholder": "Descreva em poucas linhas"}),
+            "observacoes": forms.TextInput(attrs={"placeholder": "Ex.: Etapa 3 — consulta CPF"}),
+            "uf": forms.TextInput(attrs={"maxlength": "2", "placeholder": "UF"}),
+            "endereco_completo": forms.TextInput(
+                attrs={"readonly": True, "placeholder": "Preenchido pelo CEP"}
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "parceiro" in self.fields:
+            self.fields["parceiro"].queryset = Parceiro.objects.filter(ativo=True)
+            self.fields["parceiro"].empty_label = "Selecione o PDV"
+        for name, label in LABELS_SIMPLES.items():
+            if name in self.fields:
+                self.fields[name].label = label
+                self.fields[name].required = False
+        self.fields["tipo"].required = True
+        self.fields["tipo"].choices = [("", "Selecione o tipo...")] + list(TipoDemanda.choices)
+        if "parceiro" in self.fields:
+            self.fields["parceiro"].required = True
+        # Placeholder amigável por campo
+        if "pedido" in self.fields:
+            self.fields["pedido"].widget.attrs.setdefault("placeholder", "Nº do pedido/OS")
+        if "documento_cliente" in self.fields:
+            self.fields["documento_cliente"].widget.attrs.setdefault("placeholder", "Somente números")
+        if "tt" in self.fields:
+            self.fields["tt"].widget.attrs.setdefault("placeholder", "Número da TT")
+        if "tt_vendedor" in self.fields:
+            self.fields["tt_vendedor"].widget.attrs.setdefault(
+                "placeholder", "TT do vendedor"
+            )
+        if "tt_backoffice" in self.fields:
+            self.fields["tt_backoffice"].widget.attrs.setdefault(
+                "placeholder", "TT do backoffice de cadastro"
+            )
+        if "solicitante_contato" in self.fields:
+            self.fields["solicitante_contato"].widget.attrs.setdefault(
+                "placeholder", "DDD + número do cliente"
+            )
+        # Label padrão de documento: obrigatório só quando o schema exige
+        if "documento_cliente" in self.fields:
+            self.fields["documento_cliente"].label = "CPF / CNPJ"
+
+    def clean(self):
+        cleaned = super().clean()
+        tipo = cleaned.get("tipo")
+        if not tipo:
+            return cleaned
+        cfg = schema_tipo(tipo)
+        for campo in cfg["obrigatorios"]:
+            if campo == "evidencias":
+                files = self.files.getlist("evidencias") if self.files else []
+                if not files:
+                    self.add_error("evidencias", "Anexe ao menos uma evidência.")
+                continue
+            valor = cleaned.get(campo)
+            if valor in (None, ""):
+                label = LABELS_SIMPLES.get(campo, campo)
+                self.add_error(campo, f"{label} é obrigatório para este tipo.")
+        return cleaned
+
+
+class TicketPublicCreateForm(TicketCreateForm):
+    class Meta(TicketCreateForm.Meta):
+        fields = [f for f in TicketCreateForm.Meta.fields if f != "parceiro"]
+
+
+class TicketTreatForm(forms.ModelForm):
+    complemento_retorno = forms.CharField(
+        required=False,
+        label="Complemento do retorno",
+        widget=forms.Textarea(
+            attrs={
+                "rows": 2,
+                "placeholder": "Texto extra opcional para o parceiro",
+            }
+        ),
+        help_text="Soma-se aos campos específicos acima no RETORNO.",
+    )
+
+    class Meta:
+        model = Ticket
+        fields = [
+            "status",
+            "prioridade",
+            "atendente",
+            "solicitante_contato",
+            "solicitante_nome",
+            "resultado_status",
+            "nota_interna",
+            "destino_encaminhamento",
+        ]
+        widgets = {
+            "resultado_status": forms.TextInput(
+                attrs={
+                    "placeholder": "Ex.: SENHA RESETADA / ENDEREÇO LOCALIZADO..."
+                }
+            ),
+            "solicitante_contato": forms.TextInput(
+                attrs={"placeholder": "WhatsApp / telefone para retorno"}
+            ),
+            "nota_interna": forms.Textarea(attrs={"rows": 3}),
+        }
+        labels = {
+            "status": "Situação na fila",
+            "solicitante_contato": "WhatsApp / telefone",
+            "solicitante_nome": "Contato / solicitante",
+            "resultado_status": "STATUS",
+            "nota_interna": "DETALHES (interno)",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.campos_resposta_defs = campos_resposta(self.instance.tipo)
+        dados = self.instance.retorno_dados or {}
+        for campo in self.campos_resposta_defs:
+            name = campo["name"]
+            if campo.get("widget") == "textarea":
+                widget = forms.Textarea(
+                    attrs={
+                        "rows": 3,
+                        "placeholder": campo.get("placeholder", ""),
+                    }
+                )
+            else:
+                widget = forms.TextInput(
+                    attrs={"placeholder": campo.get("placeholder", "")}
+                )
+            self.fields[name] = forms.CharField(
+                required=campo.get("required", False),
+                label=campo["label"],
+                help_text=campo.get("help", ""),
+                widget=widget,
+                initial=dados.get(name, ""),
+            )
+        # Se já havia RETORNO livre além dos campos, mostra no complemento
+        montado = montar_texto_retorno(self.instance.tipo, dados)
+        atual = (self.instance.resposta_publica or "").strip()
+        if atual and atual != montado and not self.is_bound:
+            if montado and atual.startswith(montado):
+                self.fields["complemento_retorno"].initial = atual[len(montado) :].strip()
+            elif not dados:
+                self.fields["complemento_retorno"].initial = atual
+
+    def retorno_dados_limpos(self) -> dict:
+        dados = {}
+        for campo in self.campos_resposta_defs:
+            name = campo["name"]
+            valor = (self.cleaned_data.get(name) or "").strip()
+            if valor:
+                dados[name] = valor
+        return dados
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        dados = self.retorno_dados_limpos()
+        instance.retorno_dados = dados
+        instance.resposta_publica = montar_texto_retorno(
+            instance.tipo,
+            dados,
+            self.cleaned_data.get("complemento_retorno") or "",
+        )
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance
+
+
+class MensagemForm(forms.ModelForm):
+    class Meta:
+        model = Mensagem
+        fields = ["corpo", "interno"]
+        widgets = {"corpo": forms.Textarea(attrs={"rows": 3, "placeholder": "Escreva a mensagem..."})}
+        labels = {"interno": "Nota interna (não visível ao parceiro)"}
+
+
+class AnexoForm(forms.ModelForm):
+    class Meta:
+        model = Anexo
+        fields = ["arquivo"]
+
+
+class MascaraForm(forms.ModelForm):
+    class Meta:
+        model = Mascara
+        fields = ["nome", "destino", "tipos", "template", "ativo"]
+        widgets = {
+            "template": forms.Textarea(attrs={"rows": 10, "class": "mono"}),
+            "tipos": forms.TextInput(
+                attrs={
+                    "placeholder": "Ex.: prioridade_elite,agendar_reagendar (vazio = todos)"
+                }
+            ),
+        }
+
+
+class FilaFiltroForm(forms.Form):
+    q = forms.CharField(required=False, label="Busca")
+    status = forms.ChoiceField(
+        required=False,
+        choices=[("", "Todos status")] + list(StatusTicket.choices),
+    )
+    tipo = forms.ChoiceField(
+        required=False,
+        choices=[("", "Todos tipos")] + list(TipoDemanda.choices),
+    )
+    parceiro = forms.ModelChoiceField(
+        required=False,
+        queryset=Parceiro.objects.filter(ativo=True),
+        empty_label="Todos parceiros",
+    )

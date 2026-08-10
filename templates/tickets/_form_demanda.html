@@ -1,0 +1,27 @@
+{% load static %}
+{{ demanda_schema|json_script:"demanda-schema" }}
+<div class="panel" style="max-width:720px">
+  <div class="panel-b">
+    <p class="help" data-tipo-hint style="margin-top:0">Selecione o tipo da demanda para ver só os campos necessários.</p>
+    <form method="post" enctype="multipart/form-data" class="form-grid" data-demanda-form>
+      {% csrf_token %}
+      {% for field in form %}
+        <div
+          class="{% if field.name == 'descricao' or field.name == 'evidencias' or field.name == 'endereco_completo' %}full{% endif %}"
+          data-field="{{ field.name }}"
+        >
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.name == 'cep' %}<div class="help">ViaCEP preenche o endereço ao sair do campo.</div>{% endif %}
+          {% if field.errors %}<div class="help" style="color:var(--danger)">{{ field.errors|striptags }}</div>{% endif %}
+        </div>
+      {% endfor %}
+      <div class="full" style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <button class="btn btn-primary" type="submit">{{ submit_label }}</button>
+        {% if cancel_url %}
+          <a class="btn btn-secondary" href="{% url cancel_url %}">Cancelar</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>

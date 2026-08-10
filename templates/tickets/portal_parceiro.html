@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Portal · {{ parceiro.nome }}{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Olá, {{ contato.nome }}</h1>
+    <p>PDV {{ parceiro.codigo_pdv }} — {{ parceiro.nome }}</p>
+  </div>
+  <a class="btn btn-secondary" href="{% url 'portal_sair' %}">Trocar contato / PDV</a>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-h"><h2>O que deseja fazer?</h2></div>
+    <div class="panel-b" style="display:flex;flex-direction:column;gap:0.75rem">
+      <a class="btn btn-primary" href="{% url 'abrir_demanda_form' %}">Abrir nova demanda</a>
+      <a class="btn btn-secondary" href="{% url 'minhas_demandas' %}">Ver demandas do PDV</a>
+      <a class="btn btn-secondary" href="{% url 'consulta_busca' %}">Consultar por protocolo</a>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h2>Últimas do PDV</h2></div>
+    <div class="panel-b">
+      {% for t in recentes %}
+        <div style="display:flex;justify-content:space-between;gap:0.75rem;align-items:center;padding:0.55rem 0;border-bottom:1px solid var(--line)">
+          <div>
+            <a class="protocolo" href="{% url 'consulta_protocolo' t.protocolo %}">{{ t.protocolo }}</a>
+            <div class="help">{{ t.contato.nome|default:"—" }} · {{ t.get_tipo_display }} · {{ t.criado_em|date:"d/m/Y H:i" }}</div>
+          </div>
+          <span class="pill {{ t.status }}">{{ t.get_status_display }}</span>
+        </div>
+      {% empty %}
+        <p class="help">Nenhuma demanda neste PDV ainda.</p>
+      {% endfor %}
+      {% if recentes %}
+        <div style="margin-top:0.85rem">
+          <a href="{% url 'minhas_demandas' %}">Ver todas →</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

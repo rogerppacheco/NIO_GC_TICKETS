@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Máscaras · NIO GC Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Máscaras</h1>
+    <p>Templates padrão para encaminhar (ex.: Grupo Elite).</p>
+  </div>
+  <a class="btn btn-primary" href="{% url 'mascara_nova' %}">Nova máscara</a>
+</div>
+<div class="panel">
+  <table class="table">
+    <thead><tr><th>Nome</th><th>Destino</th><th>Tipos</th><th>Ativa</th><th></th></tr></thead>
+    <tbody>
+      {% for m in mascaras %}
+      <tr>
+        <td>{{ m.nome }}</td>
+        <td>{{ m.destino }}</td>
+        <td>{{ m.tipos|default:"todos" }}</td>
+        <td>{% if m.ativo %}Sim{% else %}Não{% endif %}</td>
+        <td><a href="{% url 'mascara_editar' m.pk %}">Editar</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">Nenhuma máscara.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

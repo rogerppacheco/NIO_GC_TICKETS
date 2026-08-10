@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}{{ ticket.protocolo }} · Tratamento{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>{{ ticket.protocolo }}</h1>
+    <p>{{ ticket.parceiro.codigo_pdv }} — {{ ticket.parceiro.nome }} · {{ ticket.get_tipo_display }}</p>
+  </div>
+  <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+    <span class="pill {{ ticket.status }}">{{ ticket.get_status_display }}</span>
+    {% if ticket.sla_minutos != None %}
+      <span class="help">1º atendimento: {{ ticket.sla_minutos }} min</span>
+    {% endif %}
+    <a class="btn btn-secondary" href="{% url 'fila' %}">Voltar à fila</a>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div>
+    <div class="panel" style="margin-bottom:1rem">
+      <div class="panel-h"><h2>Dados da demanda</h2></div>
+      <div class="panel-b">
+        <p class="help" style="margin-top:0">{{ schema.titulo }}</p>
+        <div class="grid-3">
+          {% for key in schema.campos %}
+            {% if key == "pedido" %}
+              <div><label>{{ labels_tipo.pedido|default:"Pedido / OS" }}</label><div>{{ ticket.pedido|default:"—" }}</div></div>
+            {% elif key == "documento_cliente" %}
+              <div><label>{{ labels_tipo.documento_cliente|default:"CPF/CNPJ" }}</label><div>{{ ticket.documento_cliente|default:"—" }}</div></div>
+            {% elif key == "tt" %}
+              <div><label>{{ labels_tipo.tt|default:"TT" }}</label><div>{{ ticket.tt|default:"—" }}</div></div>
+            {% elif key == "tt_vendedor" %}
+              <div><label>{{ labels_tipo.tt_vendedor|default:"TT do vendedor" }}</label><div>{{ ticket.tt_vendedor|default:"—" }}</div></div>
+            {% elif key == "tt_backoffice" %}
+              <div class="full"><label>{{ labels_tipo.tt_backoffice|default:"TT do backoffice" }}</label><div>{{ ticket.tt_backoffice|default:"—" }}</div></div>
+            {% elif key == "data_desejada" %}
+              <div><label>{{ labels_tipo.data_desejada|default:"Data desejada" }}</label><div>{{ ticket.data_desejada|date:"d/m/Y"|default:"—" }}</div></div>
+            {% elif key == "turno" %}
+              <div><label>{{ labels_tipo.turno|default:"Turno" }}</label><div>{{ ticket.get_turno_display|default:"—" }}</div></div>
+            {% elif key == "cep" %}
+              <div><label>{{ labels_tipo.cep|default:"CEP" }}</label><div>{{ ticket.cep|default:"—" }}</div></div>
+            {% elif key == "logradouro" %}
+              <div><label>{{ labels_tipo.logradouro|default:"Logradouro" }}</label><div>{{ ticket.logradouro|default:"—" }}</div></div>
+            {% elif key == "numero_fachada" %}
+              <div><label>{{ labels_tipo.numero_fachada|default:"Nº" }}</label><div>{{ ticket.numero_fachada|default:"—" }}</div></div>
+            {% elif key == "complemento" %}
+              <div><label>{{ labels_tipo.complemento|default:"Complemento" }}</label><div>{{ ticket.complemento|default:"—" }}</div></div>
+            {% elif key == "bairro" %}
+              <div><label>{{ labels_tipo.bairro|default:"Bairro" }}</label><div>{{ ticket.bairro|default:"—" }}</div></div>
+            {% elif key == "cidade" %}
+              <div><label>{{ labels_tipo.cidade|default:"Cidade" }}</label><div>{{ ticket.cidade|default:"—" }}</div></div>
+            {% elif key == "uf" %}
+              <div><label>{{ labels_tipo.uf|default:"UF" }}</label><div>{{ ticket.uf|default:"—" }}</div></div>
+            {% elif key == "endereco_completo" %}
+              <div class="full"><label>{{ labels_tipo.endereco_completo|default:"Endereço completo" }}</label><div>{{ ticket.endereco_completo|default:"—" }}</div></div>
+            {% elif key == "solicitante_nome" %}
+              <div><label>{{ labels_tipo.solicitante_nome|default:"Solicitante" }}</label><div>{{ ticket.solicitante_nome|default:"—" }}</div></div>
+            {% elif key == "solicitante_contato" %}
+              <div><label>{{ labels_tipo.solicitante_contato|default:"Telefone" }}</label><div>{{ ticket.solicitante_contato|default:"—" }}</div></div>
+            {% elif key == "descricao" %}
+              <div class="full"><label>{{ labels_tipo.descricao|default:"Descrição" }}</label><div>{{ ticket.descricao|linebreaksbr|default:"—" }}</div></div>
+            {% elif key == "observacoes" %}
+              <div class="full"><label>{{ labels_tipo.observacoes|default:"Observações" }}</label><div>{{ ticket.observacoes|linebreaksbr|default:"—" }}</div></div>
+            {% endif %}
+          {% endfor %}
+          <div><label>Aberto por</label><div>{{ ticket.contato.nome|default:ticket.solicitante_nome|default:"—" }}</div></div>
+        </div>
+
+        {% if ticket.resultado_status or ticket.resposta_publica or ticket.nota_interna %}
+          <hr style="border:none;border-top:1px solid var(--line);margin:1rem 0">
+          {% if ticket.resultado_status %}<p><label>STATUS</label>{{ ticket.resultado_status }}</p>{% endif %}
+          {% if ticket.resposta_publica %}<p><label>RETORNO</label>{{ ticket.resposta_publica|linebreaksbr }}</p>{% endif %}
+          {% if ticket.nota_interna %}<p><label>DETALHES</label>{{ ticket.nota_interna|linebreaksbr }}</p>{% endif %}
+        {% endif %}
+
+        {% if anexos %}
+          <p><label>Anexos</label>
+            {% for a in anexos %}
+              <a href="{{ a.arquivo.url }}" target="_blank">{{ a.nome_original|default:a.arquivo.name }}</a>{% if not forloop.last %}, {% endif %}
+            {% endfor %}
+          </p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:1rem">
+      <div class="panel-h"><h2>Thread</h2></div>
+      <div class="panel-b thread">
+        {% for m in mensagens %}
+          <div class="bubble {% if m.interno %}interno{% endif %}">
+            <div class="meta">
+              {{ m.autor_nome|default:"Sistema" }} · {{ m.criado_em|date:"d/m/Y H:i" }}
+              {% if m.interno %} · interna{% endif %}
+            </div>
+            {{ m.corpo|linebreaksbr }}
+          </div>
+        {% empty %}
+          <p class="help">Sem mensagens.</p>
+        {% endfor %}
+        <form method="post" style="margin-top:0.5rem">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="mensagem">
+          {{ msg_form.corpo }}
+          <label style="margin-top:0.5rem;display:flex;gap:0.4rem;align-items:center;font-weight:600">
+            {{ msg_form.interno }} {{ msg_form.interno.label }}
+          </label>
+          <button class="btn btn-primary" type="submit" style="margin-top:0.6rem">Enviar mensagem</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel" style="margin-bottom:1rem">
+      <div class="panel-h"><h2>Tratar / responder</h2></div>
+      <div class="panel-b">
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="tratar">
+
+          <div class="token-picker" style="margin-bottom:1rem">
+            <strong style="font-size:0.92rem">Resposta desta demanda</strong>
+            <div class="help">Preencha o que o parceiro precisa receber · {{ ticket.get_tipo_display }}</div>
+            {% for field in treat_form %}
+              {% if field.name in resposta_field_names %}
+                <div style="margin-top:0.55rem">
+                  <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+                  {{ field }}
+                  {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+                  {% if field.errors %}<div class="help" style="color:var(--danger)">{{ field.errors|striptags }}</div>{% endif %}
+                </div>
+              {% endif %}
+            {% endfor %}
+            <div style="margin-top:0.55rem">
+              <label for="{{ treat_form.complemento_retorno.id_for_label }}">{{ treat_form.complemento_retorno.label }}</label>
+              {{ treat_form.complemento_retorno }}
+              {% if treat_form.complemento_retorno.help_text %}<div class="help">{{ treat_form.complemento_retorno.help_text }}</div>{% endif %}
+            </div>
+          </div>
+
+          {% for field in treat_form %}
+            {% if field.name != "complemento_retorno" and field.name not in resposta_field_names %}
+              <div style="margin-bottom:0.75rem">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+                {% if field.errors %}<div class="help" style="color:var(--danger)">{{ field.errors|striptags }}</div>{% endif %}
+              </div>
+            {% endif %}
+          {% endfor %}
+
+          <button class="btn btn-primary" type="submit">Salvar resposta</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:1rem">
+      <div class="panel-h"><h2>Máscaras de encaminhamento</h2></div>
+      <div class="panel-b">
+        {% for m in mascaras %}
+          <form method="post" style="margin-bottom:0.55rem">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="mascara">
+            <input type="hidden" name="mascara_id" value="{{ m.id }}">
+            <button class="btn btn-accent" type="submit" style="width:100%">{{ m.nome }} → {{ m.destino }}</button>
+          </form>
+        {% empty %}
+          <p class="help">Nenhuma máscara para este tipo. Cadastre em Máscaras.</p>
+        {% endfor %}
+        {% if encaminhamentos %}
+          <hr style="border:none;border-top:1px solid var(--line);margin:1rem 0">
+          <label>Histórico de encaminhamentos</label>
+          {% for e in encaminhamentos %}
+            <div class="help">{{ e.criado_em|date:"d/m H:i" }} · {{ e.destino }}</div>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h"><h2>Anexar arquivo</h2></div>
+      <div class="panel-b">
+        <form method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="anexo">
+          {{ anexo_form.arquivo }}
+          <button class="btn btn-secondary" type="submit" style="margin-top:0.6rem">Upload</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

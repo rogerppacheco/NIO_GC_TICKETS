@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Nova demanda · {{ parceiro.nome }}{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Nova demanda</h1>
+    <p>Parceiro: <strong>{{ parceiro.codigo_pdv }} — {{ parceiro.nome }}</strong>
+      {% if contato %} · Contato: <strong>{{ contato.nome }}</strong>{% endif %}
+    </p>
+  </div>
+</div>
+{% include "tickets/_form_demanda.html" with submit_label="Enviar demanda" %}
+{% endblock %}
+{% block extra_js %}
+<script src="{% static 'js/demanda_form.js' %}"></script>
+{% endblock %}

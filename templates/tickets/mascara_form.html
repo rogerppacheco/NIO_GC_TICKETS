@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }} · Máscaras{% endblock %}
+{% block content %}
+<div class="hero"><div><h1>{{ titulo }}</h1></div></div>
+<div class="panel">
+  <div class="panel-b">
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      {% for field in form %}
+        <div class="{% if field.name == 'template' or field.name == 'tipos' %}full{% endif %}">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+        </div>
+      {% endfor %}
+      <div class="full">
+        <button class="btn btn-primary" type="submit">Salvar</button>
+        <a class="btn btn-secondary" href="{% url 'mascaras' %}">Voltar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Entrar · NIO GC Tickets{% endblock %}
+{% block content %}
+<div class="auth-wrap" style="padding:0;min-height:auto">
+  <div class="panel auth-card">
+    <div class="panel-h"><h2>Área interna</h2></div>
+    <div class="panel-b">
+      <p class="help" style="margin-top:0">Login para tratar e responder demandas.</p>
+      <form method="post">
+        {% csrf_token %}
+        {% for field in form %}
+          <div style="margin-bottom:0.85rem">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}<div class="help" style="color:var(--danger)">{{ field.errors|striptags }}</div>{% endif %}
+          </div>
+        {% endfor %}
+        <button class="btn btn-primary" type="submit" style="width:100%">Entrar</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

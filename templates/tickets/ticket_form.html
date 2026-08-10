@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ titulo }} · NIO GC Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>{{ titulo }}</h1>
+    <p>Escolha o tipo — só pedimos o mínimo para aquela demanda.</p>
+  </div>
+</div>
+{% include "tickets/_form_demanda.html" with submit_label="Salvar demanda" cancel_url="fila" %}
+{% endblock %}
+{% block extra_js %}
+<script src="{% static 'js/demanda_form.js' %}"></script>
+{% endblock %}

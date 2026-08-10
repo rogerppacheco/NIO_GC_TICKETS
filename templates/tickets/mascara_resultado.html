@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Máscara gerada · {{ ticket.protocolo }}{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Máscara pronta</h1>
+    <p>{{ mascara.nome }} → {{ mascara.destino }} · {{ ticket.protocolo }}</p>
+  </div>
+  <a class="btn btn-secondary" href="{% url 'ticket_detalhe' ticket.protocolo %}">Voltar ao ticket</a>
+</div>
+<div class="panel">
+  <div class="panel-h">
+    <h2>Texto para copiar / colar</h2>
+    <button class="btn btn-primary" type="button" onclick="navigator.clipboard.writeText(document.getElementById('mask').value)">Copiar</button>
+  </div>
+  <div class="panel-b">
+    <textarea id="mask" class="mono" rows="16" readonly>{{ conteudo }}</textarea>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Consultar protocolo · NIO GC Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Consultar demanda</h1>
+    <p>Informe o protocolo ou, se já identificou o PDV, veja a lista das suas demandas.</p>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-h"><h2>Por protocolo</h2></div>
+    <div class="panel-b">
+      <form method="post">
+        {% csrf_token %}
+        <div style="margin-bottom:0.85rem">
+          <label for="protocolo">Protocolo</label>
+          <input type="text" name="protocolo" id="protocolo" class="mono"
+                 placeholder="Ex.: 2026-0001" required autocomplete="off">
+        </div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+          <button class="btn btn-primary" type="submit">Consultar</button>
+          <a class="btn btn-secondary" href="{% url 'abrir_demanda' %}">Abrir nova demanda</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-h"><h2>Demandas do PDV</h2></div>
+    <div class="panel-b">
+      {% if contato and parceiro %}
+        <p class="help" style="margin-top:0">Todas de {{ parceiro.codigo_pdv }} — {{ parceiro.nome }}</p>
+        {% for t in minhas %}
+          <div style="display:flex;justify-content:space-between;gap:0.75rem;align-items:center;padding:0.55rem 0;border-bottom:1px solid var(--line)">
+            <div>
+              <a class="protocolo" href="{% url 'consulta_protocolo' t.protocolo %}">{{ t.protocolo }}</a>
+              <div class="help">{{ t.contato.nome|default:"—" }} · {{ t.get_tipo_display }}</div>
+            </div>
+            <span class="pill {{ t.status }}">{{ t.get_status_display }}</span>
+          </div>
+        {% empty %}
+          <p class="help">Nenhuma demanda neste PDV ainda.</p>
+        {% endfor %}
+        <div style="margin-top:0.85rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+          <a class="btn btn-secondary" href="{% url 'minhas_demandas' %}">Ver todas</a>
+          <a class="btn btn-primary" href="{% url 'portal_parceiro' %}">Portal</a>
+        </div>
+      {% else %}
+        <p class="help" style="margin-top:0">Identifique o PDV (token) e o contato para listar todas as demandas do parceiro.</p>
+        <a class="btn btn-primary" href="{% url 'abrir_demanda' %}">Identificar PDV</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
