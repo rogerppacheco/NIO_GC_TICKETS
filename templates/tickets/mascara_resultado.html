@@ -10,11 +10,29 @@
 </div>
 <div class="panel">
   <div class="panel-h">
-    <h2>Texto para copiar / colar</h2>
-    <button class="btn btn-primary" type="button" onclick="navigator.clipboard.writeText(document.getElementById('mask').value)">Copiar</button>
+    <h2>Texto no padrão para WhatsApp / encaminhar</h2>
+    <button class="btn btn-primary" type="button" id="btn-copiar-mascara" data-copy-target="mask">
+      Copiar máscara
+    </button>
   </div>
   <div class="panel-b">
-    <textarea id="mask" class="mono" rows="16" readonly>{{ conteudo }}</textarea>
+    <p class="help" style="margin-top:0">Texto preenchido com os dados da demanda. Cole no grupo/destino: <strong>{{ mascara.destino }}</strong>.</p>
+    <textarea id="mask" class="mono" rows="18" readonly>{{ conteudo }}</textarea>
   </div>
 </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  const btn = document.getElementById("btn-copiar-mascara");
+  const mask = document.getElementById("mask");
+  if (mask) {
+    mask.focus();
+    mask.select();
+  }
+  if (btn && window.copyText) {
+    window.copyText(mask.value, btn);
+  }
+})();
+</script>
 {% endblock %}

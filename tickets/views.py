@@ -327,6 +327,9 @@ def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
     mascaras = [
         m for m in Mascara.objects.filter(ativo=True) if m.aplica_para(ticket.tipo)
     ]
+    mascaras_prontas = [
+        {"mascara": m, "conteudo": render_mascara(m, ticket)} for m in mascaras
+    ]
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -414,6 +417,7 @@ def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
             "anexos": ticket.anexos.all(),
             "encaminhamentos": ticket.encaminhamentos.select_related("mascara"),
             "mascaras": mascaras,
+            "mascaras_prontas": mascaras_prontas,
             "schema": schema_tipo(ticket.tipo),
             "labels_tipo": {**LABELS_SIMPLES, **LABELS_POR_TIPO.get(ticket.tipo, {})},
             "campos_resposta": treat_form.campos_resposta_defs,
@@ -591,6 +595,8 @@ def mascaras_lista(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def mascara_form(request: HttpRequest, pk: int | None = None) -> HttpResponse:
+    from .management.commands.seed_nio import MASCARAS as PADROES_SEED
+
     instance = get_object_or_404(Mascara, pk=pk) if pk else None
     if request.method == "POST":
         form = MascaraForm(request.POST, instance=instance)
@@ -600,10 +606,24 @@ def mascara_form(request: HttpRequest, pk: int | None = None) -> HttpResponse:
             return redirect("mascaras")
     else:
         form = MascaraForm(instance=instance)
+
+    padroes = [
+        {
+            "nome": p["nome"],
+            "destino": p["destino"],
+            "tipos": p["tipos"],
+            "template": p["template"],
+        }
+        for p in PADROES_SEED
+    ]
     return render(
         request,
         "tickets/mascara_form.html",
-        {"form": form, "titulo": "Editar máscara" if instance else "Nova máscara"},
+        {
+            "form": form,
+            "titulo": "Editar máscara" if instance else "Nova máscara",
+            "padroes": padroes,
+        },
     )
 
 

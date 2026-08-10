@@ -4,26 +4,29 @@
 <div class="hero">
   <div>
     <h1>Máscaras</h1>
-    <p>Templates padrão para encaminhar (ex.: Grupo Elite).</p>
+    <p>Templates padrão para encaminhar (ex.: Grupo Elite). No ticket, use <strong>Copiar</strong> com os dados preenchidos.</p>
   </div>
   <a class="btn btn-primary" href="{% url 'mascara_nova' %}">Nova máscara</a>
 </div>
 <div class="panel">
-  <table class="table">
-    <thead><tr><th>Nome</th><th>Destino</th><th>Tipos</th><th>Ativa</th><th></th></tr></thead>
-    <tbody>
-      {% for m in mascaras %}
-      <tr>
-        <td>{{ m.nome }}</td>
-        <td>{{ m.destino }}</td>
-        <td>{{ m.tipos|default:"todos" }}</td>
-        <td>{% if m.ativo %}Sim{% else %}Não{% endif %}</td>
-        <td><a href="{% url 'mascara_editar' m.pk %}">Editar</a></td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="5">Nenhuma máscara.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="panel-b" style="padding:0">
+    {% for m in mascaras %}
+      <div class="mask-card" style="margin:1rem;border-radius:12px">
+        <div class="mask-card-h">
+          <div>
+            <strong>{{ m.nome }}</strong>
+            <div class="help">→ {{ m.destino }} · tipos: {{ m.tipos|default:"todos" }} · {% if m.ativo %}ativa{% else %}inativa{% endif %}</div>
+          </div>
+          <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
+            <button class="btn btn-primary" type="button" data-copy-target="mask-tpl-{{ m.id }}">Copiar template</button>
+            <a class="btn btn-secondary" href="{% url 'mascara_editar' m.pk %}">Editar</a>
+          </div>
+        </div>
+        <textarea id="mask-tpl-{{ m.id }}" class="mono" rows="6" readonly>{{ m.template }}</textarea>
+      </div>
+    {% empty %}
+      <div class="panel-b"><p class="help">Nenhuma máscara. Crie uma ou rode <code>python manage.py seed_nio</code>.</p></div>
+    {% endfor %}
+  </div>
 </div>
 {% endblock %}

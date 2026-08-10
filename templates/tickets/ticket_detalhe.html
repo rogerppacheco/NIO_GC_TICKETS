@@ -157,13 +157,28 @@
     <div class="panel" style="margin-bottom:1rem">
       <div class="panel-h"><h2>Máscaras de encaminhamento</h2></div>
       <div class="panel-b">
-        {% for m in mascaras %}
-          <form method="post" style="margin-bottom:0.55rem">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="mascara">
-            <input type="hidden" name="mascara_id" value="{{ m.id }}">
-            <button class="btn btn-accent" type="submit" style="width:100%">{{ m.nome }} → {{ m.destino }}</button>
-          </form>
+        <p class="help" style="margin-top:0">Gera o texto no padrão atual, registra o encaminhamento e abre para copiar.</p>
+        {% for item in mascaras_prontas %}
+          <div class="mask-card">
+            <div class="mask-card-h">
+              <div>
+                <strong>{{ item.mascara.nome }}</strong>
+                <div class="help">→ {{ item.mascara.destino }}</div>
+              </div>
+              <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
+                <button class="btn btn-primary" type="button" data-copy-target="mask-preview-{{ item.mascara.id }}">
+                  Copiar
+                </button>
+                <form method="post">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="mascara">
+                  <input type="hidden" name="mascara_id" value="{{ item.mascara.id }}">
+                  <button class="btn btn-accent" type="submit">Gerar / registrar</button>
+                </form>
+              </div>
+            </div>
+            <textarea id="mask-preview-{{ item.mascara.id }}" class="mono" rows="8" readonly>{{ item.conteudo }}</textarea>
+          </div>
         {% empty %}
           <p class="help">Nenhuma máscara para este tipo. Cadastre em Máscaras.</p>
         {% endfor %}
@@ -171,7 +186,13 @@
           <hr style="border:none;border-top:1px solid var(--line);margin:1rem 0">
           <label>Histórico de encaminhamentos</label>
           {% for e in encaminhamentos %}
-            <div class="help">{{ e.criado_em|date:"d/m H:i" }} · {{ e.destino }}</div>
+            <div class="mask-card" style="margin-top:0.65rem">
+              <div class="mask-card-h">
+                <div class="help">{{ e.criado_em|date:"d/m H:i" }} · {{ e.destino }}</div>
+                <button class="btn btn-secondary" type="button" data-copy-target="mask-hist-{{ e.id }}">Copiar</button>
+              </div>
+              <textarea id="mask-hist-{{ e.id }}" class="mono" rows="6" readonly>{{ e.conteudo }}</textarea>
+            </div>
           {% endfor %}
         {% endif %}
       </div>

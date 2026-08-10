@@ -1,10 +1,47 @@
 {% extends "base.html" %}
 {% block title %}{{ titulo }} · Máscaras{% endblock %}
 {% block content %}
-<div class="hero"><div><h1>{{ titulo }}</h1></div></div>
+<div class="hero">
+  <div>
+    <h1>{{ titulo }}</h1>
+    <p>Use um padrão pronto ou monte o template com variáveis como pedido, endereço, TT, protocolo.</p>
+  </div>
+</div>
+
+{% if padroes %}
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-h"><h2>Padrões atuais</h2></div>
+  <div class="panel-b">
+    <p class="help" style="margin-top:0">Clique em <strong>Usar este padrão</strong> para preencher o formulário, ou em <strong>Copiar</strong> para levar o texto.</p>
+    {% for p in padroes %}
+      <div class="mask-card">
+        <div class="mask-card-h">
+          <div>
+            <strong>{{ p.nome }}</strong>
+            <div class="help">→ {{ p.destino }} · tipo: {{ p.tipos }}</div>
+          </div>
+          <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
+            <button class="btn btn-secondary" type="button" data-copy-target="padrao-{{ forloop.counter }}">Copiar</button>
+            <button class="btn btn-primary" type="button"
+                    data-aplicar-padrao
+                    data-nome="{{ p.nome|escape }}"
+                    data-destino="{{ p.destino|escape }}"
+                    data-tipos="{{ p.tipos|escape }}"
+                    data-target="padrao-{{ forloop.counter }}">
+              Usar este padrão
+            </button>
+          </div>
+        </div>
+        <textarea id="padrao-{{ forloop.counter }}" class="mono" rows="7" readonly>{{ p.template }}</textarea>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 <div class="panel">
   <div class="panel-b">
-    <form method="post" class="form-grid">
+    <form method="post" class="form-grid" id="form-mascara">
       {% csrf_token %}
       {% for field in form %}
         <div class="{% if field.name == 'template' or field.name == 'tipos' %}full{% endif %}">
@@ -13,11 +50,35 @@
           {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
         </div>
       {% endfor %}
-      <div class="full">
+      <div class="full" style="display:flex;gap:0.5rem;flex-wrap:wrap">
         <button class="btn btn-primary" type="submit">Salvar</button>
+        {% if form.template.value %}
+          <button class="btn btn-secondary" type="button" data-copy-target="{{ form.template.id_for_label }}">Copiar template</button>
+        {% endif %}
         <a class="btn btn-secondary" href="{% url 'mascaras' %}">Voltar</a>
       </div>
     </form>
   </div>
 </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+document.querySelectorAll("[data-aplicar-padrao]").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    const nome = document.getElementById("id_nome");
+    const destino = document.getElementById("id_destino");
+    const tipos = document.getElementById("id_tipos");
+    const template = document.getElementById("id_template");
+    const src = document.getElementById(btn.getAttribute("data-target"));
+    if (nome) nome.value = btn.getAttribute("data-nome") || "";
+    if (destino) destino.value = btn.getAttribute("data-destino") || "";
+    if (tipos) tipos.value = btn.getAttribute("data-tipos") || "";
+    if (template && src) template.value = src.value;
+    if (template) {
+      template.focus();
+      template.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  });
+});
+</script>
 {% endblock %}
