@@ -310,7 +310,62 @@ CAMPOS_RESPOSTA_POR_TIPO: dict[str, list[dict]] = {
 
 
 def campos_resposta(tipo: str) -> list[dict]:
-    return CAMPOS_RESPOSTA_POR_TIPO.get(tipo) or CAMPOS_RESPOSTA_POR_TIPO[TipoDemanda.OUTROS]
+    """Campos ativos para resposta: prioriza config no banco; senão usa padrão."""
+    try:
+        from .models import ConfigRespostaTipo
+
+        cfg = ConfigRespostaTipo.objects.filter(tipo=tipo).first()
+        if cfg and cfg.campos is not None:
+            return cfg.campos_ativos()
+    except Exception:
+        pass
+    return list(
+        CAMPOS_RESPOSTA_POR_TIPO.get(tipo) or CAMPOS_RESPOSTA_POR_TIPO[TipoDemanda.OUTROS]
+    )
+
+
+def catalogo_campos_resposta() -> list[dict]:
+    """Catálogo único de campos disponíveis para montar por tipo."""
+    vistos: dict[str, dict] = {}
+    for lista in CAMPOS_RESPOSTA_POR_TIPO.values():
+        for campo in lista:
+            vistos.setdefault(campo["name"], dict(campo))
+    # campos extras úteis
+    for extra in (
+        {
+            "name": "observacao_parceiro",
+            "label": "Observação ao parceiro",
+            "widget": "textarea",
+            "required": False,
+        },
+        {
+            "name": "protocolo_externo",
+            "label": "Protocolo externo",
+            "widget": "text",
+            "required": False,
+        },
+    ):
+        vistos.setdefault(extra["name"], extra)
+    return sorted(vistos.values(), key=lambda c: c["label"].lower())
+
+
+def garantir_config_resposta_padrao() -> int:
+    """Cria configs default para tipos que ainda não existem. Retorna qtd criada."""
+    from .models import ConfigRespostaTipo
+
+    criados = 0
+    for tipo, campos in CAMPOS_RESPOSTA_POR_TIPO.items():
+        _, created = ConfigRespostaTipo.objects.get_or_create(
+            tipo=tipo,
+            defaults={
+                "campos": [
+                    {**c, "ativo": True} for c in campos
+                ]
+            },
+        )
+        if created:
+            criados += 1
+    return criados
 
 
 def montar_texto_retorno(tipo: str, dados: dict, complemento: str = "") -> str:

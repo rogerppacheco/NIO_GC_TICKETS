@@ -18,10 +18,20 @@
     return ok;
   }
 
-  window.copyText = function (text, btn) {
+    window.copyText = function (text, btn) {
     const value = (text || "").toString();
     const done = function (ok) {
       if (!btn) return;
+      if (btn.querySelector("svg")) {
+        const prevTitle = btn.getAttribute("title") || "";
+        btn.setAttribute("title", ok ? "Copiado!" : "Falhou — tente de novo");
+        btn.classList.toggle("is-copied", !!ok);
+        setTimeout(function () {
+          btn.setAttribute("title", prevTitle || "Copiar máscara");
+          btn.classList.remove("is-copied");
+        }, 1800);
+        return;
+      }
       const prev = btn.getAttribute("data-label") || btn.textContent;
       if (!btn.getAttribute("data-label")) btn.setAttribute("data-label", prev);
       btn.textContent = ok ? "Copiado!" : "Falhou — selecione e Ctrl+C";

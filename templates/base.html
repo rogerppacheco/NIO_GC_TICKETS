@@ -21,6 +21,7 @@
           <a href="{% url 'ticket_criar' %}">Nova demanda</a>
           <a href="{% url 'parceiros' %}">Parceiros</a>
           <a href="{% url 'mascaras' %}">Máscaras</a>
+          <a href="{% url 'config_resposta_lista' %}">Campos resposta</a>
           <form method="post" action="{% url 'logout' %}" class="logout-form">
             {% csrf_token %}
             <button type="submit" class="nav-btn">Sair</button>

@@ -4,13 +4,20 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView, LogoutView
 from django.db.models import Count, Q
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
-from .demanda_campos import LABELS_POR_TIPO, LABELS_SIMPLES, schema_para_js, schema_tipo
+from .demanda_campos import (
+    LABELS_POR_TIPO,
+    LABELS_SIMPLES,
+    catalogo_campos_resposta,
+    garantir_config_resposta_padrao,
+    schema_para_js,
+    schema_tipo,
+)
 from .forms import (
     AnexoForm,
     ContatoParceiroForm,
@@ -25,6 +32,7 @@ from .forms import (
 )
 from .models import (
     Anexo,
+    ConfigRespostaTipo,
     ContatoParceiro,
     Encaminhamento,
     Mascara,
@@ -32,6 +40,7 @@ from .models import (
     Parceiro,
     StatusTicket,
     Ticket,
+    TipoDemanda,
 )
 from .services import render_mascara
 
@@ -652,6 +661,162 @@ def dashboard(request: HttpRequest) -> HttpResponse:
             "por_status": por_status,
             "por_tipo": por_tipo,
             "recentes": base.select_related("parceiro")[:15],
+        },
+    )
+
+
+@login_required
+@require_GET
+def ticket_mascaras_json(request: HttpRequest, protocolo: str) -> HttpResponse:
+    """Máscaras preenchidas do ticket — usado para copiar direto na fila."""
+    ticket = get_object_or_404(
+        Ticket.objects.select_related("parceiro", "contato"), protocolo=protocolo.upper()
+    )
+    mascaras = [
+        m for m in Mascara.objects.filter(ativo=True) if m.aplica_para(ticket.tipo)
+    ]
+    payload = [
+        {
+            "id": m.id,
+            "nome": m.nome,
+            "destino": m.destino,
+            "conteudo": render_mascara(m, ticket),
+        }
+        for m in mascaras
+    ]
+    return JsonResponse(
+        {
+            "protocolo": ticket.protocolo,
+            "tipo": ticket.get_tipo_display(),
+            "mascaras": payload,
+        }
+    )
+
+
+@login_required
+def config_resposta_lista(request: HttpRequest) -> HttpResponse:
+    garantir_config_resposta_padrao()
+    configs = {c.tipo: c for c in ConfigRespostaTipo.objects.all()}
+    itens = []
+    for codigo, label in TipoDemanda.choices:
+        cfg = configs.get(codigo)
+        ativos = len(cfg.campos_ativos()) if cfg else 0
+        total = len(cfg.campos) if cfg else 0
+        itens.append(
+            {
+                "tipo": codigo,
+                "label": label,
+                "ativos": ativos,
+                "total": total,
+            }
+        )
+    return render(
+        request,
+        "tickets/config_resposta_lista.html",
+        {"itens": itens},
+    )
+
+
+@login_required
+def config_resposta_editar(request: HttpRequest, tipo: str) -> HttpResponse:
+    from .demanda_campos import CAMPOS_RESPOSTA_POR_TIPO
+
+    if tipo not in TipoDemanda.values:
+        messages.error(request, "Tipo de demanda inválido.")
+        return redirect("config_resposta_lista")
+
+    garantir_config_resposta_padrao()
+    padrao = CAMPOS_RESPOSTA_POR_TIPO.get(tipo) or CAMPOS_RESPOSTA_POR_TIPO[TipoDemanda.OUTROS]
+    cfg, _ = ConfigRespostaTipo.objects.get_or_create(
+        tipo=tipo,
+        defaults={"campos": [{**c, "ativo": True} for c in padrao]},
+    )
+
+    catalogo = catalogo_campos_resposta()
+    atuais = {c["name"]: dict(c) for c in (cfg.campos or [])}
+
+    if request.method == "POST":
+        novos: list[dict] = []
+        nomes: list[str] = []
+        for c in catalogo:
+            nomes.append(c["name"])
+        for name in atuais:
+            if name not in nomes:
+                nomes.append(name)
+
+        # novos campos custom
+        novo_nome = (request.POST.get("novo_name") or "").strip().lower()
+        novo_label = (request.POST.get("novo_label") or "").strip()
+        if novo_nome and novo_label:
+            import re
+
+            novo_nome = re.sub(r"[^a-z0-9_]+", "_", novo_nome).strip("_")
+            if novo_nome and novo_nome not in nomes:
+                nomes.append(novo_nome)
+                atuais[novo_nome] = {
+                    "name": novo_nome,
+                    "label": novo_label,
+                    "widget": request.POST.get("novo_widget") or "text",
+                    "required": False,
+                    "ativo": True,
+                    "help": "",
+                    "placeholder": "",
+                }
+
+        for name in nomes:
+            prefix = f"campo_{name}_"
+            base = atuais.get(name) or next(
+                (dict(c) for c in catalogo if c["name"] == name), {"name": name}
+            )
+            novos.append(
+                {
+                    "name": name,
+                    "label": (
+                        request.POST.get(prefix + "label") or base.get("label") or name
+                    ).strip(),
+                    "widget": request.POST.get(prefix + "widget")
+                    or base.get("widget")
+                    or "text",
+                    "required": request.POST.get(prefix + "required") == "on",
+                    "ativo": request.POST.get(prefix + "ativo") == "on",
+                    "help": (
+                        request.POST.get(prefix + "help") or base.get("help") or ""
+                    ).strip(),
+                    "placeholder": (
+                        request.POST.get(prefix + "placeholder")
+                        or base.get("placeholder")
+                        or ""
+                    ).strip(),
+                }
+            )
+
+        cfg.campos = novos
+        cfg.save()
+        messages.success(
+            request, f"Campos de resposta de “{cfg.get_tipo_display()}” salvos."
+        )
+        return redirect("config_resposta_editar", tipo=tipo)
+
+    linhas = []
+    vistos: set[str] = set()
+    for c in catalogo:
+        if c["name"] in atuais:
+            linhas.append({**c, **atuais[c["name"]]})
+        else:
+            linhas.append({**c, "ativo": False})
+        vistos.add(c["name"])
+    for name, c in atuais.items():
+        if name not in vistos:
+            linhas.append(c)
+
+    return render(
+        request,
+        "tickets/config_resposta_form.html",
+        {
+            "cfg": cfg,
+            "tipo": tipo,
+            "titulo": cfg.get_tipo_display(),
+            "linhas": linhas,
         },
     )
 

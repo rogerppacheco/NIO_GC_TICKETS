@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Campos de resposta · NIO GC Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Campos de resposta</h1>
+    <p>Escolha quais campos aparecem ao responder cada tipo de demanda.</p>
+  </div>
+</div>
+<div class="panel">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Tipo de demanda</th>
+        <th>Campos ativos</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in itens %}
+      <tr>
+        <td>{{ item.label }}</td>
+        <td>{{ item.ativos }} / {{ item.total }}</td>
+        <td><a class="btn btn-secondary" href="{% url 'config_resposta_editar' item.tipo %}">Configurar</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -179,6 +179,11 @@ class Command(BaseCommand):
             )
         self.stdout.write(self.style.SUCCESS(f"{len(MASCARAS)} máscaras ok"))
 
+        from tickets.demanda_campos import garantir_config_resposta_padrao
+
+        n = garantir_config_resposta_padrao()
+        self.stdout.write(self.style.SUCCESS(f"configs resposta: {n} novas"))
+
         User = get_user_model()
         username = options["username"]
         if not User.objects.filter(username=username).exists():

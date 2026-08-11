@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Anexo, ContatoParceiro, Encaminhamento, Mascara, Mensagem, Parceiro, Ticket
+from .models import Anexo, ContatoParceiro, Encaminhamento, Mascara, Mensagem, Parceiro, Ticket, ConfigRespostaTipo
 
 admin.site.site_header = "NIO GC Tickets"
 admin.site.site_title = "NIO GC Tickets"
@@ -77,3 +77,10 @@ class EncaminhamentoAdmin(admin.ModelAdmin):
 
 admin.site.register(Mensagem)
 admin.site.register(Anexo)
+
+
+@admin.register(ConfigRespostaTipo)
+class ConfigRespostaTipoAdmin(admin.ModelAdmin):
+    list_display = ("tipo", "atualizado_em")
+    search_fields = ("tipo",)
+

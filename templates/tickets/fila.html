@@ -22,35 +22,119 @@
 </div>
 
 <div class="panel">
-  <table class="table">
-    <thead>
-      <tr>
-        <th>Protocolo</th>
-        <th>Parceiro</th>
-        <th>Tipo</th>
-        <th>Pedido</th>
-        <th>Fila</th>
-        <th>STATUS</th>
-        <th>Criado</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for t in tickets %}
-      <tr>
-        <td><a class="protocolo" href="{% url 'ticket_detalhe' t.protocolo %}">{{ t.protocolo }}</a></td>
-        <td>{{ t.parceiro.nome }}</td>
-        <td>{{ t.get_tipo_display }}</td>
-        <td>{{ t.pedido|default:"—" }}</td>
-        <td><span class="pill {{ t.status }}">{{ t.get_status_display }}</span></td>
-        <td>{{ t.resultado_status|default:"—" }}</td>
-        <td>{{ t.criado_em|date:"d/m/Y H:i" }}</td>
-        <td><a class="btn btn-primary" href="{% url 'ticket_detalhe' t.protocolo %}">Responder</a></td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="8">Nenhuma demanda encontrada.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Protocolo</th>
+          <th>Parceiro</th>
+          <th>Tipo</th>
+          <th>Pedido</th>
+          <th>Fila</th>
+          <th>STATUS</th>
+          <th>Criado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tickets %}
+        <tr>
+          <td><a class="protocolo" href="{% url 'ticket_detalhe' t.protocolo %}">{{ t.protocolo }}</a></td>
+          <td>{{ t.parceiro.nome }}</td>
+          <td>{{ t.get_tipo_display }}</td>
+          <td>{{ t.pedido|default:"—" }}</td>
+          <td><span class="pill {{ t.status }}">{{ t.get_status_display }}</span></td>
+          <td>{{ t.resultado_status|default:"—" }}</td>
+          <td>{{ t.criado_em|date:"d/m/Y H:i" }}</td>
+          <td>
+            <div class="fila-actions">
+              <button type="button" class="icon-btn" title="Copiar máscara"
+                      data-copy-maska="{{ t.protocolo }}"
+                      aria-label="Copiar máscara {{ t.protocolo }}">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </button>
+              <a class="btn btn-primary" href="{% url 'ticket_detalhe' t.protocolo %}">Responder</a>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8">Nenhuma demanda encontrada.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
+
+<div id="mask-menu" class="mask-menu" hidden></div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  const menu = document.getElementById("mask-menu");
+
+  function hideMenu() {
+    if (!menu) return;
+    menu.hidden = true;
+    menu.innerHTML = "";
+  }
+
+  document.addEventListener("click", function (ev) {
+    if (!menu.hidden && !ev.target.closest("#mask-menu") && !ev.target.closest("[data-copy-maska]")) {
+      hideMenu();
+    }
+  });
+
+  document.querySelectorAll("[data-copy-maska]").forEach(function (btn) {
+    btn.addEventListener("click", async function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const protocolo = btn.getAttribute("data-copy-maska");
+      btn.disabled = true;
+      try {
+        const res = await fetch("/tickets/" + encodeURIComponent(protocolo) + "/mascaras.json", {
+          headers: { "Accept": "application/json" },
+          credentials: "same-origin",
+        });
+        if (!res.ok) throw new Error("Falha ao carregar máscaras");
+        const data = await res.json();
+        const list = data.mascaras || [];
+        if (!list.length) {
+          alert("Nenhuma máscara configurada para este tipo.");
+          return;
+        }
+        if (list.length === 1) {
+          if (window.copyText) window.copyText(list[0].conteudo, btn);
+          else await navigator.clipboard.writeText(list[0].conteudo);
+          return;
+        }
+        // várias máscaras → menu
+        const rect = btn.getBoundingClientRect();
+        menu.innerHTML = list.map(function (m, i) {
+          return '<button type="button" class="mask-menu-item" data-idx="' + i + '">' +
+            (m.nome || "Máscara") + " → " + (m.destino || "") +
+            "</button>";
+        }).join("");
+        menu.hidden = false;
+        menu.style.left = Math.max(8, rect.left + window.scrollX - 40) + "px";
+        menu.style.top = (rect.bottom + window.scrollY + 6) + "px";
+        menu.querySelectorAll(".mask-menu-item").forEach(function (item) {
+          item.addEventListener("click", function () {
+            const m = list[Number(item.getAttribute("data-idx"))];
+            if (window.copyText) window.copyText(m.conteudo, btn);
+            else navigator.clipboard.writeText(m.conteudo);
+            hideMenu();
+          });
+        });
+      } catch (e) {
+        alert("Não foi possível copiar a máscara.");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}

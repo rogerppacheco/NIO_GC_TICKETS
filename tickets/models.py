@@ -340,13 +340,38 @@ class Mascara(models.Model):
         verbose_name_plural = "Máscaras"
 
     def __str__(self) -> str:
-        return f"{self.nome} → {self.destino}"
+        return self.nome
 
     def aplica_para(self, tipo: str) -> bool:
         if not self.tipos.strip():
             return True
-        codigos = [c.strip() for c in self.tipos.split(",") if c.strip()]
-        return tipo in codigos
+        allowed = {t.strip() for t in self.tipos.split(",") if t.strip()}
+        return tipo in allowed
+
+
+class ConfigRespostaTipo(models.Model):
+    """Campos de resposta exibidos ao tratar cada tipo de demanda."""
+
+    tipo = models.CharField(
+        max_length=40, unique=True, choices=TipoDemanda.choices, db_index=True
+    )
+    campos = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Lista de campos: name, label, widget, required, ativo, help, placeholder.",
+    )
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["tipo"]
+        verbose_name = "Config. resposta por tipo"
+        verbose_name_plural = "Configs resposta por tipo"
+
+    def __str__(self) -> str:
+        return self.get_tipo_display()
+
+    def campos_ativos(self) -> list[dict]:
+        return [c for c in (self.campos or []) if c.get("ativo", True)]
 
 
 class Encaminhamento(models.Model):
