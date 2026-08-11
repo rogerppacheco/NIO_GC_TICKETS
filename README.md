@@ -47,4 +47,17 @@ Variáveis:
 - `ALLOWED_HOSTS=.up.railway.app,seu-dominio`
 - `CSRF_TRUSTED_ORIGINS=https://seu-servico.up.railway.app`
 
+### Cloudflare R2 (anexos / imagens)
+
+No Railway o disco do container é **efêmero** — anexos em `/media/` somem no redeploy.
+Configure o R2 para persistir uploads:
+
+- `R2_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET_NAME`
+- `R2_PUBLIC_BASE_URL` (ex.: `https://pub-xxx.r2.dev`) **ou** `R2_CUSTOM_DOMAIN`
+
+No bucket: ative acesso público (r2.dev ou domínio custom) e CORS permitindo GET do domínio do app.
+
 O `entrypoint.sh` cria o schema e roda migrations automaticamente.
