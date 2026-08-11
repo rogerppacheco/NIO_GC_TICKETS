@@ -343,6 +343,20 @@ def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
     if request.method == "POST":
         action = request.POST.get("action")
         if action == "tratar":
+            if request.POST.get("so_atualizar_tipo"):
+                novo_tipo = (request.POST.get("tipo") or "").strip()
+                if novo_tipo in TipoDemanda.values:
+                    antigo = ticket.get_tipo_display()
+                    ticket.tipo = novo_tipo
+                    ticket.save(update_fields=["tipo", "atualizado_em"])
+                    messages.success(
+                        request,
+                        f"Tipo alterado de “{antigo}” para “{ticket.get_tipo_display()}”.",
+                    )
+                else:
+                    messages.error(request, "Tipo inválido.")
+                return redirect("ticket_detalhe", protocolo=ticket.protocolo)
+
             treat_form = TicketTreatForm(request.POST, instance=ticket)
             if treat_form.is_valid():
                 t = treat_form.save(commit=False)
