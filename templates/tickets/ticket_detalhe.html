@@ -119,6 +119,21 @@
           <input type="hidden" name="action" value="tratar">
 
           <div class="token-picker" style="margin-bottom:1rem">
+            <strong style="font-size:0.92rem">Tipo da demanda</strong>
+            <div style="margin-top:0.45rem">
+              <label for="{{ treat_form.tipo.id_for_label }}">{{ treat_form.tipo.label }}</label>
+              {{ treat_form.tipo }}
+              {% if treat_form.tipo.help_text %}<div class="help">{{ treat_form.tipo.help_text }}</div>{% endif %}
+              {% if treat_form.tipo.errors %}<div class="help" style="color:var(--danger)">{{ treat_form.tipo.errors|striptags }}</div>{% endif %}
+            </div>
+            <div style="margin-top:0.55rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+              <button class="btn btn-secondary" type="submit" name="so_atualizar_tipo" value="1">
+                Só alterar o tipo
+              </button>
+            </div>
+          </div>
+
+          <div class="token-picker" style="margin-bottom:1rem">
             <strong style="font-size:0.92rem">Resposta desta demanda</strong>
             <div class="help">Preencha o que o parceiro precisa receber · {{ ticket.get_tipo_display }}</div>
             {% for field in treat_form %}
@@ -139,7 +154,7 @@
           </div>
 
           {% for field in treat_form %}
-            {% if field.name != "complemento_retorno" and field.name not in resposta_field_names %}
+            {% if field.name != "complemento_retorno" and field.name != "tipo" and field.name not in resposta_field_names %}
               <div style="margin-bottom:0.75rem">
                 <label for="{{ field.id_for_label }}">{{ field.label }}</label>
                 {{ field }}

@@ -180,6 +180,7 @@ class TicketTreatForm(forms.ModelForm):
     class Meta:
         model = Ticket
         fields = [
+            "tipo",
             "status",
             "prioridade",
             "atendente",
@@ -190,6 +191,7 @@ class TicketTreatForm(forms.ModelForm):
             "destino_encaminhamento",
         ]
         widgets = {
+            "tipo": forms.Select(attrs={"id": "id_tipo_tratamento"}),
             "resultado_status": forms.TextInput(
                 attrs={
                     "placeholder": "Ex.: SENHA RESETADA / ENDEREÇO LOCALIZADO..."
@@ -201,16 +203,24 @@ class TicketTreatForm(forms.ModelForm):
             "nota_interna": forms.Textarea(attrs={"rows": 3}),
         }
         labels = {
+            "tipo": "Tipo da demanda",
             "status": "Situação na fila",
             "solicitante_contato": "WhatsApp / telefone",
             "solicitante_nome": "Contato / solicitante",
             "resultado_status": "STATUS",
             "nota_interna": "DETALHES (interno)",
         }
+        help_texts = {
+            "tipo": "Altere se a demanda foi aberta no tipo errado. Ao salvar, campos e máscaras se atualizam.",
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.campos_resposta_defs = campos_resposta(self.instance.tipo)
+        # Em POST, usa o tipo enviado para montar os campos de resposta
+        tipo = self.instance.tipo
+        if self.is_bound:
+            tipo = self.data.get("tipo") or tipo
+        self.campos_resposta_defs = campos_resposta(tipo)
         dados = self.instance.retorno_dados or {}
         for campo in self.campos_resposta_defs:
             name = campo["name"]
@@ -233,7 +243,7 @@ class TicketTreatForm(forms.ModelForm):
                 initial=dados.get(name, ""),
             )
         # Se já havia RETORNO livre além dos campos, mostra no complemento
-        montado = montar_texto_retorno(self.instance.tipo, dados)
+        montado = montar_texto_retorno(tipo, dados)
         atual = (self.instance.resposta_publica or "").strip()
         if atual and atual != montado and not self.is_bound:
             if montado and atual.startswith(montado):
