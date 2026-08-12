@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load tickets_extras %}
 {% block title %}{{ ticket.protocolo }} · Consulta{% endblock %}
 {% block content %}
 <div class="hero">
@@ -6,7 +7,7 @@
     <h1>Protocolo {{ ticket.protocolo }}</h1>
     <p>{{ ticket.parceiro.nome }} · {{ ticket.get_tipo_display }}</p>
   </div>
-    <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+  <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
     <span class="pill {{ ticket.status }}">{{ ticket.get_status_display }}</span>
     <a class="btn btn-secondary" href="{% url 'consulta_busca' %}">Outro protocolo</a>
     {% if portal_contato %}
@@ -24,16 +25,19 @@
           <p><label>STATUS</label>{{ ticket.resultado_status }}</p>
         {% endif %}
         {% if ticket.resposta_publica %}
-          <p><label>RETORNO</label>{{ ticket.resposta_publica|linebreaksbr }}</p>
+          <p><label>RETORNO</label></p>
+          <div class="long-text">{{ ticket.resposta_publica|texto_formatado }}</div>
         {% endif %}
         {% if ticket.retorno_dados.senha_resetada %}
           <p><label>Senha resetada</label><span class="mono">{{ ticket.retorno_dados.senha_resetada }}</span></p>
         {% endif %}
         {% if ticket.retorno_dados.endereco_consultado %}
-          <p><label>Endereço consultado</label>{{ ticket.retorno_dados.endereco_consultado|linebreaksbr }}</p>
+          <p><label>Endereço consultado</label></p>
+          <div class="long-text">{{ ticket.retorno_dados.endereco_consultado|texto_formatado }}</div>
         {% endif %}
         {% if ticket.retorno_dados.status_agendamento %}
-          <p><label>Status / agendamento</label>{{ ticket.retorno_dados.status_agendamento|linebreaksbr }}</p>
+          <p><label>Status / agendamento</label></p>
+          <div class="long-text">{{ ticket.retorno_dados.status_agendamento|texto_formatado }}</div>
         {% endif %}
       {% else %}
         <p class="help">Ainda sem retorno. Acompanhe por este protocolo — a equipe NIO responde pela fila interna.</p>
@@ -42,7 +46,10 @@
       <p><strong>Pedido:</strong> {{ ticket.pedido|default:"—" }}</p>
       <p><strong>Documento:</strong> {{ ticket.documento_cliente|default:"—" }}</p>
       {% if ticket.tt %}<p><strong>TT:</strong> {{ ticket.tt }}</p>{% endif %}
-      {% if ticket.descricao %}<p><strong>Descrição:</strong><br>{{ ticket.descricao|linebreaksbr }}</p>{% endif %}
+      {% if ticket.descricao %}
+        <p><strong>Descrição:</strong></p>
+        <div class="long-text">{{ ticket.descricao|texto_formatado }}</div>
+      {% endif %}
       <p class="help">Aberto em {{ ticket.criado_em|date:"d/m/Y H:i" }}</p>
     </div>
   </div>
@@ -52,7 +59,7 @@
       {% for m in mensagens %}
         <div class="bubble">
           <div class="meta">{{ m.autor_nome|default:"Sistema" }} · {{ m.criado_em|date:"d/m/Y H:i" }}</div>
-          {{ m.corpo|linebreaksbr }}
+          <div class="long-text" style="max-height:12rem;margin-top:0.2rem">{{ m.corpo|texto_formatado }}</div>
         </div>
       {% empty %}
         <p class="help">Sem mensagens ainda.</p>

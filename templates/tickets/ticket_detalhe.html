@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load tickets_extras %}
 {% block title %}{{ ticket.protocolo }} · Tratamento{% endblock %}
 {% block content %}
 <div class="hero">
@@ -52,25 +53,25 @@
             {% elif key == "uf" %}
               <div><label>{{ labels_tipo.uf|default:"UF" }}</label><div>{{ ticket.uf|default:"—" }}</div></div>
             {% elif key == "endereco_completo" %}
-              <div class="full"><label>{{ labels_tipo.endereco_completo|default:"Endereço completo" }}</label><div>{{ ticket.endereco_completo|default:"—" }}</div></div>
+              <div class="full kv"><label>{{ labels_tipo.endereco_completo|default:"Endereço completo" }}</label><div>{{ ticket.endereco_completo|default:"—" }}</div></div>
             {% elif key == "solicitante_nome" %}
-              <div><label>{{ labels_tipo.solicitante_nome|default:"Solicitante" }}</label><div>{{ ticket.solicitante_nome|default:"—" }}</div></div>
+              <div class="kv"><label>{{ labels_tipo.solicitante_nome|default:"Solicitante" }}</label><div>{{ ticket.solicitante_nome|default:"—" }}</div></div>
             {% elif key == "solicitante_contato" %}
-              <div><label>{{ labels_tipo.solicitante_contato|default:"Telefone" }}</label><div>{{ ticket.solicitante_contato|default:"—" }}</div></div>
+              <div class="kv"><label>{{ labels_tipo.solicitante_contato|default:"Telefone" }}</label><div>{{ ticket.solicitante_contato|default:"—" }}</div></div>
             {% elif key == "descricao" %}
-              <div class="full"><label>{{ labels_tipo.descricao|default:"Descrição" }}</label><div>{{ ticket.descricao|linebreaksbr|default:"—" }}</div></div>
+              <div class="full kv"><label>{{ labels_tipo.descricao|default:"Descrição" }}</label><div class="long-text">{{ ticket.descricao|texto_formatado }}</div></div>
             {% elif key == "observacoes" %}
-              <div class="full"><label>{{ labels_tipo.observacoes|default:"Observações" }}</label><div>{{ ticket.observacoes|linebreaksbr|default:"—" }}</div></div>
+              <div class="full kv"><label>{{ labels_tipo.observacoes|default:"Observações" }}</label><div class="long-text">{{ ticket.observacoes|texto_formatado }}</div></div>
             {% endif %}
           {% endfor %}
-          <div><label>Aberto por</label><div>{{ ticket.contato.nome|default:ticket.solicitante_nome|default:"—" }}</div></div>
+          <div class="kv"><label>Aberto por</label><div>{{ ticket.contato.nome|default:ticket.solicitante_nome|default:"—" }}</div></div>
         </div>
 
         {% if ticket.resultado_status or ticket.resposta_publica or ticket.nota_interna %}
           <hr style="border:none;border-top:1px solid var(--line);margin:1rem 0">
           {% if ticket.resultado_status %}<p><label>STATUS</label>{{ ticket.resultado_status }}</p>{% endif %}
-          {% if ticket.resposta_publica %}<p><label>RETORNO</label>{{ ticket.resposta_publica|linebreaksbr }}</p>{% endif %}
-          {% if ticket.nota_interna %}<p><label>DETALHES</label>{{ ticket.nota_interna|linebreaksbr }}</p>{% endif %}
+          {% if ticket.resposta_publica %}<p><label>RETORNO</label></p><div class="long-text">{{ ticket.resposta_publica|texto_formatado }}</div>{% endif %}
+          {% if ticket.nota_interna %}<p><label>DETALHES</label></p><div class="long-text">{{ ticket.nota_interna|texto_formatado }}</div>{% endif %}
         {% endif %}
 
         {% if anexos %}
@@ -92,7 +93,7 @@
               {{ m.autor_nome|default:"Sistema" }} · {{ m.criado_em|date:"d/m/Y H:i" }}
               {% if m.interno %} · interna{% endif %}
             </div>
-            {{ m.corpo|linebreaksbr }}
+            <div class="long-text" style="max-height:12rem;margin-top:0.2rem">{{ m.corpo|texto_formatado }}</div>
           </div>
         {% empty %}
           <p class="help">Sem mensagens.</p>
