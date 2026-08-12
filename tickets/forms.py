@@ -24,8 +24,26 @@ MOTIVO_REPARO_CHOICES = [
 ]
 
 
-class MultiFileInput(forms.ClearableFileInput):
+class MultipleFileInput(forms.ClearableFileInput):
     allow_multiple_selected = True
+
+
+class MultipleFileField(forms.FileField):
+    """Aceita um ou vários arquivos (FileField padrão quebra com getlist)."""
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("widget", MultipleFileInput())
+        super().__init__(*args, **kwargs)
+
+    def clean(self, data, initial=None):
+        single_file_clean = super().clean
+        if isinstance(data, (list, tuple)):
+            result = [single_file_clean(d, initial) for d in data]
+            # Sem arquivos e campo opcional: lista vazia (não None).
+            if not result and not self.required:
+                return []
+            return result
+        return [single_file_clean(data, initial)]
 
 
 class LoginForm(AuthenticationForm):
@@ -70,9 +88,8 @@ class ContatoParceiroForm(forms.ModelForm):
 
 
 class TicketCreateForm(forms.ModelForm):
-    evidencias = forms.FileField(
+    evidencias = MultipleFileField(
         required=False,
-        widget=MultiFileInput(attrs={"multiple": True}),
         label="Evidências (anexo)",
     )
     motivo_reparo = forms.ChoiceField(
@@ -203,7 +220,9 @@ class TicketCreateForm(forms.ModelForm):
         labels = {**LABELS_SIMPLES, **LABELS_POR_TIPO.get(tipo, {})}
         for campo in cfg["obrigatorios"]:
             if campo == "evidencias":
-                files = self.files.getlist("evidencias") if self.files else []
+                files = cleaned.get("evidencias") or []
+                if not files and self.files:
+                    files = self.files.getlist("evidencias")
                 if not files:
                     self.add_error("evidencias", "Anexe ao menos uma evidência.")
                 continue
