@@ -75,6 +75,25 @@ MASCARAS = [
         ),
     },
     {
+        "nome": "Reparo — OS recém instalada",
+        "destino": "Grupo Elite / Reparo",
+        "tipos": TipoDemanda.REPARO,
+        "template": (
+            "*MÁSCARA PADRÃO DE ACIONAMENTO PARA REPAROS DE OSS RECÉM INSTALADAS:*\n\n"
+            "- *OS:* {{os}}\n"
+            "- *NOME DO CLIENTE:* {{nome_cliente}}\n"
+            "- *ENDEREÇO COMPLETO:* {{endereco}}\n"
+            "- *CONTATO DO CLIENTE:* {{contato}}\n"
+            "- *PDV:* {{pdv}} - {{parceiro}}\n"
+            "- *GC:* {{nome_gc}}\n"
+            "- *DATA INSTALAÇÃO:* {{data_instalacao}}\n"
+            "- *DATA E HORÁRIO AGENDADO COM O CLIENTE:*\n"
+            "  1) {{data}} - {{turno}}\n"
+            "  2) {{data_2}} - {{turno_2}}\n"
+            "- *SOLICITAÇÃO:* {{descricao}}\n"
+        ),
+    },
+    {
         "nome": "BO Agendamento / Reagendamento",
         "destino": "BO Agendamento (7095/7029/7037)",
         "tipos": TipoDemanda.AGENDAR_REAGENDAR,

@@ -80,6 +80,7 @@ class TipoDemanda(models.TextChoices):
     ABRIR_CHAMADO_TI = "abrir_chamado_ti", "Abrir chamado com TI"
     SEM_SLOT = "sem_slot", "Sinalização — sem slot / liberação de agenda"
     INSTALACAO_FISICA = "instalacao_fisica", "Sinalização — instalação física / pendência"
+    REPARO = "reparo", "Reparo — internet pós-instalação (até 14 dias)"
     OUTROS = "outros", "Outros / suporte geral"
 
 
@@ -160,6 +161,20 @@ class Ticket(models.Model):
     )
     data_desejada = models.DateField("Data desejada", null=True, blank=True)
     turno = models.CharField(max_length=20, choices=Turno.choices, blank=True)
+    nome_cliente = models.CharField("Nome do cliente", max_length=180, blank=True)
+    data_instalacao = models.DateField("Data da instalação", null=True, blank=True)
+    data_alternativa = models.DateField(
+        "Opção 2 — Data",
+        null=True,
+        blank=True,
+        help_text="Segunda opção de data para retorno do técnico (reparo).",
+    )
+    turno_alternativo = models.CharField(
+        "Opção 2 — Turno",
+        max_length=20,
+        choices=Turno.choices,
+        blank=True,
+    )
     descricao = models.TextField("Descrição detalhada", blank=True)
     observacoes = models.TextField(blank=True)
 
@@ -327,6 +342,7 @@ class Mascara(models.Model):
         help_text=(
             "Variáveis: {{protocolo}} {{parceiro}} {{pdv}} {{tipo}} {{pedido}} "
             "{{documento}} {{endereco}} {{cep}} {{fachada}} {{data}} {{turno}} "
+            "{{data_2}} {{turno_2}} {{nome_cliente}} {{data_instalacao}} {{nome_gc}} "
             "{{descricao}} {{observacoes}} {{solicitante}} {{contato}} {{tt}} "
             "{{tt_vendedor}} {{tt_backoffice}} {{os}}"
         )

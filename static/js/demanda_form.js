@@ -35,7 +35,11 @@
           row.hidden = false;
           return;
         }
-        const show = !!tipo && allowed.has(name);
+        let show = !!tipo && allowed.has(name);
+        if (show && name === "descricao" && cfg && cfg.descricao_se) {
+          const trigger = form.querySelector('[name="' + cfg.descricao_se.campo + '"]');
+          show = !!(trigger && trigger.value === cfg.descricao_se.valor);
+        }
         row.hidden = !show;
         const label = row.querySelector("label");
         if (label && show) {
@@ -43,13 +47,18 @@
             label.setAttribute("data-base-label", label.textContent.replace(/\s*\*$/, "").trim());
           }
           const base = labels[name] || label.getAttribute("data-base-label");
-          label.textContent = required.has(name) ? base + " *" : base;
+          const req = required.has(name) || (name === "descricao" && cfg && cfg.descricao_se && show);
+          label.textContent = req ? base + " *" : base;
         }
       });
     }
 
     if (tipoSelect) {
       tipoSelect.addEventListener("change", apply);
+    }
+    const motivoReparo = form.querySelector('[name="motivo_reparo"]');
+    if (motivoReparo) {
+      motivoReparo.addEventListener("change", apply);
     }
     apply();
   }

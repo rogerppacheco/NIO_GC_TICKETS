@@ -44,6 +44,7 @@
       {% endif %}
       <hr style="border:none;border-top:1px solid var(--line);margin:1rem 0">
       <p><strong>Pedido:</strong> {{ ticket.pedido|default:"—" }}</p>
+      {% if ticket.nome_cliente %}<p><strong>Cliente:</strong> {{ ticket.nome_cliente }}</p>{% endif %}
       <p><strong>Documento:</strong> {{ ticket.documento_cliente|default:"—" }}</p>
       {% if ticket.tt %}<p><strong>TT:</strong> {{ ticket.tt }}</p>{% endif %}
       {% if ticket.descricao %}

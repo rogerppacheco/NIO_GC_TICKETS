@@ -132,6 +132,43 @@ CAMPOS_POR_TIPO: dict[str, dict] = {
         ],
         "obrigatorios": ["pedido", "descricao"],
     },
+    TipoDemanda.REPARO: {
+        "titulo": "OS recém instalada (até 14 dias): duas opções de retorno e a solicitação",
+        "campos": [
+            "pedido",
+            "nome_cliente",
+            "cep",
+            "logradouro",
+            "numero_fachada",
+            "complemento",
+            "bairro",
+            "cidade",
+            "uf",
+            "endereco_completo",
+            "solicitante_contato",
+            "data_instalacao",
+            "data_desejada",
+            "turno",
+            "data_alternativa",
+            "turno_alternativo",
+            "motivo_reparo",
+            "descricao",
+        ],
+        "obrigatorios": [
+            "pedido",
+            "nome_cliente",
+            "cep",
+            "numero_fachada",
+            "solicitante_contato",
+            "data_instalacao",
+            "data_desejada",
+            "turno",
+            "data_alternativa",
+            "turno_alternativo",
+            "motivo_reparo",
+        ],
+        "descricao_se": {"campo": "motivo_reparo", "valor": "outro"},
+    },
     TipoDemanda.OUTROS: {
         "titulo": "Descreva a demanda",
         "campos": ["pedido", "descricao", "evidencias"],
@@ -161,6 +198,11 @@ LABELS_SIMPLES = {
     "observacoes": "Etapa do erro",
     "solicitante_nome": "Login / nome",
     "solicitante_contato": "Telefone do cliente",
+    "nome_cliente": "Nome do cliente",
+    "data_instalacao": "Data da instalação",
+    "data_alternativa": "Opção 2 — Data",
+    "turno_alternativo": "Opção 2 — Turno",
+    "motivo_reparo": "Solicitação",
     "evidencias": "Evidências (anexo)",
 }
 
@@ -185,6 +227,17 @@ LABELS_POR_TIPO: dict[str, dict[str, str]] = {
     TipoDemanda.SEM_SLOT: {
         "solicitante_contato": "Telefone do cliente",
     },
+    TipoDemanda.REPARO: {
+        "solicitante_contato": "Contato do cliente",
+        "data_desejada": "Opção 1 — Data",
+        "turno": "Opção 1 — Turno",
+        "data_alternativa": "Opção 2 — Data",
+        "turno_alternativo": "Opção 2 — Turno",
+        "data_instalacao": "Data da instalação",
+        "nome_cliente": "Nome do cliente",
+        "motivo_reparo": "Solicitação",
+        "descricao": "Descreva a solicitação",
+    },
 }
 
 
@@ -199,6 +252,7 @@ def schema_para_js() -> dict:
             "campos": cfg["campos"],
             "obrigatorios": cfg["obrigatorios"],
             "labels": LABELS_POR_TIPO.get(tipo, {}),
+            "descricao_se": cfg.get("descricao_se"),
         }
         for tipo, cfg in CAMPOS_POR_TIPO.items()
     }
@@ -296,6 +350,15 @@ CAMPOS_RESPOSTA_POR_TIPO: dict[str, list[dict]] = {
             "label": "Retorno da sinalização",
             "widget": "textarea",
             "required": False,
+        },
+    ],
+    TipoDemanda.REPARO: [
+        {
+            "name": "retorno_reparo",
+            "label": "Retorno do reparo",
+            "widget": "textarea",
+            "required": False,
+            "placeholder": "Ex.: técnico agendado / protocolo de reparo",
         },
     ],
     TipoDemanda.OUTROS: [

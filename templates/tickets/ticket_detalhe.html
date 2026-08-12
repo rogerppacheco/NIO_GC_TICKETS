@@ -58,6 +58,14 @@
               <div class="kv"><label>{{ labels_tipo.solicitante_nome|default:"Solicitante" }}</label><div>{{ ticket.solicitante_nome|default:"—" }}</div></div>
             {% elif key == "solicitante_contato" %}
               <div class="kv"><label>{{ labels_tipo.solicitante_contato|default:"Telefone" }}</label><div>{{ ticket.solicitante_contato|default:"—" }}</div></div>
+            {% elif key == "nome_cliente" %}
+              <div class="kv"><label>{{ labels_tipo.nome_cliente|default:"Nome do cliente" }}</label><div>{{ ticket.nome_cliente|default:"—" }}</div></div>
+            {% elif key == "data_instalacao" %}
+              <div><label>{{ labels_tipo.data_instalacao|default:"Data da instalação" }}</label><div>{{ ticket.data_instalacao|date:"d/m/Y"|default:"—" }}</div></div>
+            {% elif key == "data_alternativa" %}
+              <div><label>{{ labels_tipo.data_alternativa|default:"Opção 2 — Data" }}</label><div>{{ ticket.data_alternativa|date:"d/m/Y"|default:"—" }}</div></div>
+            {% elif key == "turno_alternativo" %}
+              <div><label>{{ labels_tipo.turno_alternativo|default:"Opção 2 — Turno" }}</label><div>{{ ticket.get_turno_alternativo_display|default:"—" }}</div></div>
             {% elif key == "descricao" %}
               <div class="full kv"><label>{{ labels_tipo.descricao|default:"Descrição" }}</label><div class="long-text">{{ ticket.descricao|texto_formatado }}</div></div>
             {% elif key == "observacoes" %}

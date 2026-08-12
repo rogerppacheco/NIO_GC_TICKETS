@@ -3,7 +3,7 @@ from __future__ import annotations
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 
-from .demanda_campos import LABELS_SIMPLES, campos_resposta, montar_texto_retorno, schema_tipo
+from .demanda_campos import LABELS_SIMPLES, LABELS_POR_TIPO, campos_resposta, montar_texto_retorno, schema_tipo
 from .models import (
     Anexo,
     ContatoParceiro,
@@ -14,6 +14,14 @@ from .models import (
     Ticket,
     TipoDemanda,
 )
+
+
+MOTIVO_REPARO_CHOICES = [
+    ("", "Selecione"),
+    ("Internet não funciona (total)", "Internet não funciona (total)"),
+    ("Internet com lentidão", "Internet com lentidão"),
+    ("outro", "Outra (descreva abaixo)"),
+]
 
 
 class MultiFileInput(forms.ClearableFileInput):
@@ -67,6 +75,11 @@ class TicketCreateForm(forms.ModelForm):
         widget=MultiFileInput(attrs={"multiple": True}),
         label="Evidências (anexo)",
     )
+    motivo_reparo = forms.ChoiceField(
+        required=False,
+        choices=MOTIVO_REPARO_CHOICES,
+        label="Solicitação",
+    )
 
     class Meta:
         model = Ticket
@@ -88,14 +101,20 @@ class TicketCreateForm(forms.ModelForm):
             "cidade",
             "uf",
             "endereco_completo",
+            "nome_cliente",
+            "data_instalacao",
             "data_desejada",
             "turno",
+            "data_alternativa",
+            "turno_alternativo",
             "descricao",
             "observacoes",
         ]
         widgets = {
             "tipo": forms.Select(attrs={"id": "id_tipo", "class": "tipo-demanda"}),
             "data_desejada": forms.DateInput(attrs={"type": "date"}),
+            "data_instalacao": forms.DateInput(attrs={"type": "date"}),
+            "data_alternativa": forms.DateInput(attrs={"type": "date"}),
             "descricao": forms.Textarea(attrs={"rows": 3, "placeholder": "Descreva em poucas linhas"}),
             "observacoes": forms.TextInput(attrs={"placeholder": "Ex.: Etapa 3 — consulta CPF"}),
             "uf": forms.TextInput(attrs={"maxlength": "2", "placeholder": "UF"}),
@@ -136,9 +155,44 @@ class TicketCreateForm(forms.ModelForm):
             self.fields["solicitante_contato"].widget.attrs.setdefault(
                 "placeholder", "DDD + número do cliente"
             )
+        if "nome_cliente" in self.fields:
+            self.fields["nome_cliente"].widget.attrs.setdefault(
+                "placeholder", "Nome completo do cliente"
+            )
         # Label padrão de documento: obrigatório só quando o schema exige
         if "documento_cliente" in self.fields:
             self.fields["documento_cliente"].label = "CPF / CNPJ"
+        self.order_fields(
+            [
+                "parceiro",
+                "tipo",
+                "pedido",
+                "documento_cliente",
+                "nome_cliente",
+                "solicitante_nome",
+                "solicitante_contato",
+                "tt",
+                "tt_vendedor",
+                "tt_backoffice",
+                "cep",
+                "logradouro",
+                "numero_fachada",
+                "complemento",
+                "bairro",
+                "cidade",
+                "uf",
+                "endereco_completo",
+                "data_instalacao",
+                "data_desejada",
+                "turno",
+                "data_alternativa",
+                "turno_alternativo",
+                "motivo_reparo",
+                "descricao",
+                "observacoes",
+                "evidencias",
+            ]
+        )
 
     def clean(self):
         cleaned = super().clean()
@@ -146,6 +200,7 @@ class TicketCreateForm(forms.ModelForm):
         if not tipo:
             return cleaned
         cfg = schema_tipo(tipo)
+        labels = {**LABELS_SIMPLES, **LABELS_POR_TIPO.get(tipo, {})}
         for campo in cfg["obrigatorios"]:
             if campo == "evidencias":
                 files = self.files.getlist("evidencias") if self.files else []
@@ -154,8 +209,16 @@ class TicketCreateForm(forms.ModelForm):
                 continue
             valor = cleaned.get(campo)
             if valor in (None, ""):
-                label = LABELS_SIMPLES.get(campo, campo)
+                label = labels.get(campo, campo)
                 self.add_error(campo, f"{label} é obrigatório para este tipo.")
+        if tipo == TipoDemanda.REPARO:
+            motivo = (cleaned.get("motivo_reparo") or "").strip()
+            texto = (cleaned.get("descricao") or "").strip()
+            if motivo == "outro":
+                if not texto:
+                    self.add_error("descricao", "Descreva a solicitação.")
+            elif motivo:
+                cleaned["descricao"] = motivo
         return cleaned
 
 
