@@ -381,11 +381,18 @@ def _eh_ajax(request: HttpRequest) -> bool:
 
 def _ctx_modal_resposta(request: HttpRequest, ticket: Ticket, treat_form: TicketTreatForm) -> dict:
     proximo = request.POST.get("next") or request.GET.get("next") or ""
+    mascaras = [
+        m for m in Mascara.objects.filter(ativo=True) if m.aplica_para(ticket.tipo)
+    ]
     return {
         "ticket": ticket,
         "treat_form": treat_form,
         "abas": montar_abas_tratamento(treat_form),
         "contexto_demanda": contexto_demanda_para_resposta(ticket),
+        "anexos": list(ticket.anexos.all()),
+        "mascaras_prontas": [
+            {"mascara": m, "conteudo": render_mascara(m, ticket)} for m in mascaras
+        ],
         "resposta_field_names": [c["name"] for c in treat_form.campos_resposta_defs],
         "next": proximo,
         "tempo_ja_registrado": ticket.tempo_retorno_segundos is not None,

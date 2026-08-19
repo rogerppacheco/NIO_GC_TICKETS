@@ -377,6 +377,17 @@ class Anexo(models.Model):
     def __str__(self) -> str:
         return self.nome_original or self.arquivo.name
 
+    @property
+    def eh_imagem(self) -> bool:
+        nome = f"{self.nome_original or ''} {getattr(self.arquivo, 'name', '') or ''}".lower()
+        return any(nome.endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"))
+
+    def url_arquivo(self) -> str:
+        try:
+            return self.arquivo.url
+        except Exception:
+            return ""
+
 
 class Mascara(models.Model):
     """Templates padrão para encaminhar a outras áreas (ex.: Grupo Elite)."""

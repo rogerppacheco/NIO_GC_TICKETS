@@ -27,6 +27,7 @@
           {{ aba.label }}
         </button>
       {% endfor %}
+      <button type="button" class="tab" role="tab" data-tab="mascaras" aria-selected="false">Máscaras</button>
     </div>
 
     <form method="post" action="{% url 'ticket_responder' ticket.protocolo %}" id="form-responder" class="modal-form">
@@ -64,6 +65,7 @@
                 {% endfor %}
               </div>
             </div>
+            {% include "tickets/_modal_anexos.html" %}
           {% endif %}
           {% for fname in aba.field_names %}
             {% with field=treat_form|form_field:fname %}
@@ -79,6 +81,26 @@
           {% endfor %}
         </div>
       {% endfor %}
+
+      <div class="tab-panel" data-panel="mascaras" role="tabpanel">
+        <p class="help" style="margin-top:0">Texto já preenchido com os dados desta demanda. Copie sem sair do tratamento.</p>
+        {% for item in mascaras_prontas %}
+          <div class="mask-card">
+            <div class="mask-card-h">
+              <div>
+                <strong>{{ item.mascara.nome }}</strong>
+                <div class="help">→ {{ item.mascara.destino }}</div>
+              </div>
+              <button class="btn btn-primary" type="button" data-copy-target="mask-modal-{{ item.mascara.id }}">
+                Copiar
+              </button>
+            </div>
+            <textarea id="mask-modal-{{ item.mascara.id }}" class="mono" rows="8" readonly>{{ item.conteudo }}</textarea>
+          </div>
+        {% empty %}
+          <p class="help">Nenhuma máscara para este tipo. Cadastre em Máscaras no menu.</p>
+        {% endfor %}
+      </div>
 
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" data-fechar-modal>Cancelar</button>

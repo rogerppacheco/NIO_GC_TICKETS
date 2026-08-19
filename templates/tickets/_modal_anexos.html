@@ -1,0 +1,23 @@
+{% if anexos %}
+  <div class="modal-anexos">
+    <p class="help" style="margin-top:0">Anexos desta demanda</p>
+    {% for a in anexos %}
+      {% with url=a.url_arquivo %}
+        {% if url %}
+          <figure class="modal-anexo">
+            {% if a.eh_imagem %}
+              <a href="{{ url }}" target="_blank" rel="noopener">
+                <img class="modal-anexo-img" src="{{ url }}" alt="{{ a.nome_original|default:'Anexo' }}">
+              </a>
+            {% endif %}
+            <a class="modal-anexo-link" href="{{ url }}" target="_blank" rel="noopener">
+              {{ a.nome_original|default:a.arquivo.name }}
+            </a>
+          </figure>
+        {% else %}
+          <p class="help">{{ a.nome_original|default:"Anexo" }} (arquivo indisponível)</p>
+        {% endif %}
+      {% endwith %}
+    {% endfor %}
+  </div>
+{% endif %}

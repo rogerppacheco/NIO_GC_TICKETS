@@ -333,6 +333,14 @@ body.modal-open { overflow: hidden; }
   box-shadow: 0 20px 50px rgba(21, 32, 43, 0.18);
   margin: auto;
 }
+.modal.modal-responder { width: min(880px, 100%); }
+.modal-anexos { margin-top: 0.9rem; display: grid; gap: 0.75rem; }
+.modal-anexo { margin: 0; }
+.modal-anexo-img {
+  display: block; width: 100%; max-height: 280px; object-fit: contain;
+  background: #fff; border: 1px solid var(--line); border-radius: 10px;
+}
+.modal-anexo-link { display: inline-block; margin-top: 0.35rem; font-size: 0.86rem; }
 .modal-h {
   display: flex; align-items: flex-start; gap: 0.75rem;
   padding: 1rem 1.1rem; border-bottom: 1px solid var(--line);

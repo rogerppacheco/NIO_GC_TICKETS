@@ -10,7 +10,7 @@ from django.utils.datastructures import MultiValueDict
 from .acesso import eh_gestor, qs_equipe, qs_especialistas, tickets_visiveis
 from .demanda_campos import montar_abas_tratamento
 from .forms import LoginForm, MultipleFileField, ParceiroForm, TicketCreateForm, TicketTreatForm
-from .models import Parceiro, PerfilStaff, Ticket, TipoDemanda, formatar_duracao
+from .models import Anexo, Parceiro, PerfilStaff, Ticket, TipoDemanda, formatar_duracao
 
 
 class MultipleFileFieldTests(SimpleTestCase):
@@ -261,6 +261,42 @@ class TratamentoModalTests(TestCase):
         self.assertIsNotNone(self.ticket.tempo_retorno_segundos)
         self.assertGreaterEqual(self.ticket.tempo_retorno_segundos, 12)
         self.assertIn("Nio@123", self.ticket.resposta_publica)
+
+    @override_settings(
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    )
+    def test_modal_mostra_anexo_e_permite_copiar_mascara(self):
+        from .models import Mascara
+
+        Anexo.objects.create(
+            ticket=self.ticket,
+            arquivo=SimpleUploadedFile("print.jpeg", b"fake-image", content_type="image/jpeg"),
+            nome_original="print.jpeg",
+        )
+        Mascara.objects.create(
+            nome="Reset",
+            destino="GC",
+            tipos=TipoDemanda.RESET_SENHA,
+            template="*TT:* {{tt}}",
+            ativo=True,
+        )
+        self.client.force_login(self.user)
+        r = self.client.post(
+            reverse("ticket_responder", args=[self.ticket.protocolo]),
+            {"action": "abrir"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "print.jpeg")
+        self.assertContains(r, "modal-anexo-img")
+        self.assertContains(r, 'data-tab="mascaras"')
+        self.assertContains(r, "Copiar")
+        self.assertContains(r, "*TT:* TT99")
 
 
 class IsolamentoAuthTests(SimpleTestCase):
