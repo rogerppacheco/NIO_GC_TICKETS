@@ -77,6 +77,22 @@ class EspecialistaAcessoTests(TestCase):
             parceiro=self.pdv_outro, tipo=TipoDemanda.STATUS_PEDIDO, pedido="99"
         )
 
+    def test_lista_parceiros_sem_especialista_nao_quebra(self):
+        from django.template import Context, Template
+
+        html = Template(
+            "{% if p.especialista %}"
+            "{{ p.especialista.get_full_name|default:p.especialista.username }}"
+            "{% else %}—{% endif %}"
+        ).render(Context({"p": self.pdv_outro}))
+        self.assertEqual(html, "—")
+        html_ana = Template(
+            "{% if p.especialista %}"
+            "{{ p.especialista.get_full_name|default:p.especialista.username }}"
+            "{% else %}—{% endif %}"
+        ).render(Context({"p": self.pdv_ana}))
+        self.assertIn("Ana", html_ana)
+
     def test_gestor_ve_todos(self):
         self.assertTrue(eh_gestor(self.gestor))
         self.assertEqual(tickets_visiveis(self.gestor).count(), 2)

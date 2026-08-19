@@ -27,7 +27,13 @@
         <tr {% if not p.ativo %}style="opacity:0.65"{% endif %}>
           <td>{{ p.codigo_pdv }}</td>
           <td>{{ p.nome }}</td>
-          <td>{{ p.especialista.get_full_name|default:p.especialista.username|default:"—" }}</td>
+          <td>
+            {% if p.especialista %}
+              {{ p.especialista.get_full_name|default:p.especialista.username }}
+            {% else %}
+              —
+            {% endif %}
+          </td>
           <td>{{ p.qtd_contatos }}</td>
           <td>{{ p.qtd_tickets }}</td>
           <td>

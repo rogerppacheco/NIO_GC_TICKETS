@@ -38,7 +38,7 @@ a:hover { text-decoration: underline; }
   border-bottom: 1px solid var(--line);
 }
 .topbar-inner {
-  max-width: 1180px; margin: 0 auto; padding: 0.85rem 1.25rem;
+  max-width: none; margin: 0; padding: 0.7rem 1.1rem;
   display: flex; align-items: center; gap: 1.25rem; justify-content: space-between;
 }
 .brand {
@@ -67,6 +67,63 @@ a:hover { text-decoration: underline; }
 
 .wrap { max-width: 1180px; margin: 0 auto; padding: 1.4rem 1.25rem 3rem; }
 .wrap-wide { max-width: 1280px; }
+.wrap-fila {
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 0.7rem 1rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-height: calc(100vh - 58px);
+}
+.page-fila { background: var(--bg); }
+.fila-head {
+  display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
+}
+.fila-head h1 { margin: 0; font-size: 1.25rem; letter-spacing: -0.03em; }
+.fila-head p { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.85rem; }
+.fila-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem;
+}
+.fila-toolbar .fila-search {
+  flex: 1 1 16rem;
+  min-width: 12rem;
+  max-width: 22rem;
+  width: auto;
+  padding: 0.42rem 0.7rem;
+}
+.fila-toolbar .fila-pick {
+  width: auto;
+  min-width: 9.5rem;
+  max-width: 16rem;
+  padding: 0.42rem 0.55rem;
+  font-size: 0.88rem;
+}
+.fila-clear { padding: 0.42rem 0.65rem; font-size: 0.85rem; }
+.fila-board {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: 12px;
+}
+.fila-board .table-scroll {
+  flex: 1;
+  overflow: auto;
+}
+.wrap-fila .table { min-width: 1080px; }
+.wrap-fila .table th,
+.wrap-fila .table td { padding: 0.48rem 0.65rem; white-space: nowrap; }
+.wrap-fila .table thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: #fff; box-shadow: 0 1px 0 var(--line);
+}
+.cell-clip {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .stack { display: flex; flex-direction: column; gap: 1rem; }
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .table-scroll .table { min-width: 720px; }

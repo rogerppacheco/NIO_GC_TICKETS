@@ -1,30 +1,30 @@
 {% extends "base.html" %}
 {% block title %}Fila · NIO GC Tickets{% endblock %}
+{% block body_class %}page-fila{% endblock %}
+{% block main_class %}wrap wrap-fila{% endblock %}
 {% block content %}
-<div class="hero">
+<div class="fila-head">
   <div>
     <h1>Fila de demandas</h1>
-    <p>{{ abertos_count }} abertos · substitui a planilha de acompanhamento</p>
+    <p>{{ abertos_count }} abertos</p>
   </div>
   <a class="btn btn-primary" href="{% url 'ticket_criar' %}">Nova demanda</a>
 </div>
 
-<div class="panel" style="margin-bottom:1rem">
-  <div class="panel-b">
-    <form method="get" class="form-grid">
-      <div>{{ form.q.label_tag }}{{ form.q }}</div>
-      <div>{{ form.status.label_tag }}{{ form.status }}</div>
-      <div>{{ form.tipo.label_tag }}{{ form.tipo }}</div>
-      <div>{{ form.parceiro.label_tag }}{{ form.parceiro }}</div>
-      {% if mostrar_filtro_especialista and form.especialista %}
-        <div>{{ form.especialista.label_tag }}{{ form.especialista }}</div>
-      {% endif %}
-      <div class="full"><button class="btn btn-secondary" type="submit">Filtrar</button></div>
-    </form>
-  </div>
-</div>
+<form method="get" class="fila-toolbar" id="fila-filtros">
+  {{ form.q }}
+  {{ form.status }}
+  {{ form.tipo }}
+  {{ form.parceiro }}
+  {% if mostrar_filtro_especialista and form.especialista %}
+    {{ form.especialista }}
+  {% endif %}
+  {% if filtros_ativos %}
+    <a class="btn btn-ghost fila-clear" href="{% url 'fila' %}">Limpar</a>
+  {% endif %}
+</form>
 
-<div class="panel">
+<div class="panel fila-board">
   <div class="table-scroll">
     <table class="table">
       <thead>
@@ -35,7 +35,7 @@
           <th>Pedido</th>
           <th>Fila</th>
           <th>STATUS</th>
-          <th>Retorno tratamento</th>
+          <th>Retorno</th>
           <th>Criado</th>
           <th></th>
         </tr>
@@ -45,10 +45,10 @@
         <tr>
           <td><a class="protocolo" href="{% url 'ticket_detalhe' t.protocolo %}">{{ t.protocolo }}</a></td>
           <td>{{ t.parceiro.nome }}</td>
-          <td>{{ t.get_tipo_display }}</td>
+          <td class="cell-clip" title="{{ t.get_tipo_display }}">{{ t.get_tipo_display }}</td>
           <td>{{ t.pedido|default:"—" }}</td>
           <td><span class="pill {{ t.status }}">{{ t.get_status_display }}</span></td>
-          <td>{{ t.resultado_status|default:"—" }}</td>
+          <td class="cell-clip" title="{{ t.resultado_status }}">{{ t.resultado_status|default:"—" }}</td>
           <td>{{ t.tempo_retorno_tratamento }}</td>
           <td>{{ t.criado_em|date:"d/m/Y H:i" }}</td>
           <td>
@@ -79,6 +79,21 @@
 {% block extra_js %}
 <script>
 (function () {
+  const form = document.getElementById("fila-filtros");
+  if (form) {
+    form.querySelectorAll("select").forEach(function (el) {
+      el.addEventListener("change", function () { form.submit(); });
+    });
+    const busca = form.querySelector(".fila-search, input[name='q']");
+    let t;
+    if (busca) {
+      busca.addEventListener("input", function () {
+        clearTimeout(t);
+        t = setTimeout(function () { form.submit(); }, 350);
+      });
+    }
+  }
+
   const menu = document.getElementById("mask-menu");
 
   function hideMenu() {
@@ -116,7 +131,6 @@
           else await navigator.clipboard.writeText(list[0].conteudo);
           return;
         }
-        // várias máscaras → menu
         const rect = btn.getBoundingClientRect();
         menu.innerHTML = list.map(function (m, i) {
           return '<button type="button" class="mask-menu-item" data-idx="' + i + '">' +

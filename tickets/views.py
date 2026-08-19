@@ -111,6 +111,10 @@ def fila(request: HttpRequest) -> HttpResponse:
     abertos = qs.exclude(
         status__in=[StatusTicket.RESOLVIDO, StatusTicket.FECHADO, StatusTicket.CANCELADO]
     )
+    filtros_ativos = any(
+        (request.GET.get(k) or "").strip()
+        for k in ("q", "status", "tipo", "parceiro", "especialista")
+    )
     return render(
         request,
         "tickets/fila.html",
@@ -119,6 +123,7 @@ def fila(request: HttpRequest) -> HttpResponse:
             "tickets": qs[:200],
             "abertos_count": abertos.count(),
             "mostrar_filtro_especialista": eh_gestor(request.user),
+            "filtros_ativos": filtros_ativos,
         },
     )
 

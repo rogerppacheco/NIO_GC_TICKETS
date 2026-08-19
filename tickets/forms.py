@@ -466,25 +466,39 @@ class MascaraForm(forms.ModelForm):
 
 
 class FilaFiltroForm(forms.Form):
-    q = forms.CharField(required=False, label="Busca")
+    q = forms.CharField(
+        required=False,
+        label="Busca",
+        widget=forms.TextInput(
+            attrs={
+                "placeholder": "Protocolo, pedido, PDV…",
+                "autocomplete": "off",
+                "class": "fila-search",
+            }
+        ),
+    )
     status = forms.ChoiceField(
         required=False,
         choices=[("", "Todos status")] + list(StatusTicket.choices),
+        widget=forms.Select(attrs={"class": "fila-pick", "aria-label": "Status"}),
     )
     tipo = forms.ChoiceField(
         required=False,
         choices=[("", "Todos tipos")] + list(TipoDemanda.choices),
+        widget=forms.Select(attrs={"class": "fila-pick", "aria-label": "Tipo"}),
     )
     parceiro = forms.ModelChoiceField(
         required=False,
         queryset=Parceiro.objects.filter(ativo=True),
         empty_label="Todos parceiros",
+        widget=forms.Select(attrs={"class": "fila-pick", "aria-label": "Parceiro"}),
     )
     especialista = forms.ModelChoiceField(
         required=False,
         queryset=get_user_model().objects.none(),
         empty_label="Todos especialistas",
         label="Especialista",
+        widget=forms.Select(attrs={"class": "fila-pick", "aria-label": "Especialista"}),
     )
 
     def __init__(self, *args, parceiros_qs=None, especialistas_qs=None, **kwargs):

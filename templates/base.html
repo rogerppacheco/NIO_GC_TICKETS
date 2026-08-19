@@ -7,7 +7,7 @@
   <title>{% block title %}NIO GC Tickets{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="{% url 'home' %}">
@@ -46,7 +46,7 @@
     </div>
   </header>
 
-  <main class="wrap">
+  <main class="{% block main_class %}wrap{% endblock %}">
     {% if messages %}
       <ul class="messages">
         {% for message in messages %}
