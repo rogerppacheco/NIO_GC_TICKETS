@@ -20,6 +20,9 @@
           <a href="{% url 'fila' %}">Fila {% if nav_novos %}<span class="badge">{{ nav_novos }}</span>{% endif %}</a>
           <a href="{% url 'ticket_criar' %}">Nova demanda</a>
           <a href="{% url 'parceiros' %}">Parceiros</a>
+          {% if eh_gestor %}
+            <a href="{% url 'especialistas' %}">Especialistas</a>
+          {% endif %}
           <a href="{% url 'mascaras' %}">Máscaras</a>
           <a href="{% url 'config_resposta_lista' %}">Campos resposta</a>
           <form method="post" action="{% url 'logout' %}" class="logout-form">
@@ -53,8 +56,12 @@
     {% endif %}
     {% block content %}{% endblock %}
   </main>
+  <div id="modal-root">{% block modal %}{% endblock %}</div>
   <script src="{% static 'js/viacep.js' %}"></script>
   <script src="{% static 'js/clipboard.js' %}"></script>
+  {% if user.is_authenticated %}
+    <script src="{% static 'js/responder_modal.js' %}"></script>
+  {% endif %}
   {% block extra_js %}{% endblock %}
 </body>
 </html>

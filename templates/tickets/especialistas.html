@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Especialistas · NIO GC Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Especialistas</h1>
+    <p>Cada especialista entra com o mesmo acesso interno e vê só as demandas dos PDVs em que está no cadastro do parceiro.</p>
+  </div>
+  <a class="btn btn-primary" href="{% url 'especialista_novo' %}">Novo especialista</a>
+</div>
+<div class="panel">
+  <div class="table-scroll">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Login</th>
+          <th>E-mail</th>
+          <th>PDVs</th>
+          <th>Situação</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in especialistas %}
+        <tr {% if not u.is_active %}style="opacity:0.65"{% endif %}>
+          <td>{{ u.get_full_name|default:"—" }}</td>
+          <td class="mono">{{ u.username }}</td>
+          <td>{{ u.email|default:"—" }}</td>
+          <td>{{ u.qtd_parceiros }}</td>
+          <td>
+            {% if u.is_active %}
+              <span class="pill resolvido">Ativo</span>
+            {% else %}
+              <span class="pill cancelado">Inativo</span>
+            {% endif %}
+          </td>
+          <td><a class="btn btn-secondary" href="{% url 'especialista_editar' u.pk %}">Editar</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6">Nenhum especialista ainda. Crie o acesso e depois vincule no cadastro do parceiro.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

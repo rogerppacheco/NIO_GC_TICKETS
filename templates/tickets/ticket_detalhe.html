@@ -123,57 +123,30 @@
     <div class="panel" style="margin-bottom:1rem">
       <div class="panel-h"><h2>Tratar / responder</h2></div>
       <div class="panel-b">
-        <form method="post">
+        <p class="help" style="margin-top:0">Abre o formulário em abas. A primeira é o campo de resposta desta demanda. O cronômetro conta até Salvar resposta.</p>
+        <a class="btn btn-primary" href="?responder=1"
+           data-abrir-resposta="{{ ticket.protocolo }}"
+           data-next="{% url 'ticket_detalhe' ticket.protocolo %}">Responder</a>
+        {% if ticket.tempo_retorno_segundos != None %}
+          <p class="help">Retorno de tratamento: <strong>{{ ticket.tempo_retorno_tratamento }}</strong></p>
+        {% endif %}
+
+        <form method="post" style="margin-top:1.1rem">
           {% csrf_token %}
           <input type="hidden" name="action" value="tratar">
-
-          <div class="token-picker" style="margin-bottom:1rem">
+          <div class="token-picker">
             <strong style="font-size:0.92rem">Tipo da demanda</strong>
             <div style="margin-top:0.45rem">
               <label for="{{ treat_form.tipo.id_for_label }}">{{ treat_form.tipo.label }}</label>
               {{ treat_form.tipo }}
               {% if treat_form.tipo.help_text %}<div class="help">{{ treat_form.tipo.help_text }}</div>{% endif %}
-              {% if treat_form.tipo.errors %}<div class="help" style="color:var(--danger)">{{ treat_form.tipo.errors|striptags }}</div>{% endif %}
             </div>
-            <div style="margin-top:0.55rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+            <div style="margin-top:0.55rem">
               <button class="btn btn-secondary" type="submit" name="so_atualizar_tipo" value="1">
                 Só alterar o tipo
               </button>
             </div>
           </div>
-
-          <div class="token-picker" style="margin-bottom:1rem">
-            <strong style="font-size:0.92rem">Resposta desta demanda</strong>
-            <div class="help">Preencha o que o parceiro precisa receber · {{ ticket.get_tipo_display }}</div>
-            {% for field in treat_form %}
-              {% if field.name in resposta_field_names %}
-                <div style="margin-top:0.55rem">
-                  <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
-                  {{ field }}
-                  {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
-                  {% if field.errors %}<div class="help" style="color:var(--danger)">{{ field.errors|striptags }}</div>{% endif %}
-                </div>
-              {% endif %}
-            {% endfor %}
-            <div style="margin-top:0.55rem">
-              <label for="{{ treat_form.complemento_retorno.id_for_label }}">{{ treat_form.complemento_retorno.label }}</label>
-              {{ treat_form.complemento_retorno }}
-              {% if treat_form.complemento_retorno.help_text %}<div class="help">{{ treat_form.complemento_retorno.help_text }}</div>{% endif %}
-            </div>
-          </div>
-
-          {% for field in treat_form %}
-            {% if field.name != "complemento_retorno" and field.name != "tipo" and field.name not in resposta_field_names %}
-              <div style="margin-bottom:0.75rem">
-                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {{ field }}
-                {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
-                {% if field.errors %}<div class="help" style="color:var(--danger)">{{ field.errors|striptags }}</div>{% endif %}
-              </div>
-            {% endif %}
-          {% endfor %}
-
-          <button class="btn btn-primary" type="submit">Salvar resposta</button>
         </form>
       </div>
     </div>
@@ -235,4 +208,9 @@
     </div>
   </div>
 </div>
+{% endblock %}
+{% block modal %}
+{% if abrir_modal_resposta %}
+  {% include "tickets/_modal_responder.html" %}
+{% endif %}
 {% endblock %}

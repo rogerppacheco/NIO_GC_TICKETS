@@ -261,6 +261,71 @@ input:focus, select:focus, textarea:focus {
 }
 .auth-card { width: min(420px, 100%); }
 
+body.modal-open { overflow: hidden; }
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 80;
+  background: rgba(21, 32, 43, 0.45);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 1.5rem 1rem 2rem; overflow-y: auto;
+}
+.modal {
+  width: min(720px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 50px rgba(21, 32, 43, 0.18);
+  margin: auto;
+}
+.modal-h {
+  display: flex; align-items: flex-start; gap: 0.75rem;
+  padding: 1rem 1.1rem; border-bottom: 1px solid var(--line);
+}
+.modal-h h2 { margin: 0; font-size: 1.2rem; letter-spacing: -0.02em; }
+.modal-h .icon-btn { margin-left: auto; flex-shrink: 0; }
+.modal-timer {
+  display: flex; flex-direction: column; align-items: flex-end;
+  min-width: 5.5rem;
+}
+.modal-timer strong {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.15rem; color: var(--brand);
+}
+.tabs {
+  display: flex; gap: 0.25rem; overflow-x: auto;
+  padding: 0.55rem 0.85rem 0; border-bottom: 1px solid var(--line);
+}
+.tab {
+  border: 0; background: transparent; cursor: pointer; font: inherit;
+  font-weight: 700; font-size: 0.86rem; color: var(--muted);
+  padding: 0.55rem 0.75rem; border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--ink); }
+.tab.is-active { color: var(--brand); border-bottom-color: var(--brand); }
+.tab-panel { display: none; padding: 1rem 1.1rem; }
+.tab-panel.is-active { display: block; }
+.modal-field { margin-bottom: 0.85rem; }
+.modal-actions {
+  display: flex; justify-content: flex-end; gap: 0.5rem; flex-wrap: wrap;
+  padding: 0.85rem 1.1rem 1.1rem; border-top: 1px solid var(--line);
+}
+.contexto-demanda {
+  margin-bottom: 1rem; padding: 0.75rem;
+  border: 1px dashed var(--line); border-radius: 10px; background: #f8fafb;
+}
+.ctx-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; }
+.ctx-chip label { margin-bottom: 0.2rem; }
+.ctx-val {
+  display: flex; align-items: center; gap: 0.35rem;
+  font-weight: 700; overflow-wrap: anywhere;
+}
+.ctx-val .icon-btn { width: 1.85rem; height: 1.85rem; flex-shrink: 0; }
+
+@media (max-width: 700px) {
+  .ctx-grid { grid-template-columns: 1fr; }
+  .modal-h { flex-wrap: wrap; }
+}
+
 @media (max-width: 900px) {
   .cards, .grid-2, .grid-3, .form-grid { grid-template-columns: 1fr; }
   .hero { flex-direction: column; align-items: start; }

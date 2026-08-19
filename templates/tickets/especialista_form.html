@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }} · Especialistas{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>{{ titulo }}</h1>
+    <p>O login abre a mesma área interna. A fila mostra só os tickets dos parceiros em que esta pessoa é o especialista.</p>
+  </div>
+</div>
+
+<div class="stack">
+  <div class="panel">
+    <div class="panel-h"><h2>Acesso</h2></div>
+    <div class="panel-b">
+      <form method="post" class="form-grid">
+        {% csrf_token %}
+        {% for field in form %}
+          <div class="{% if field.name == 'is_active' %}full{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+            {% if field.errors %}<div class="help" style="color:var(--danger)">{{ field.errors|striptags }}</div>{% endif %}
+          </div>
+        {% endfor %}
+        <div class="full" style="display:flex;gap:0.5rem;flex-wrap:wrap">
+          <button class="btn btn-primary" type="submit">Salvar especialista</button>
+          <a class="btn btn-secondary" href="{% url 'especialistas' %}">Voltar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% if especialista %}
+  <div class="panel">
+    <div class="panel-h"><h2>Parceiros deste especialista</h2></div>
+    <div class="panel-b">
+      {% if parceiros %}
+        <ul class="stack" style="list-style:none;padding:0;margin:0;gap:0.45rem">
+          {% for p in parceiros %}
+            <li>
+              <a href="{% url 'parceiro_editar' p.pk %}">{{ p.codigo_pdv }} — {{ p.nome }}</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="help" style="margin:0">Nenhum PDV vinculado. Edite o parceiro e escolha este especialista no campo <strong>Especialista</strong>.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

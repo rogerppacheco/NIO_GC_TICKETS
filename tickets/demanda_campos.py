@@ -241,8 +241,112 @@ LABELS_POR_TIPO: dict[str, dict[str, str]] = {
 }
 
 
+# Campos da demanda mostrados no topo da 1ª aba (o que precisa consultar para responder)
+CAMPOS_CONTEXTO_RESPOSTA: dict[str, list[str]] = {
+    TipoDemanda.RESET_SENHA: ["tt"],
+    TipoDemanda.ENDERECO_DOC: ["pedido", "documento_cliente"],
+    TipoDemanda.STATUS_PEDIDO: ["pedido"],
+    TipoDemanda.VIABILIDADE: ["cep", "numero_fachada", "endereco_completo"],
+    TipoDemanda.AGENDAR_REAGENDAR: ["pedido", "documento_cliente", "data_desejada", "turno"],
+    TipoDemanda.PRIORIDADE_ELITE: ["pedido", "endereco_completo", "data_desejada", "turno"],
+    TipoDemanda.ACESSO_APP: ["documento_cliente", "descricao"],
+    TipoDemanda.ABRIR_CHAMADO_TI: ["tt_vendedor", "tt_backoffice", "pedido", "observacoes"],
+    TipoDemanda.SEM_SLOT: ["pedido", "data_desejada", "turno", "solicitante_contato"],
+    TipoDemanda.INSTALACAO_FISICA: ["pedido", "endereco_completo", "descricao"],
+    TipoDemanda.REPARO: [
+        "pedido",
+        "nome_cliente",
+        "data_instalacao",
+        "data_desejada",
+        "turno",
+        "data_alternativa",
+        "turno_alternativo",
+    ],
+    TipoDemanda.OUTROS: ["pedido", "descricao"],
+}
+
+
 def schema_tipo(tipo: str) -> dict:
     return CAMPOS_POR_TIPO.get(tipo) or CAMPOS_POR_TIPO[TipoDemanda.OUTROS]
+
+
+def campos_contexto_resposta(tipo: str) -> list[str]:
+    return list(CAMPOS_CONTEXTO_RESPOSTA.get(tipo) or ["pedido"])
+
+
+def valor_campo_ticket(ticket, name: str) -> str:
+    """Valor legível de um campo da demanda para exibir no modal."""
+    if name == "turno":
+        return ticket.get_turno_display() or "—"
+    if name == "turno_alternativo":
+        return ticket.get_turno_alternativo_display() or "—"
+    if name in {"data_desejada", "data_instalacao", "data_alternativa"}:
+        valor = getattr(ticket, name, None)
+        return valor.strftime("%d/%m/%Y") if valor else "—"
+    valor = getattr(ticket, name, None)
+    if valor in (None, ""):
+        return "—"
+    return str(valor)
+
+
+def contexto_demanda_para_resposta(ticket) -> list[dict]:
+    labels = {**LABELS_SIMPLES, **LABELS_POR_TIPO.get(ticket.tipo, {})}
+    itens = []
+    for name in campos_contexto_resposta(ticket.tipo):
+        itens.append(
+            {
+                "name": name,
+                "label": labels.get(name, name),
+                "valor": valor_campo_ticket(ticket, name),
+            }
+        )
+    return itens
+
+
+ABAS_TRATAMENTO_EXTRAS = [
+    ("complemento_retorno", "Complemento"),
+    ("resultado_status", "STATUS"),
+    ("status", "Fila"),
+    ("nota_interna", "DETALHES"),
+    ("solicitante_contato", "WhatsApp"),
+]
+
+
+def montar_abas_tratamento(treat_form) -> list[dict]:
+    """Abas do modal: a 1ª é sempre o campo de resposta da demanda."""
+    tabs: list[dict] = []
+    for campo in treat_form.campos_resposta_defs:
+        tabs.append(
+            {
+                "id": campo["name"],
+                "label": campo["label"],
+                "field_names": [campo["name"]],
+                "principal": not tabs,
+            }
+        )
+    if not tabs:
+        tabs.append(
+            {
+                "id": "resposta",
+                "label": "Resposta",
+                "field_names": ["complemento_retorno"],
+                "principal": True,
+            }
+        )
+    usados = {n for t in tabs for n in t["field_names"]}
+    for name, label in ABAS_TRATAMENTO_EXTRAS:
+        if name in usados:
+            continue
+        field_names = ["status", "prioridade"] if name == "status" else [name]
+        tabs.append(
+            {
+                "id": name,
+                "label": label,
+                "field_names": field_names,
+                "principal": False,
+            }
+        )
+    return tabs
 
 
 def schema_para_js() -> dict:

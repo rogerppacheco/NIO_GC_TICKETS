@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Anexo, ContatoParceiro, Encaminhamento, Mascara, Mensagem, Parceiro, Ticket, ConfigRespostaTipo
+from .models import Anexo, ContatoParceiro, Encaminhamento, Mascara, Mensagem, Parceiro, PerfilStaff, Ticket, ConfigRespostaTipo
 
 admin.site.site_header = "NIO GC Tickets"
 admin.site.site_title = "NIO GC Tickets"
@@ -13,7 +13,7 @@ class ContatoParceiroInline(admin.TabularInline):
 
 @admin.register(Parceiro)
 class ParceiroAdmin(admin.ModelAdmin):
-    list_display = ("codigo_pdv", "nome", "ativo")
+    list_display = ("codigo_pdv", "nome", "especialista", "ativo")
     list_filter = ("ativo",)
     search_fields = ("codigo_pdv", "nome")
     inlines = [ContatoParceiroInline]
@@ -47,6 +47,7 @@ class TicketAdmin(admin.ModelAdmin):
         "resultado_status",
         "prioridade",
         "pedido",
+        "tempo_retorno_tratamento",
         "criado_em",
     )
     list_filter = ("status", "tipo", "prioridade", "parceiro")
@@ -60,7 +61,14 @@ class TicketAdmin(admin.ModelAdmin):
         "contato__nome",
     )
     inlines = [MensagemInline, AnexoInline]
-    readonly_fields = ("protocolo", "criado_em", "atualizado_em")
+    readonly_fields = (
+        "protocolo",
+        "criado_em",
+        "atualizado_em",
+        "resposta_iniciada_em",
+        "resposta_salva_em",
+        "tempo_retorno_segundos",
+    )
 
 
 @admin.register(Mascara)
@@ -77,6 +85,12 @@ class EncaminhamentoAdmin(admin.ModelAdmin):
 
 admin.site.register(Mensagem)
 admin.site.register(Anexo)
+
+
+@admin.register(PerfilStaff)
+class PerfilStaffAdmin(admin.ModelAdmin):
+    list_display = ("user", "papel")
+    list_filter = ("papel",)
 
 
 @admin.register(ConfigRespostaTipo)

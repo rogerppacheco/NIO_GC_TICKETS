@@ -33,3 +33,11 @@ def texto_formatado(value) -> str:
     text = _linkify(escape(str(value)))
     text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br>")
     return mark_safe(text)
+
+
+@register.filter
+def form_field(form, name):
+    try:
+        return form[name]
+    except Exception:
+        return None

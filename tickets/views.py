@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView, LogoutView
 from django.db.models import Count, Q
@@ -10,17 +11,27 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
+from .acesso import (
+    eh_gestor,
+    gestor_required,
+    parceiros_visiveis,
+    ticket_para_usuario,
+    tickets_visiveis,
+)
 from .demanda_campos import (
     LABELS_POR_TIPO,
     LABELS_SIMPLES,
     catalogo_campos_resposta,
+    contexto_demanda_para_resposta,
     garantir_config_resposta_padrao,
+    montar_abas_tratamento,
     schema_para_js,
     schema_tipo,
 )
 from .forms import (
     AnexoForm,
     ContatoParceiroForm,
+    EspecialistaForm,
     FilaFiltroForm,
     LoginForm,
     MascaraForm,
@@ -38,6 +49,7 @@ from .models import (
     Mascara,
     Mensagem,
     Parceiro,
+    PerfilStaff,
     StatusTicket,
     Ticket,
     TipoDemanda,
@@ -62,8 +74,20 @@ def home(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def fila(request: HttpRequest) -> HttpResponse:
-    form = FilaFiltroForm(request.GET or None)
-    qs = Ticket.objects.select_related("parceiro", "atendente")
+    User = get_user_model()
+    parceiros_qs = parceiros_visiveis(request.user).filter(ativo=True)
+    especialistas_qs = User.objects.filter(is_staff=True, is_active=True).order_by(
+        "first_name", "username"
+    )
+    form = FilaFiltroForm(
+        request.GET or None,
+        parceiros_qs=parceiros_qs,
+        especialistas_qs=especialistas_qs,
+    )
+    if not eh_gestor(request.user):
+        form.fields.pop("especialista", None)
+
+    qs = tickets_visiveis(request.user)
 
     if form.is_valid():
         q = form.cleaned_data.get("q") or ""
@@ -81,6 +105,8 @@ def fila(request: HttpRequest) -> HttpResponse:
             qs = qs.filter(tipo=form.cleaned_data["tipo"])
         if form.cleaned_data.get("parceiro"):
             qs = qs.filter(parceiro=form.cleaned_data["parceiro"])
+        if eh_gestor(request.user) and form.cleaned_data.get("especialista"):
+            qs = qs.filter(parceiro__especialista=form.cleaned_data["especialista"])
 
     abertos = qs.exclude(
         status__in=[StatusTicket.RESOLVIDO, StatusTicket.FECHADO, StatusTicket.CANCELADO]
@@ -92,6 +118,7 @@ def fila(request: HttpRequest) -> HttpResponse:
             "form": form,
             "tickets": qs[:200],
             "abertos_count": abertos.count(),
+            "mostrar_filtro_especialista": eh_gestor(request.user),
         },
     )
 
@@ -100,6 +127,7 @@ def fila(request: HttpRequest) -> HttpResponse:
 def ticket_criar(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         form = TicketCreateForm(request.POST, request.FILES)
+        form.fields["parceiro"].queryset = parceiros_visiveis(request.user).filter(ativo=True)
         if form.is_valid():
             ticket = form.save(commit=False)
             if request.user.is_authenticated:
@@ -116,6 +144,7 @@ def ticket_criar(request: HttpRequest) -> HttpResponse:
             return redirect("ticket_detalhe", protocolo=ticket.protocolo)
     else:
         form = TicketCreateForm()
+        form.fields["parceiro"].queryset = parceiros_visiveis(request.user).filter(ativo=True)
     return render(
         request,
         "tickets/ticket_form.html",
@@ -325,11 +354,78 @@ def consulta_protocolo(request: HttpRequest, protocolo: str) -> HttpResponse:
     )
 
 
+def _eh_ajax(request: HttpRequest) -> bool:
+    return request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+
+def _ctx_modal_resposta(request: HttpRequest, ticket: Ticket, treat_form: TicketTreatForm) -> dict:
+    proximo = request.POST.get("next") or request.GET.get("next") or ""
+    return {
+        "ticket": ticket,
+        "treat_form": treat_form,
+        "abas": montar_abas_tratamento(treat_form),
+        "contexto_demanda": contexto_demanda_para_resposta(ticket),
+        "resposta_field_names": [c["name"] for c in treat_form.campos_resposta_defs],
+        "next": proximo,
+        "tempo_ja_registrado": ticket.tempo_retorno_segundos is not None,
+        "iniciado_iso": ticket.resposta_iniciada_em.isoformat()
+        if ticket.resposta_iniciada_em
+        else "",
+    }
+
+
+def _aplicar_tratamento(request: HttpRequest, ticket: Ticket, treat_form: TicketTreatForm) -> Ticket:
+    t = treat_form.save(commit=False)
+    t.registrar_tempo_resposta()
+    if not t.atendente:
+        t.atendente = request.user
+    t.save()
+    if t.resposta_publica:
+        Mensagem.objects.create(
+            ticket=t,
+            autor=request.user,
+            autor_nome=request.user.get_username(),
+            corpo=t.resposta_publica,
+            interno=False,
+        )
+    return t
+
+
+@login_required
+def ticket_responder(request: HttpRequest, protocolo: str) -> HttpResponse:
+    ticket = ticket_para_usuario(request.user, protocolo)
+    proximo = request.POST.get("next") or request.GET.get("next") or reverse("fila")
+
+    if request.method == "GET" or request.POST.get("action") == "abrir":
+        ticket.iniciar_tratamento(request.user)
+        ticket.refresh_from_db()
+        treat_form = TicketTreatForm(instance=ticket)
+        ctx = _ctx_modal_resposta(request, ticket, treat_form)
+        if _eh_ajax(request) or request.GET.get("modal") == "1":
+            return render(request, "tickets/_modal_responder.html", ctx)
+        return redirect(f"{reverse('ticket_detalhe', args=[ticket.protocolo])}?responder=1")
+
+    treat_form = TicketTreatForm(request.POST, instance=ticket)
+    if treat_form.is_valid():
+        _aplicar_tratamento(request, ticket, treat_form)
+        messages.success(request, "Resposta salva.")
+        if _eh_ajax(request):
+            return JsonResponse({"ok": True, "redirect": proximo})
+        return redirect(proximo)
+
+    ctx = _ctx_modal_resposta(request, ticket, treat_form)
+    if _eh_ajax(request):
+        return render(request, "tickets/_modal_responder.html", ctx, status=400)
+    messages.error(request, "Não foi possível salvar. Verifique os campos.")
+    return redirect("ticket_detalhe", protocolo=ticket.protocolo)
+
+
 @login_required
 def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
-    ticket = get_object_or_404(
-        Ticket.objects.select_related("parceiro", "atendente"), protocolo=protocolo
-    )
+    ticket = ticket_para_usuario(request.user, protocolo)
+    if request.GET.get("responder") == "1":
+        ticket.iniciar_tratamento(request.user)
+        ticket.refresh_from_db()
     treat_form = TicketTreatForm(instance=ticket)
     msg_form = MensagemForm()
     anexo_form = AnexoForm()
@@ -359,21 +455,8 @@ def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
 
             treat_form = TicketTreatForm(request.POST, instance=ticket)
             if treat_form.is_valid():
-                t = treat_form.save(commit=False)
-                if not t.primeiro_atendimento_em and t.status != StatusTicket.NOVO:
-                    t.primeiro_atendimento_em = timezone.now()
-                if not t.atendente:
-                    t.atendente = request.user
-                t.save()
-                if t.resposta_publica:
-                    Mensagem.objects.create(
-                        ticket=t,
-                        autor=request.user,
-                        autor_nome=request.user.get_username(),
-                        corpo=t.resposta_publica,
-                        interno=False,
-                    )
-                messages.success(request, "Ticket atualizado.")
+                _aplicar_tratamento(request, ticket, treat_form)
+                messages.success(request, "Resposta salva.")
                 return redirect("ticket_detalhe", protocolo=ticket.protocolo)
         elif action == "mensagem":
             msg_form = MensagemForm(request.POST)
@@ -445,16 +528,23 @@ def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
             "labels_tipo": {**LABELS_SIMPLES, **LABELS_POR_TIPO.get(ticket.tipo, {})},
             "campos_resposta": treat_form.campos_resposta_defs,
             "resposta_field_names": [c["name"] for c in treat_form.campos_resposta_defs],
+            "abrir_modal_resposta": request.GET.get("responder") == "1",
+            **_ctx_modal_resposta(request, ticket, treat_form),
         },
     )
 
 
 @login_required
 def parceiros_lista(request: HttpRequest) -> HttpResponse:
-    parceiros = Parceiro.objects.annotate(
-        qtd_tickets=Count("tickets"),
-        qtd_contatos=Count("contatos"),
-    ).order_by("nome")
+    parceiros = (
+        parceiros_visiveis(request.user)
+        .select_related("especialista")
+        .annotate(
+            qtd_tickets=Count("tickets"),
+            qtd_contatos=Count("contatos"),
+        )
+        .order_by("nome")
+    )
     return render(
         request,
         "tickets/parceiros.html",
@@ -464,20 +554,27 @@ def parceiros_lista(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def parceiro_form(request: HttpRequest, pk: int | None = None) -> HttpResponse:
-    instance = get_object_or_404(Parceiro, pk=pk) if pk else None
+    instance = get_object_or_404(parceiros_visiveis(request.user), pk=pk) if pk else None
     qtd_tickets = instance.tickets.count() if instance else 0
     contatos = instance.contatos.all() if instance else []
     contato_form = ContatoParceiroForm()
     form = ParceiroForm(instance=instance)
+    if not eh_gestor(request.user):
+        form.fields.pop("especialista", None)
 
     if request.method == "POST":
         action = request.POST.get("action") or "salvar_parceiro"
         if action == "salvar_parceiro":
             form = ParceiroForm(request.POST, instance=instance)
+            if not eh_gestor(request.user):
+                form.fields.pop("especialista", None)
             if form.is_valid():
-                form.save()
+                parceiro = form.save(commit=False)
+                if not eh_gestor(request.user):
+                    parceiro.especialista = request.user
+                parceiro.save()
                 messages.success(request, "Parceiro salvo.")
-                return redirect("parceiro_editar", pk=form.instance.pk)
+                return redirect("parceiro_editar", pk=parceiro.pk)
         elif action == "add_contato" and instance:
             contato_form = ContatoParceiroForm(request.POST)
             if contato_form.is_valid():
@@ -525,7 +622,10 @@ def parceiro_form(request: HttpRequest, pk: int | None = None) -> HttpResponse:
 @login_required
 @require_POST
 def contato_toggle(request: HttpRequest, pk: int) -> HttpResponse:
-    contato = get_object_or_404(ContatoParceiro, pk=pk)
+    contato = get_object_or_404(
+        ContatoParceiro.objects.filter(parceiro__in=parceiros_visiveis(request.user)),
+        pk=pk,
+    )
     contato.ativo = not contato.ativo
     contato.save(update_fields=["ativo", "atualizado_em"])
     estado = "ativado" if contato.ativo else "inativado"
@@ -536,7 +636,10 @@ def contato_toggle(request: HttpRequest, pk: int) -> HttpResponse:
 @login_required
 @require_POST
 def contato_excluir(request: HttpRequest, pk: int) -> HttpResponse:
-    contato = get_object_or_404(ContatoParceiro, pk=pk)
+    contato = get_object_or_404(
+        ContatoParceiro.objects.filter(parceiro__in=parceiros_visiveis(request.user)),
+        pk=pk,
+    )
     parceiro_id = contato.parceiro_id
     qtd = contato.tickets.count()
     if qtd > 0:
@@ -558,7 +661,10 @@ def contato_excluir(request: HttpRequest, pk: int) -> HttpResponse:
 def contato_gerar_token(request: HttpRequest, pk: int) -> HttpResponse:
     import secrets
 
-    contato = get_object_or_404(ContatoParceiro, pk=pk)
+    contato = get_object_or_404(
+        ContatoParceiro.objects.filter(parceiro__in=parceiros_visiveis(request.user)),
+        pk=pk,
+    )
     contato.token_acesso = secrets.token_urlsafe(6)
     contato.save(update_fields=["token_acesso", "atualizado_em"])
     messages.success(request, f"Token aleatório de {contato.nome}: {contato.token_acesso}")
@@ -568,7 +674,7 @@ def contato_gerar_token(request: HttpRequest, pk: int) -> HttpResponse:
 @login_required
 @require_POST
 def parceiro_inativar(request: HttpRequest, pk: int) -> HttpResponse:
-    parceiro = get_object_or_404(Parceiro, pk=pk)
+    parceiro = get_object_or_404(parceiros_visiveis(request.user), pk=pk)
     parceiro.ativo = False
     parceiro.save(update_fields=["ativo", "atualizado_em"])
     messages.success(
@@ -582,7 +688,7 @@ def parceiro_inativar(request: HttpRequest, pk: int) -> HttpResponse:
 @login_required
 @require_POST
 def parceiro_reativar(request: HttpRequest, pk: int) -> HttpResponse:
-    parceiro = get_object_or_404(Parceiro, pk=pk)
+    parceiro = get_object_or_404(parceiros_visiveis(request.user), pk=pk)
     parceiro.ativo = True
     parceiro.save(update_fields=["ativo", "atualizado_em"])
     messages.success(request, f"Parceiro {parceiro.codigo_pdv} — {parceiro.nome} reativado.")
@@ -592,7 +698,7 @@ def parceiro_reativar(request: HttpRequest, pk: int) -> HttpResponse:
 @login_required
 @require_POST
 def parceiro_excluir(request: HttpRequest, pk: int) -> HttpResponse:
-    parceiro = get_object_or_404(Parceiro, pk=pk)
+    parceiro = get_object_or_404(parceiros_visiveis(request.user), pk=pk)
     qtd = parceiro.tickets.count()
     if qtd > 0:
         messages.error(
@@ -650,9 +756,59 @@ def mascara_form(request: HttpRequest, pk: int | None = None) -> HttpResponse:
     )
 
 
+@gestor_required
+def especialistas_lista(request: HttpRequest) -> HttpResponse:
+    User = get_user_model()
+    especialistas = (
+        User.objects.filter(perfil_staff__papel=PerfilStaff.Papel.ESPECIALISTA)
+        .annotate(qtd_parceiros=Count("parceiros_especialista"))
+        .order_by("first_name", "username")
+    )
+    return render(
+        request,
+        "tickets/especialistas.html",
+        {"especialistas": especialistas},
+    )
+
+
+@gestor_required
+def especialista_form(request: HttpRequest, pk: int | None = None) -> HttpResponse:
+    User = get_user_model()
+    instance = None
+    if pk:
+        instance = get_object_or_404(
+            User.objects.filter(perfil_staff__papel=PerfilStaff.Papel.ESPECIALISTA),
+            pk=pk,
+        )
+    form = EspecialistaForm(instance=instance)
+    if request.method == "POST":
+        form = EspecialistaForm(request.POST, instance=instance)
+        if form.is_valid():
+            user = form.save()
+            messages.success(
+                request,
+                f"Especialista {user.get_full_name() or user.username} salvo. "
+                "Associe-o no cadastro de cada parceiro.",
+            )
+            return redirect("especialistas")
+    parceiros = []
+    if instance:
+        parceiros = Parceiro.objects.filter(especialista=instance).order_by("nome")
+    return render(
+        request,
+        "tickets/especialista_form.html",
+        {
+            "form": form,
+            "especialista": instance,
+            "parceiros": parceiros,
+            "titulo": "Editar especialista" if instance else "Novo especialista",
+        },
+    )
+
+
 @login_required
 def dashboard(request: HttpRequest) -> HttpResponse:
-    base = Ticket.objects.all()
+    base = tickets_visiveis(request.user)
     por_status = dict(
         base.values_list("status").annotate(c=Count("id")).values_list("status", "c")
     )
@@ -683,9 +839,7 @@ def dashboard(request: HttpRequest) -> HttpResponse:
 @require_GET
 def ticket_mascaras_json(request: HttpRequest, protocolo: str) -> HttpResponse:
     """Máscaras preenchidas do ticket — usado para copiar direto na fila."""
-    ticket = get_object_or_404(
-        Ticket.objects.select_related("parceiro", "contato"), protocolo=protocolo.upper()
-    )
+    ticket = ticket_para_usuario(request.user, protocolo)
     mascaras = [
         m for m in Mascara.objects.filter(ativo=True) if m.aplica_para(ticket.tipo)
     ]

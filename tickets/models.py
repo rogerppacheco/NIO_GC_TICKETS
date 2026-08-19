@@ -18,6 +18,15 @@ class Parceiro(models.Model):
     email = models.EmailField(blank=True)
     telefone = models.CharField(max_length=40, blank=True)
     ativo = models.BooleanField(default=True)
+    especialista = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="parceiros_especialista",
+        verbose_name="Especialista",
+        help_text="Responsável NIO por este PDV. Vê e trata as demandas deste parceiro.",
+    )
     token_acesso = models.CharField(
         max_length=64,
         blank=True,
@@ -215,6 +224,24 @@ class Ticket(models.Model):
     atualizado_em = models.DateTimeField(auto_now=True)
     primeiro_atendimento_em = models.DateTimeField(null=True, blank=True)
     resolvido_em = models.DateTimeField(null=True, blank=True)
+    resposta_iniciada_em = models.DateTimeField(
+        "Início do tratamento",
+        null=True,
+        blank=True,
+        help_text="Momento em que o atendente clicou em Responder.",
+    )
+    resposta_salva_em = models.DateTimeField(
+        "Fim do tratamento",
+        null=True,
+        blank=True,
+        help_text="Momento em que a resposta foi salva.",
+    )
+    tempo_retorno_segundos = models.PositiveIntegerField(
+        "Retorno de tratamento (s)",
+        null=True,
+        blank=True,
+        help_text="Tempo entre clicar em Responder e Salvar resposta (primeira vez).",
+    )
 
     class Meta:
         ordering = ["-criado_em"]
@@ -283,6 +310,32 @@ class Ticket(models.Model):
             return None
         delta = self.primeiro_atendimento_em - self.criado_em
         return round(delta.total_seconds() / 60, 1)
+
+    @property
+    def tempo_retorno_tratamento(self) -> str:
+        return formatar_duracao(self.tempo_retorno_segundos)
+
+    def iniciar_tratamento(self, user) -> None:
+        agora = timezone.now()
+        campos = ["resposta_iniciada_em", "atualizado_em"]
+        self.resposta_iniciada_em = agora
+        if not self.primeiro_atendimento_em:
+            self.primeiro_atendimento_em = agora
+            campos.append("primeiro_atendimento_em")
+        if self.status == StatusTicket.NOVO:
+            self.status = StatusTicket.EM_ANALISE
+            campos.append("status")
+        if not self.atendente and user is not None:
+            self.atendente = user
+            campos.append("atendente")
+        self.save(update_fields=campos)
+
+    def registrar_tempo_resposta(self) -> None:
+        agora = timezone.now()
+        self.resposta_salva_em = agora
+        if self.tempo_retorno_segundos is None and self.resposta_iniciada_em:
+            delta = agora - self.resposta_iniciada_em
+            self.tempo_retorno_segundos = max(0, int(delta.total_seconds()))
 
     @property
     def aberto(self) -> bool:
@@ -388,6 +441,44 @@ class ConfigRespostaTipo(models.Model):
 
     def campos_ativos(self) -> list[dict]:
         return [c for c in (self.campos or []) if c.get("ativo", True)]
+
+
+class PerfilStaff(models.Model):
+    class Papel(models.TextChoices):
+        GESTOR = "gestor", "Gestor"
+        ESPECIALISTA = "especialista", "Especialista"
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="perfil_staff",
+    )
+    papel = models.CharField(
+        max_length=20,
+        choices=Papel.choices,
+        default=Papel.ESPECIALISTA,
+        db_index=True,
+    )
+
+    class Meta:
+        verbose_name = "Perfil interno"
+        verbose_name_plural = "Perfis internos"
+
+    def __str__(self) -> str:
+        return f"{self.user} · {self.get_papel_display()}"
+
+
+def formatar_duracao(segundos: int | None) -> str:
+    if segundos is None:
+        return "—"
+    segundos = max(0, int(segundos))
+    horas, resto = divmod(segundos, 3600)
+    minutos, segs = divmod(resto, 60)
+    if horas:
+        return f"{horas}h {minutos:02d}min"
+    if minutos:
+        return f"{minutos}min {segs:02d}s" if segs else f"{minutos} min"
+    return f"{segs}s"
 
 
 class Encaminhamento(models.Model):

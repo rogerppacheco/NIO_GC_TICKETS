@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django import forms
+from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm
 
 from .demanda_campos import LABELS_SIMPLES, LABELS_POR_TIPO, campos_resposta, montar_texto_retorno, schema_tipo
@@ -58,10 +59,12 @@ class ParceiroForm(forms.ModelForm):
             "codigo_pdv",
             "nome",
             "ativo",
+            "especialista",
             "token_acesso",
         ]
         help_texts = {
             "token_acesso": "Um único token para todos os contatos deste PDV (opcional).",
+            "especialista": "Quem trata as demandas deste PDV.",
         }
         widgets = {
             "token_acesso": forms.TextInput(
@@ -72,6 +75,83 @@ class ParceiroForm(forms.ModelForm):
                 }
             ),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        User = get_user_model()
+        self.fields["especialista"].queryset = User.objects.filter(
+            is_staff=True, is_active=True
+        ).order_by("first_name", "username")
+        self.fields["especialista"].required = False
+        self.fields["especialista"].empty_label = "Sem especialista"
+
+
+class EspecialistaForm(forms.Form):
+    first_name = forms.CharField(label="Nome", max_length=150)
+    username = forms.CharField(label="Usuário (login)", max_length=150)
+    email = forms.EmailField(label="E-mail", required=False)
+    password = forms.CharField(
+        label="Senha",
+        widget=forms.PasswordInput,
+        required=False,
+        help_text="Deixe em branco para manter a senha atual.",
+    )
+    is_active = forms.BooleanField(label="Ativo", required=False, initial=True)
+
+    def __init__(self, *args, instance=None, **kwargs):
+        self.instance = instance
+        if instance and "initial" not in kwargs:
+            kwargs["initial"] = {
+                "first_name": instance.first_name,
+                "username": instance.username,
+                "email": instance.email,
+                "is_active": instance.is_active,
+            }
+        super().__init__(*args, **kwargs)
+        if instance is None:
+            self.fields["password"].required = True
+            self.fields["password"].help_text = "Senha inicial do especialista."
+            self.fields["password"].widget = forms.PasswordInput()
+
+    def clean_username(self):
+        User = get_user_model()
+        username = (self.cleaned_data.get("username") or "").strip()
+        qs = User.objects.filter(username__iexact=username)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError("Já existe um usuário com este login.")
+        return username
+
+    def save(self):
+        User = get_user_model()
+        from .models import PerfilStaff
+
+        dados = self.cleaned_data
+        if self.instance:
+            user = self.instance
+            user.first_name = dados["first_name"]
+            user.username = dados["username"]
+            user.email = dados.get("email") or ""
+            user.is_active = dados.get("is_active", True)
+            if dados.get("password"):
+                user.set_password(dados["password"])
+            user.is_staff = True
+            user.save()
+        else:
+            user = User.objects.create_user(
+                username=dados["username"],
+                password=dados["password"],
+                first_name=dados["first_name"],
+                email=dados.get("email") or "",
+                is_staff=True,
+                is_active=True,
+            )
+        PerfilStaff.objects.update_or_create(
+            user=user,
+            defaults={"papel": PerfilStaff.Papel.ESPECIALISTA},
+        )
+        return user
 
 
 class ContatoParceiroForm(forms.ModelForm):
@@ -400,3 +480,21 @@ class FilaFiltroForm(forms.Form):
         queryset=Parceiro.objects.filter(ativo=True),
         empty_label="Todos parceiros",
     )
+    especialista = forms.ModelChoiceField(
+        required=False,
+        queryset=get_user_model().objects.none(),
+        empty_label="Todos especialistas",
+        label="Especialista",
+    )
+
+    def __init__(self, *args, parceiros_qs=None, especialistas_qs=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if parceiros_qs is not None:
+            self.fields["parceiro"].queryset = parceiros_qs
+        if especialistas_qs is not None:
+            self.fields["especialista"].queryset = especialistas_qs
+        else:
+            User = get_user_model()
+            self.fields["especialista"].queryset = User.objects.filter(
+                is_staff=True, is_active=True
+            ).order_by("first_name", "username")

@@ -15,6 +15,7 @@
         <tr>
           <th>Código</th>
           <th>Nome</th>
+          <th>Especialista</th>
           <th>Contatos</th>
           <th>Demandas</th>
           <th>Situação</th>
@@ -26,6 +27,7 @@
         <tr {% if not p.ativo %}style="opacity:0.65"{% endif %}>
           <td>{{ p.codigo_pdv }}</td>
           <td>{{ p.nome }}</td>
+          <td>{{ p.especialista.get_full_name|default:p.especialista.username|default:"—" }}</td>
           <td>{{ p.qtd_contatos }}</td>
           <td>{{ p.qtd_tickets }}</td>
           <td>
@@ -61,7 +63,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="6">Nenhum parceiro. Rode: <code>python manage.py seed_nio</code></td></tr>
+        <tr><td colspan="7">Nenhum parceiro. Rode: <code>python manage.py seed_nio</code></td></tr>
         {% endfor %}
       </tbody>
     </table>

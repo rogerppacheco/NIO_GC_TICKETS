@@ -1,0 +1,89 @@
+{% load tickets_extras %}
+<div class="modal-overlay is-open" id="modal-responder" role="presentation"
+     data-iniciado="{{ iniciado_iso }}"
+     data-tempo-ok="{% if tempo_ja_registrado %}1{% else %}0{% endif %}">
+  <div class="modal modal-responder" role="dialog" aria-modal="true" aria-labelledby="modal-responder-titulo">
+    <div class="modal-h">
+      <div>
+        <h2 id="modal-responder-titulo">Responder {{ ticket.protocolo }}</h2>
+        <p class="help" style="margin:0.2rem 0 0">
+          {{ ticket.parceiro.codigo_pdv }} — {{ ticket.parceiro.nome }} · {{ ticket.get_tipo_display }}
+        </p>
+      </div>
+      <div class="modal-timer" title="Tempo desde Responder até Salvar resposta">
+        <span class="help">{% if tempo_ja_registrado %}Retorno{% else %}Tratando{% endif %}</span>
+        <strong data-timer-tratamento>
+          {% if tempo_ja_registrado %}{{ ticket.tempo_retorno_tratamento }}{% else %}00:00{% endif %}
+        </strong>
+      </div>
+      <button type="button" class="icon-btn" data-fechar-modal aria-label="Fechar">×</button>
+    </div>
+
+    <div class="tabs" role="tablist">
+      {% for aba in abas %}
+        <button type="button" class="tab{% if aba.principal %} is-active{% endif %}"
+                role="tab" data-tab="{{ aba.id }}"
+                aria-selected="{% if aba.principal %}true{% else %}false{% endif %}">
+          {{ aba.label }}
+        </button>
+      {% endfor %}
+    </div>
+
+    <form method="post" action="{% url 'ticket_responder' ticket.protocolo %}" id="form-responder" class="modal-form">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="tratar">
+      <input type="hidden" name="next" value="{{ next|default:request.path }}">
+      <div hidden>
+        <input type="hidden" name="tipo" value="{{ ticket.tipo }}">
+        <input type="hidden" name="atendente" value="{{ ticket.atendente_id|default:'' }}">
+        <input type="hidden" name="solicitante_nome" value="{{ ticket.solicitante_nome }}">
+        <input type="hidden" name="destino_encaminhamento" value="{{ ticket.destino_encaminhamento }}">
+      </div>
+
+      {% for aba in abas %}
+        <div class="tab-panel{% if aba.principal %} is-active{% endif %}" data-panel="{{ aba.id }}" role="tabpanel">
+          {% if aba.principal %}
+            <div class="contexto-demanda">
+              <p class="help" style="margin-top:0">Dados para consultar e responder esta demanda</p>
+              <div class="ctx-grid">
+                {% for item in contexto_demanda %}
+                  <div class="ctx-chip">
+                    <label>{{ item.label }}</label>
+                    <div class="ctx-val">
+                      <span>{{ item.valor }}</span>
+                      {% if item.valor != "—" %}
+                        <button type="button" class="icon-btn" title="Copiar" data-copy-text="{{ item.valor }}">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                          </svg>
+                        </button>
+                      {% endif %}
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
+          {% for fname in aba.field_names %}
+            {% with field=treat_form|form_field:fname %}
+              {% if field %}
+                <div class="modal-field">
+                  <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+                  {{ field }}
+                  {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+                  {% if field.errors %}<div class="help" style="color:var(--danger)">{{ field.errors|striptags }}</div>{% endif %}
+                </div>
+              {% endif %}
+            {% endwith %}
+          {% endfor %}
+        </div>
+      {% endfor %}
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-fechar-modal>Cancelar</button>
+        <button class="btn btn-primary" type="submit">Salvar resposta</button>
+      </div>
+    </form>
+  </div>
+</div>
