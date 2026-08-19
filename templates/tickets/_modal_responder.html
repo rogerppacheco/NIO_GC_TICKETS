@@ -27,6 +27,7 @@
           {{ aba.label }}
         </button>
       {% endfor %}
+      <button type="button" class="tab" role="tab" data-tab="historico" aria-selected="false">Histórico</button>
       <button type="button" class="tab" role="tab" data-tab="mascaras" aria-selected="false">Máscaras</button>
     </div>
 
@@ -81,6 +82,50 @@
           {% endfor %}
         </div>
       {% endfor %}
+
+      <div class="tab-panel" data-panel="historico" role="tabpanel">
+        <p class="help" style="margin-top:0">O que já foi respondido neste ticket, da mais recente para a mais antiga.</p>
+        {% if ticket.resultado_status or ticket.resposta_publica or ticket.nota_interna %}
+          <div class="mask-card" style="margin-bottom:0.75rem">
+            <div class="mask-card-h">
+              <strong>Retorno atual no ticket</strong>
+              {% if ticket.resposta_publica %}
+                <textarea id="hist-atual" hidden>{{ ticket.resposta_publica }}</textarea>
+                <button class="btn btn-secondary" type="button" data-copy-target="hist-atual">Copiar</button>
+              {% endif %}
+            </div>
+            {% if ticket.resultado_status %}
+              <p style="margin:0 0 0.4rem"><label>STATUS</label> {{ ticket.resultado_status }}</p>
+            {% endif %}
+            {% if ticket.resposta_publica %}
+              <div class="long-text">{{ ticket.resposta_publica|texto_formatado }}</div>
+            {% endif %}
+            {% if ticket.nota_interna %}
+              <p class="help" style="margin-top:0.6rem">DETALHES (interno)</p>
+              <div class="long-text">{{ ticket.nota_interna|texto_formatado }}</div>
+            {% endif %}
+          </div>
+        {% endif %}
+        <div class="thread">
+          {% for m in historico_respostas %}
+            <div class="bubble {% if m.interno %}interno{% endif %}">
+              <div class="meta" style="display:flex;justify-content:space-between;gap:0.5rem;align-items:center;flex-wrap:wrap">
+                <span>
+                  {{ m.autor_nome|default:"Sistema" }} · {{ m.criado_em|date:"d/m/Y H:i" }}
+                  {% if m.interno %} · interna{% endif %}
+                </span>
+                <button class="btn btn-secondary" type="button" data-copy-target="hist-msg-{{ m.id }}">Copiar</button>
+              </div>
+              <textarea id="hist-msg-{{ m.id }}" hidden>{{ m.corpo }}</textarea>
+              <div class="long-text" style="margin-top:0.35rem">{{ m.corpo|texto_formatado }}</div>
+            </div>
+          {% empty %}
+            {% if not ticket.resposta_publica and not ticket.resultado_status and not ticket.nota_interna %}
+              <p class="help">Ainda não há resposta neste ticket.</p>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
 
       <div class="tab-panel" data-panel="mascaras" role="tabpanel">
         <p class="help" style="margin-top:0">Texto já preenchido com os dados desta demanda. Copie sem sair do tratamento.</p>

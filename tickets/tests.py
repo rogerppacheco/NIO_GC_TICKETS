@@ -10,7 +10,7 @@ from django.utils.datastructures import MultiValueDict
 from .acesso import eh_gestor, qs_equipe, qs_especialistas, tickets_visiveis
 from .demanda_campos import montar_abas_tratamento
 from .forms import LoginForm, MultipleFileField, ParceiroForm, TicketCreateForm, TicketTreatForm
-from .models import Anexo, Parceiro, PerfilStaff, Ticket, TipoDemanda, formatar_duracao
+from .models import Anexo, Mensagem, Parceiro, PerfilStaff, Ticket, TipoDemanda, formatar_duracao
 
 
 class MultipleFileFieldTests(SimpleTestCase):
@@ -297,6 +297,28 @@ class TratamentoModalTests(TestCase):
         self.assertContains(r, 'data-tab="mascaras"')
         self.assertContains(r, "Copiar")
         self.assertContains(r, "*TT:* TT99")
+
+    def test_modal_mostra_historico_de_respostas(self):
+        Mensagem.objects.create(
+            ticket=self.ticket,
+            autor=self.user,
+            autor_nome="gestor",
+            corpo="Chamado 998877 aberto na TI",
+            interno=False,
+        )
+        self.ticket.resposta_publica = "Chamado 998877 aberto na TI"
+        self.ticket.resultado_status = "CHAMADO ABERTO"
+        self.ticket.save(update_fields=["resposta_publica", "resultado_status"])
+        self.client.force_login(self.user)
+        r = self.client.post(
+            reverse("ticket_responder", args=[self.ticket.protocolo]),
+            {"action": "abrir"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'data-tab="historico"')
+        self.assertContains(r, "Chamado 998877 aberto na TI")
+        self.assertContains(r, "CHAMADO ABERTO")
 
 
 class IsolamentoAuthTests(SimpleTestCase):

@@ -390,6 +390,7 @@ def _ctx_modal_resposta(request: HttpRequest, ticket: Ticket, treat_form: Ticket
         "abas": montar_abas_tratamento(treat_form),
         "contexto_demanda": contexto_demanda_para_resposta(ticket),
         "anexos": list(ticket.anexos.all()),
+        "historico_respostas": list(ticket.mensagens.order_by("-criado_em")),
         "mascaras_prontas": [
             {"mascara": m, "conteudo": render_mascara(m, ticket)} for m in mascaras
         ],
