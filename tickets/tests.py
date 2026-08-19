@@ -2,12 +2,12 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.datastructures import MultiValueDict
 
-from .acesso import eh_gestor, qs_especialistas, tickets_visiveis
+from .acesso import eh_gestor, qs_equipe, qs_especialistas, tickets_visiveis
 from .demanda_campos import montar_abas_tratamento
 from .forms import LoginForm, MultipleFileField, ParceiroForm, TicketCreateForm, TicketTreatForm
 from .models import Parceiro, PerfilStaff, Ticket, TipoDemanda, formatar_duracao
@@ -144,17 +144,38 @@ class EspecialistaAcessoTests(TestCase):
         self.spec.refresh_from_db()
         self.assertEqual(self.spec.username, "ana")
 
-    def test_dropdown_parceiro_so_mostra_especialistas_deste_app(self):
+    def test_dropdown_parceiro_mostra_equipe_deste_app(self):
         User = get_user_model()
         User.objects.create_user("DANIEL", "d@x.com", "x", is_staff=True)
         User.objects.create_user("VT35879", "v@x.com", "x", is_staff=True)
-        nomes = set(qs_especialistas().values_list("username", flat=True))
-        self.assertEqual(nomes, {"ana"})
+        nomes = set(qs_equipe().values_list("username", flat=True))
+        self.assertEqual(nomes, {"ana", "gestor"})
+        self.assertEqual(
+            set(qs_especialistas().values_list("username", flat=True)),
+            {"ana"},
+        )
         form = ParceiroForm()
         self.assertEqual(
             set(form.fields["especialista"].queryset.values_list("username", flat=True)),
-            {"ana"},
+            {"ana", "gestor"},
         )
+
+    @override_settings(
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    )
+    def test_pagina_especialistas_mostra_gestor_e_especialista(self):
+        self.client.force_login(self.gestor)
+        r = self.client.get(reverse("especialistas"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "gestor")
+        self.assertContains(r, "Ana")
+        self.assertContains(r, "Gestor")
+        self.assertNotContains(r, "DANIEL")
 
     def test_staff_de_outro_sistema_nao_e_gestor_nem_loga(self):
         User = get_user_model()

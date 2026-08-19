@@ -15,7 +15,7 @@ from .acesso import (
     eh_gestor,
     gestor_required,
     parceiros_visiveis,
-    qs_especialistas,
+    qs_equipe,
     ticket_para_usuario,
     tickets_visiveis,
 )
@@ -94,7 +94,7 @@ def home(request: HttpRequest) -> HttpResponse:
 @login_required
 def fila(request: HttpRequest) -> HttpResponse:
     parceiros_qs = parceiros_visiveis(request.user).filter(ativo=True)
-    especialistas_qs = qs_especialistas()
+    especialistas_qs = qs_equipe()
     form = FilaFiltroForm(
         request.GET or None,
         parceiros_qs=parceiros_qs,
@@ -781,9 +781,10 @@ def mascara_form(request: HttpRequest, pk: int | None = None) -> HttpResponse:
 def especialistas_lista(request: HttpRequest) -> HttpResponse:
     User = get_user_model()
     especialistas = (
-        User.objects.filter(perfil_staff__papel=PerfilStaff.Papel.ESPECIALISTA)
+        User.objects.filter(perfil_staff__isnull=False)
+        .select_related("perfil_staff")
         .annotate(qtd_parceiros=Count("parceiros_especialista"))
-        .order_by("first_name", "username")
+        .order_by("perfil_staff__papel", "first_name", "username")
     )
     return render(
         request,

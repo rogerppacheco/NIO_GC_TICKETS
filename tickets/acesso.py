@@ -29,12 +29,18 @@ def eh_gestor(user) -> bool:
     return bool(perfil and perfil.papel == PerfilStaff.Papel.GESTOR)
 
 
-def qs_especialistas():
+def qs_equipe():
+    """Quem pode ser vinculado a um PDV: gestores e especialistas deste app."""
     User = get_user_model()
-    return User.objects.filter(
-        is_active=True,
-        perfil_staff__papel=PerfilStaff.Papel.ESPECIALISTA,
-    ).order_by("first_name", "username")
+    return (
+        User.objects.filter(is_active=True, perfil_staff__isnull=False)
+        .select_related("perfil_staff")
+        .order_by("first_name", "username")
+    )
+
+
+def qs_especialistas():
+    return qs_equipe().filter(perfil_staff__papel=PerfilStaff.Papel.ESPECIALISTA)
 
 
 def tickets_visiveis(user):

@@ -4,7 +4,7 @@
 <div class="hero">
   <div>
     <h1>Especialistas</h1>
-    <p>Crie um login novo para cada pessoa da operação. O seu usuário de gestor ({{ user.username }}) já existe — para alterar nome, e-mail ou senha, use <a href="{% url 'meu_perfil' %}">Meu perfil</a>.</p>
+    <p>Equipe deste sistema. Gestores também podem ser vinculados no cadastro do parceiro. Para nome, e-mail ou senha do seu login, use <a href="{% url 'meu_perfil' %}">Meu perfil</a>.</p>
   </div>
   <a class="btn btn-primary" href="{% url 'especialista_novo' %}">Novo especialista</a>
 </div>
@@ -15,6 +15,7 @@
         <tr>
           <th>Nome</th>
           <th>Login</th>
+          <th>Papel</th>
           <th>E-mail</th>
           <th>PDVs</th>
           <th>Situação</th>
@@ -26,6 +27,7 @@
         <tr {% if not u.is_active %}style="opacity:0.65"{% endif %}>
           <td>{{ u.get_full_name|default:"—" }}</td>
           <td class="mono">{{ u.username }}</td>
+          <td>{{ u.perfil_staff.get_papel_display }}</td>
           <td>{{ u.email|default:"—" }}</td>
           <td>{{ u.qtd_parceiros }}</td>
           <td>
@@ -35,10 +37,18 @@
               <span class="pill cancelado">Inativo</span>
             {% endif %}
           </td>
-          <td><a class="btn btn-secondary" href="{% url 'especialista_editar' u.pk %}">Editar</a></td>
+          <td>
+            {% if u.perfil_staff.papel == "especialista" %}
+              <a class="btn btn-secondary" href="{% url 'especialista_editar' u.pk %}">Editar</a>
+            {% elif u.pk == user.pk %}
+              <a class="btn btn-secondary" href="{% url 'meu_perfil' %}">Meu perfil</a>
+            {% else %}
+              —
+            {% endif %}
+          </td>
         </tr>
         {% empty %}
-        <tr><td colspan="6">Nenhum especialista ainda. Crie o acesso e depois vincule no cadastro do parceiro.</td></tr>
+        <tr><td colspan="7">Ninguém na equipe ainda. Crie um especialista e vincule no cadastro do parceiro.</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -89,11 +89,17 @@ class ParceiroForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        from .acesso import qs_especialistas
+        from .acesso import qs_equipe
 
-        self.fields["especialista"].queryset = qs_especialistas()
-        self.fields["especialista"].required = False
-        self.fields["especialista"].empty_label = "Sem especialista"
+        campo = self.fields["especialista"]
+        campo.queryset = qs_equipe()
+        campo.required = False
+        campo.empty_label = "Sem especialista"
+        campo.label_from_instance = lambda u: (
+            f"{(u.get_full_name() or u.username).strip()} · {u.perfil_staff.get_papel_display()}"
+            if getattr(u, "perfil_staff", None)
+            else (u.get_full_name() or u.username)
+        )
 
 
 class EspecialistaForm(forms.Form):
@@ -574,6 +580,6 @@ class FilaFiltroForm(forms.Form):
         if especialistas_qs is not None:
             self.fields["especialista"].queryset = especialistas_qs
         else:
-            from .acesso import qs_especialistas
+            from .acesso import qs_equipe
 
-            self.fields["especialista"].queryset = qs_especialistas()
+            self.fields["especialista"].queryset = qs_equipe()
