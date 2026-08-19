@@ -424,6 +424,18 @@ def _aplicar_tratamento(request: HttpRequest, ticket: Ticket, treat_form: Ticket
     return t
 
 
+def _aplicar_novo_tipo(ticket: Ticket, novo_tipo: str) -> tuple[bool, str]:
+    novo = (novo_tipo or "").strip()
+    if novo not in TipoDemanda.values:
+        return False, "Tipo inválido."
+    if ticket.tipo == novo:
+        return True, "Tipo já estava selecionado."
+    antigo = ticket.get_tipo_display()
+    ticket.tipo = novo
+    ticket.save(update_fields=["tipo", "atualizado_em"])
+    return True, f"Tipo alterado de “{antigo}” para “{ticket.get_tipo_display()}”."
+
+
 @login_required
 def ticket_responder(request: HttpRequest, protocolo: str) -> HttpResponse:
     ticket = ticket_para_usuario(request.user, protocolo)
@@ -436,6 +448,22 @@ def ticket_responder(request: HttpRequest, protocolo: str) -> HttpResponse:
         ctx = _ctx_modal_resposta(request, ticket, treat_form)
         if _eh_ajax(request) or request.GET.get("modal") == "1":
             return render(request, "tickets/_modal_responder.html", ctx)
+        return redirect(f"{reverse('ticket_detalhe', args=[ticket.protocolo])}?responder=1")
+
+    if request.POST.get("action") == "atualizar_tipo":
+        ok, texto = _aplicar_novo_tipo(ticket, request.POST.get("tipo") or "")
+        ticket.refresh_from_db()
+        treat_form = TicketTreatForm(instance=ticket)
+        ctx = _ctx_modal_resposta(request, ticket, treat_form)
+        ctx["aviso_tipo"] = texto
+        ctx["aviso_tipo_ok"] = ok
+        status = 200 if ok else 400
+        if _eh_ajax(request):
+            return render(request, "tickets/_modal_responder.html", ctx, status=status)
+        if ok:
+            messages.success(request, texto)
+        else:
+            messages.error(request, texto)
         return redirect(f"{reverse('ticket_detalhe', args=[ticket.protocolo])}?responder=1")
 
     treat_form = TicketTreatForm(request.POST, instance=ticket)
@@ -479,17 +507,11 @@ def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
         action = request.POST.get("action")
         if action == "tratar":
             if request.POST.get("so_atualizar_tipo"):
-                novo_tipo = (request.POST.get("tipo") or "").strip()
-                if novo_tipo in TipoDemanda.values:
-                    antigo = ticket.get_tipo_display()
-                    ticket.tipo = novo_tipo
-                    ticket.save(update_fields=["tipo", "atualizado_em"])
-                    messages.success(
-                        request,
-                        f"Tipo alterado de “{antigo}” para “{ticket.get_tipo_display()}”.",
-                    )
+                ok, texto = _aplicar_novo_tipo(ticket, request.POST.get("tipo") or "")
+                if ok:
+                    messages.success(request, texto)
                 else:
-                    messages.error(request, "Tipo inválido.")
+                    messages.error(request, texto)
                 return redirect("ticket_detalhe", protocolo=ticket.protocolo)
 
             treat_form = TicketTreatForm(request.POST, instance=ticket)

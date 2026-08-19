@@ -426,7 +426,9 @@ class TicketTreatForm(forms.ModelForm):
             "destino_encaminhamento",
         ]
         widgets = {
-            "tipo": forms.Select(attrs={"id": "id_tipo_tratamento"}),
+            "tipo": forms.Select(
+                attrs={"id": "id_tipo_tratamento", "data-tipo-demanda": "1"}
+            ),
             "resultado_status": forms.TextInput(
                 attrs={
                     "placeholder": "Ex.: SENHA RESETADA / ENDEREÇO LOCALIZADO..."

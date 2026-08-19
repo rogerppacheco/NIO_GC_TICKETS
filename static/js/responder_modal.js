@@ -88,6 +88,32 @@
     });
   }
 
+  async function recarregarModal(html) {
+    const box = root();
+    if (!box) return;
+    box.innerHTML = html;
+    bindModal(box.querySelector("#modal-responder"));
+  }
+
+  async function atualizarTipo(overlay) {
+    const form = overlay && overlay.querySelector("#form-responder");
+    if (!form) return;
+    const fd = new FormData(form);
+    fd.set("action", "atualizar_tipo");
+    showModalNotice(overlay, "Atualizando tipo da demanda…", true);
+    try {
+      const res = await fetch(form.action, {
+        method: "POST",
+        body: fd,
+        credentials: "same-origin",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      });
+      recarregarModal(await res.text());
+    } catch (e) {
+      showModalNotice(overlay, "Não foi possível alterar o tipo. Tente de novo.", false);
+    }
+  }
+
   async function abrirResponder(protocolo, nextUrl) {
     const box = root();
     if (!box) return;
@@ -130,6 +156,17 @@
       const overlay = tab.closest("#modal-responder");
       if (overlay) activateTab(overlay, tab.getAttribute("data-tab"));
     }
+    const aplicarTipo = ev.target.closest("[data-atualizar-tipo]");
+    if (aplicarTipo) {
+      ev.preventDefault();
+      atualizarTipo(aplicarTipo.closest("#modal-responder"));
+    }
+  });
+
+  document.addEventListener("change", function (ev) {
+    const sel = ev.target.closest("[data-tipo-demanda]");
+    if (!sel) return;
+    atualizarTipo(sel.closest("#modal-responder"));
   });
 
   document.addEventListener("keydown", function (ev) {

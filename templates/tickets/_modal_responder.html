@@ -19,17 +19,25 @@
       <button type="button" class="icon-btn" data-fechar-modal aria-label="Fechar">×</button>
     </div>
 
-    <div class="tabs" role="tablist">
-      {% for aba in abas %}
-        <button type="button" class="tab{% if aba.principal %} is-active{% endif %}{% if aba.tem_erro %} has-error{% endif %}"
-                role="tab" data-tab="{{ aba.id }}"
-                aria-selected="{% if aba.principal %}true{% else %}false{% endif %}">
-          {{ aba.label }}
-        </button>
-      {% endfor %}
-      <button type="button" class="tab" role="tab" data-tab="historico" aria-selected="false">Histórico</button>
-      <button type="button" class="tab" role="tab" data-tab="mascaras" aria-selected="false">Máscaras</button>
-    </div>
+    <form method="post" action="{% url 'ticket_responder' ticket.protocolo %}" id="form-responder" class="modal-form" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="action" value="tratar">
+      <input type="hidden" name="next" value="{{ next|default:request.path }}">
+      <div hidden>
+        <input type="hidden" name="atendente" value="{{ ticket.atendente_id|default:'' }}">
+        <input type="hidden" name="solicitante_nome" value="{{ ticket.solicitante_nome }}">
+        <input type="hidden" name="destino_encaminhamento" value="{{ ticket.destino_encaminhamento }}">
+      </div>
+      <div class="modal-tipo">
+        <div class="modal-tipo-field">
+          <label for="{{ treat_form.tipo.id_for_label }}">{{ treat_form.tipo.label }}</label>
+          {{ treat_form.tipo }}
+        </div>
+        <button type="button" class="btn btn-secondary" data-atualizar-tipo>Aplicar tipo</button>
+      </div>
+    {% if aviso_tipo %}
+      <div class="{% if aviso_tipo_ok %}modal-ok{% else %}modal-erro{% endif %}" role="alert">{{ aviso_tipo }}</div>
+    {% endif %}
     {% if treat_form.errors %}
       <div class="modal-erro" role="alert">
         Não foi possível salvar. Corrija os campos nas abas em vermelho.
@@ -46,16 +54,17 @@
       </div>
     {% endif %}
 
-    <form method="post" action="{% url 'ticket_responder' ticket.protocolo %}" id="form-responder" class="modal-form" novalidate>
-      {% csrf_token %}
-      <input type="hidden" name="action" value="tratar">
-      <input type="hidden" name="next" value="{{ next|default:request.path }}">
-      <div hidden>
-        <input type="hidden" name="tipo" value="{{ ticket.tipo }}">
-        <input type="hidden" name="atendente" value="{{ ticket.atendente_id|default:'' }}">
-        <input type="hidden" name="solicitante_nome" value="{{ ticket.solicitante_nome }}">
-        <input type="hidden" name="destino_encaminhamento" value="{{ ticket.destino_encaminhamento }}">
-      </div>
+    <div class="tabs" role="tablist">
+      {% for aba in abas %}
+        <button type="button" class="tab{% if aba.principal %} is-active{% endif %}{% if aba.tem_erro %} has-error{% endif %}"
+                role="tab" data-tab="{{ aba.id }}"
+                aria-selected="{% if aba.principal %}true{% else %}false{% endif %}">
+          {{ aba.label }}
+        </button>
+      {% endfor %}
+      <button type="button" class="tab" role="tab" data-tab="historico" aria-selected="false">Histórico</button>
+      <button type="button" class="tab" role="tab" data-tab="mascaras" aria-selected="false">Máscaras</button>
+    </div>
 
       {% for aba in abas %}
         <div class="tab-panel{% if aba.principal %} is-active{% endif %}" data-panel="{{ aba.id }}" role="tabpanel">

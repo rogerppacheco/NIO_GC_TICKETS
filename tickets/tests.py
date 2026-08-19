@@ -336,6 +336,30 @@ class TratamentoModalTests(TestCase):
         self.assertContains(r, "Não foi possível salvar", status_code=400)
         self.assertContains(r, "Senha resetada", status_code=400)
 
+    def test_modal_permite_alterar_tipo_da_demanda(self):
+        self.client.force_login(self.user)
+        r = self.client.post(
+            reverse("ticket_responder", args=[self.ticket.protocolo]),
+            {"action": "abrir"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertContains(r, "Aplicar tipo")
+        self.assertContains(r, "id_tipo_tratamento")
+
+        r = self.client.post(
+            reverse("ticket_responder", args=[self.ticket.protocolo]),
+            {
+                "action": "atualizar_tipo",
+                "tipo": TipoDemanda.ABRIR_CHAMADO_TI,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.tipo, TipoDemanda.ABRIR_CHAMADO_TI)
+        self.assertContains(r, "Nº do chamado TI")
+        self.assertContains(r, "Tipo alterado")
+
 
 class IsolamentoAuthTests(SimpleTestCase):
     def test_schema_padrao_valido(self):
