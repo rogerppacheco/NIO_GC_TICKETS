@@ -384,10 +384,14 @@ def _ctx_modal_resposta(request: HttpRequest, ticket: Ticket, treat_form: Ticket
     mascaras = [
         m for m in Mascara.objects.filter(ativo=True) if m.aplica_para(ticket.tipo)
     ]
+    abas = montar_abas_tratamento(treat_form)
+    erros = treat_form.errors
+    for aba in abas:
+        aba["tem_erro"] = any(nome in erros for nome in aba["field_names"])
     return {
         "ticket": ticket,
         "treat_form": treat_form,
-        "abas": montar_abas_tratamento(treat_form),
+        "abas": abas,
         "contexto_demanda": contexto_demanda_para_resposta(ticket),
         "anexos": list(ticket.anexos.all()),
         "historico_respostas": list(ticket.mensagens.order_by("-criado_em")),
@@ -439,7 +443,13 @@ def ticket_responder(request: HttpRequest, protocolo: str) -> HttpResponse:
         _aplicar_tratamento(request, ticket, treat_form)
         messages.success(request, "Resposta salva.")
         if _eh_ajax(request):
-            return JsonResponse({"ok": True, "redirect": proximo})
+            return JsonResponse(
+                {
+                    "ok": True,
+                    "redirect": proximo,
+                    "message": "Resposta salva.",
+                }
+            )
         return redirect(proximo)
 
     ctx = _ctx_modal_resposta(request, ticket, treat_form)

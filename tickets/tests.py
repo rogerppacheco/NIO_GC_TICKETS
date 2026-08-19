@@ -320,6 +320,22 @@ class TratamentoModalTests(TestCase):
         self.assertContains(r, "Chamado 998877 aberto na TI")
         self.assertContains(r, "CHAMADO ABERTO")
 
+    def test_salvar_sem_campo_obrigatorio_mostra_erro_no_modal(self):
+        self.client.force_login(self.user)
+        r = self.client.post(
+            reverse("ticket_responder", args=[self.ticket.protocolo]),
+            {
+                "action": "tratar",
+                "tipo": TipoDemanda.RESET_SENHA,
+                "status": self.ticket.status,
+                "prioridade": self.ticket.prioridade,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertContains(r, "Não foi possível salvar", status_code=400)
+        self.assertContains(r, "Senha resetada", status_code=400)
+
 
 class IsolamentoAuthTests(SimpleTestCase):
     def test_schema_padrao_valido(self):

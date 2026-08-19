@@ -366,7 +366,18 @@ body.modal-open { overflow: hidden; }
   white-space: nowrap;
 }
 .tab:hover { color: var(--ink); }
-.tab.is-active { color: var(--brand); border-bottom-color: var(--brand); }
+.tab.has-error { color: var(--danger); }
+.modal-erro {
+  margin: 0.75rem 1.1rem 0; padding: 0.75rem 0.9rem;
+  background: #fef3f2; border: 1px solid #f3c6c2; color: var(--danger);
+  border-radius: 10px; font-size: 0.9rem;
+}
+.modal-erro ul { margin: 0.4rem 0 0; padding-left: 1.1rem; }
+.modal-ok {
+  margin: 0.75rem 1.1rem 0; padding: 0.75rem 0.9rem;
+  background: #eef8f5; border: 1px solid #c9e8df; color: var(--brand);
+  border-radius: 10px; font-size: 0.9rem;
+}
 .tab-panel { display: none; padding: 1rem 1.1rem; }
 .tab-panel.is-active { display: block; }
 .modal-field { margin-bottom: 0.85rem; }

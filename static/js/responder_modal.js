@@ -67,6 +67,11 @@
   }
 
   function firstErrorTab(overlay) {
+    const marked = overlay.querySelector(".tab.has-error");
+    if (marked) {
+      activateTab(overlay, marked.getAttribute("data-tab"));
+      return;
+    }
     const err = overlay.querySelector(".tab-panel .help[style*='danger'], .tab-panel .errorlist");
     if (!err) return;
     const panel = err.closest(".tab-panel");
@@ -131,26 +136,54 @@
     if (ev.key === "Escape") closeModal();
   });
 
+  function showModalNotice(overlay, text, ok) {
+    if (!overlay) return;
+    let box = overlay.querySelector("[data-modal-notice]");
+    if (!box) {
+      box = document.createElement("div");
+      box.setAttribute("data-modal-notice", "1");
+      const tabs = overlay.querySelector(".tabs");
+      if (tabs && tabs.parentNode) {
+        tabs.parentNode.insertBefore(box, tabs.nextSibling);
+      } else {
+        const modal = overlay.querySelector(".modal-responder") || overlay;
+        modal.insertBefore(box, modal.firstChild);
+      }
+    }
+    box.className = ok ? "modal-ok" : "modal-erro";
+    box.setAttribute("role", "alert");
+    box.textContent = text;
+  }
+
   document.addEventListener("submit", async function (ev) {
     const form = ev.target.closest("#form-responder");
     if (!form) return;
     ev.preventDefault();
+    const overlay = form.closest("#modal-responder");
     const btn = form.querySelector('button[type="submit"]');
-    if (btn) btn.disabled = true;
+    const label = btn ? btn.textContent : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Salvando…";
+    }
+    showModalNotice(overlay, "Salvando resposta…", true);
     try {
       const res = await fetch(form.action, {
         method: "POST",
         body: new FormData(form),
         credentials: "same-origin",
-        headers: { "X-Requested-With": "XMLHttpRequest" },
+        headers: { "X-Requested-With": "XMLHttpRequest", "Accept": "application/json" },
       });
       const ct = res.headers.get("content-type") || "";
       if (ct.indexOf("application/json") !== -1) {
         const data = await res.json();
-        if (data.redirect) {
+        if (data.ok && data.redirect) {
+          showModalNotice(overlay, data.message || "Resposta salva. Atualizando…", true);
           window.location.href = data.redirect;
           return;
         }
+        showModalNotice(overlay, data.error || "Não foi possível salvar.", false);
+        return;
       }
       const html = await res.text();
       const box = root();
@@ -159,9 +192,12 @@
         bindModal(box.querySelector("#modal-responder"));
       }
     } catch (e) {
-      form.submit();
+      showModalNotice(overlay, "Falha de rede ao salvar. Tente de novo.", false);
     } finally {
-      if (btn) btn.disabled = false;
+      if (btn && document.body.contains(btn)) {
+        btn.disabled = false;
+        btn.textContent = label || "Salvar resposta";
+      }
     }
   });
 

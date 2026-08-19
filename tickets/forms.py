@@ -399,6 +399,7 @@ class TicketPublicCreateForm(TicketCreateForm):
 
 
 class TicketTreatForm(forms.ModelForm):
+    use_required_attribute = False
     complemento_retorno = forms.CharField(
         required=False,
         label="Complemento do retorno",

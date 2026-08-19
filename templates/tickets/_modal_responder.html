@@ -21,7 +21,7 @@
 
     <div class="tabs" role="tablist">
       {% for aba in abas %}
-        <button type="button" class="tab{% if aba.principal %} is-active{% endif %}"
+        <button type="button" class="tab{% if aba.principal %} is-active{% endif %}{% if aba.tem_erro %} has-error{% endif %}"
                 role="tab" data-tab="{{ aba.id }}"
                 aria-selected="{% if aba.principal %}true{% else %}false{% endif %}">
           {{ aba.label }}
@@ -30,8 +30,23 @@
       <button type="button" class="tab" role="tab" data-tab="historico" aria-selected="false">Histórico</button>
       <button type="button" class="tab" role="tab" data-tab="mascaras" aria-selected="false">Máscaras</button>
     </div>
+    {% if treat_form.errors %}
+      <div class="modal-erro" role="alert">
+        Não foi possível salvar. Corrija os campos nas abas em vermelho.
+        <ul>
+          {% for field in treat_form %}
+            {% for err in field.errors %}
+              <li>{{ field.label }}: {{ err }}</li>
+            {% endfor %}
+          {% endfor %}
+          {% for err in treat_form.non_field_errors %}
+            <li>{{ err }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
 
-    <form method="post" action="{% url 'ticket_responder' ticket.protocolo %}" id="form-responder" class="modal-form">
+    <form method="post" action="{% url 'ticket_responder' ticket.protocolo %}" id="form-responder" class="modal-form" novalidate>
       {% csrf_token %}
       <input type="hidden" name="action" value="tratar">
       <input type="hidden" name="next" value="{{ next|default:request.path }}">
