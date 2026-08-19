@@ -261,3 +261,19 @@ class TratamentoModalTests(TestCase):
         self.assertIsNotNone(self.ticket.tempo_retorno_segundos)
         self.assertGreaterEqual(self.ticket.tempo_retorno_segundos, 12)
         self.assertIn("Nio@123", self.ticket.resposta_publica)
+
+
+class IsolamentoAuthTests(SimpleTestCase):
+    def test_schema_padrao_valido(self):
+        from tickets.isolamento_auth import nome_schema
+
+        self.assertEqual(nome_schema(), "nio_gc_tickets")
+
+    def test_isolamento_e_noop_fora_do_postgres(self):
+        from django.db import connection
+
+        from tickets.isolamento_auth import isolar_auth_schema
+
+        resultado = isolar_auth_schema(connection)
+        self.assertTrue(resultado["ok"])
+        self.assertEqual(resultado.get("motivo"), "nao_postgres")

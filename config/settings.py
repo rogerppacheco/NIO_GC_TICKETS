@@ -71,6 +71,7 @@ DATABASES = {
 POSTGRES_SCHEMA = os.environ.get("POSTGRES_SCHEMA", "nio_gc_tickets").strip()
 if DATABASES["default"].get("ENGINE", "").endswith("postgresql"):
     options = DATABASES["default"].setdefault("OPTIONS", {})
+    # Schema do app primeiro: auth_user local (não o cadastro da viabilidade em public).
     options["options"] = f"-c search_path={POSTGRES_SCHEMA},public"
 
 AUTH_PASSWORD_VALIDATORS = [
