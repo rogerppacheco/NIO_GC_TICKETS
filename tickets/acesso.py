@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from functools import wraps
 
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth.decorators import login_required
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
@@ -9,15 +11,30 @@ from django.shortcuts import get_object_or_404
 from .models import Parceiro, PerfilStaff, Ticket
 
 
-def eh_gestor(user) -> bool:
+def perfil_de(user):
     if not getattr(user, "is_authenticated", False):
-        return False
-    if user.is_superuser:
-        return True
-    perfil = getattr(user, "perfil_staff", None)
-    if perfil is None:
-        return True
-    return perfil.papel == PerfilStaff.Papel.GESTOR
+        return None
+    try:
+        return user.perfil_staff
+    except (ObjectDoesNotExist, AttributeError):
+        return None
+
+
+def tem_acesso_interno(user) -> bool:
+    return perfil_de(user) is not None
+
+
+def eh_gestor(user) -> bool:
+    perfil = perfil_de(user)
+    return bool(perfil and perfil.papel == PerfilStaff.Papel.GESTOR)
+
+
+def qs_especialistas():
+    User = get_user_model()
+    return User.objects.filter(
+        is_active=True,
+        perfil_staff__papel=PerfilStaff.Papel.ESPECIALISTA,
+    ).order_by("first_name", "username")
 
 
 def tickets_visiveis(user):

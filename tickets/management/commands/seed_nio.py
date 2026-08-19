@@ -205,12 +205,21 @@ class Command(BaseCommand):
 
         User = get_user_model()
         username = options["username"]
+        from tickets.models import PerfilStaff
+
         if not User.objects.filter(username=username).exists():
-            User.objects.create_superuser(
+            user = User.objects.create_superuser(
                 username=username,
                 email=options["email"],
                 password=options["password"],
             )
+            PerfilStaff.objects.get_or_create(
+                user=user, defaults={"papel": PerfilStaff.Papel.GESTOR}
+            )
             self.stdout.write(self.style.SUCCESS(f"Superuser {username} criado"))
         else:
+            user = User.objects.get(username=username)
+            PerfilStaff.objects.get_or_create(
+                user=user, defaults={"papel": PerfilStaff.Papel.GESTOR}
+            )
             self.stdout.write(f"Superuser {username} já existe")

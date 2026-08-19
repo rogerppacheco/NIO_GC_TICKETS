@@ -15,6 +15,7 @@ from .acesso import (
     eh_gestor,
     gestor_required,
     parceiros_visiveis,
+    qs_especialistas,
     ticket_para_usuario,
     tickets_visiveis,
 )
@@ -92,11 +93,8 @@ def home(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def fila(request: HttpRequest) -> HttpResponse:
-    User = get_user_model()
     parceiros_qs = parceiros_visiveis(request.user).filter(ativo=True)
-    especialistas_qs = User.objects.filter(is_staff=True, is_active=True).order_by(
-        "first_name", "username"
-    )
+    especialistas_qs = qs_especialistas()
     form = FilaFiltroForm(
         request.GET or None,
         parceiros_qs=parceiros_qs,

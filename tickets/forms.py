@@ -51,6 +51,17 @@ class LoginForm(AuthenticationForm):
     username = forms.CharField(label="Usuário", widget=forms.TextInput(attrs={"autofocus": True}))
     password = forms.CharField(label="Senha", widget=forms.PasswordInput)
 
+    def confirm_login_allowed(self, user):
+        super().confirm_login_allowed(user)
+        from .acesso import tem_acesso_interno
+
+        if not tem_acesso_interno(user):
+            raise forms.ValidationError(
+                "Este login não tem acesso ao NIO GC Tickets. "
+                "Use um usuário criado em Especialistas ou Meu perfil.",
+                code="sem_acesso",
+            )
+
 
 class ParceiroForm(forms.ModelForm):
     class Meta:
@@ -78,10 +89,9 @@ class ParceiroForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        User = get_user_model()
-        self.fields["especialista"].queryset = User.objects.filter(
-            is_staff=True, is_active=True
-        ).order_by("first_name", "username")
+        from .acesso import qs_especialistas
+
+        self.fields["especialista"].queryset = qs_especialistas()
         self.fields["especialista"].required = False
         self.fields["especialista"].empty_label = "Sem especialista"
 
@@ -161,7 +171,11 @@ class EspecialistaForm(forms.Form):
 
 class StaffPerfilForm(forms.Form):
     first_name = forms.CharField(label="Nome", max_length=150)
-    username = forms.CharField(label="Usuário (login)", max_length=150)
+    username = forms.CharField(
+        label="Usuário (login)",
+        max_length=150,
+        help_text="Este login precisa ser exclusivo neste banco. Não use o de outra conta.",
+    )
     email = forms.EmailField(label="E-mail", required=False)
     password = forms.CharField(
         label="Senha",
@@ -187,7 +201,11 @@ class StaffPerfilForm(forms.Form):
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
-            raise forms.ValidationError("Já existe um usuário com este login.")
+            raise forms.ValidationError(
+                f"O login “{username}” já pertence a outra conta. "
+                "Se for a sua, saia e entre com esse usuário. "
+                "Não copie o login de outra pessoa nesta tela."
+            )
         return username
 
     def save(self):
@@ -556,7 +574,6 @@ class FilaFiltroForm(forms.Form):
         if especialistas_qs is not None:
             self.fields["especialista"].queryset = especialistas_qs
         else:
-            User = get_user_model()
-            self.fields["especialista"].queryset = User.objects.filter(
-                is_staff=True, is_active=True
-            ).order_by("first_name", "username")
+            from .acesso import qs_especialistas
+
+            self.fields["especialista"].queryset = qs_especialistas()

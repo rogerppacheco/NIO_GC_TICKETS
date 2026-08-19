@@ -7,9 +7,9 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.datastructures import MultiValueDict
 
-from .acesso import eh_gestor, tickets_visiveis
+from .acesso import eh_gestor, qs_especialistas, tickets_visiveis
 from .demanda_campos import montar_abas_tratamento
-from .forms import MultipleFileField, TicketCreateForm, TicketTreatForm
+from .forms import LoginForm, MultipleFileField, ParceiroForm, TicketCreateForm, TicketTreatForm
 from .models import Parceiro, PerfilStaff, Ticket, TipoDemanda, formatar_duracao
 
 
@@ -144,11 +144,61 @@ class EspecialistaAcessoTests(TestCase):
         self.spec.refresh_from_db()
         self.assertEqual(self.spec.username, "ana")
 
+    def test_dropdown_parceiro_so_mostra_especialistas_deste_app(self):
+        User = get_user_model()
+        User.objects.create_user("DANIEL", "d@x.com", "x", is_staff=True)
+        User.objects.create_user("VT35879", "v@x.com", "x", is_staff=True)
+        nomes = set(qs_especialistas().values_list("username", flat=True))
+        self.assertEqual(nomes, {"ana"})
+        form = ParceiroForm()
+        self.assertEqual(
+            set(form.fields["especialista"].queryset.values_list("username", flat=True)),
+            {"ana"},
+        )
+
+    def test_staff_de_outro_sistema_nao_e_gestor_nem_loga(self):
+        User = get_user_model()
+        externo = User.objects.create_user("DANIEL", "d@x.com", "x", is_staff=True)
+        self.assertFalse(eh_gestor(externo))
+        form = LoginForm(
+            data={"username": "DANIEL", "password": "x"},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertTrue(form.non_field_errors())
+
+    def test_superuser_sem_perfil_nao_e_gestor(self):
+        User = get_user_model()
+        solto = User.objects.create_superuser("vt-admin", "vt@x.com", "x")
+        self.assertFalse(eh_gestor(solto))
+
+    def test_middleware_desloga_quem_nao_tem_perfil(self):
+        User = get_user_model()
+        externo = User.objects.create_user("VT35558", "v@x.com", "x", is_staff=True)
+        self.client.force_login(externo)
+        r = self.client.get(reverse("fila"))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/login/", r["Location"])
+
+    def test_perfil_nao_renomeia_para_login_de_outra_conta(self):
+        from .forms import StaffPerfilForm
+
+        form = StaffPerfilForm(
+            {
+                "first_name": "Admin",
+                "username": "gestor",
+                "email": "a@x.com",
+            },
+            instance=self.spec,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("username", form.errors)
+
 
 class TratamentoModalTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_superuser("gestor", "g@x.com", "x")
+        PerfilStaff.objects.create(user=self.user, papel=PerfilStaff.Papel.GESTOR)
         self.pdv = Parceiro.objects.create(codigo_pdv="100", nome="PDV")
         self.ticket = Ticket.objects.create(
             parceiro=self.pdv, tipo=TipoDemanda.RESET_SENHA, tt="TT99"
