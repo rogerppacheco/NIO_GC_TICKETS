@@ -35,6 +35,16 @@
         </div>
         <button type="button" class="btn btn-secondary" data-atualizar-tipo>Aplicar tipo</button>
       </div>
+      <div class="modal-fila">
+        <div class="modal-tipo-field">
+          <label for="{{ treat_form.status.id_for_label }}">{{ treat_form.status.label }}</label>
+          {{ treat_form.status }}
+        </div>
+        <div class="modal-tipo-field">
+          <label for="{{ treat_form.prioridade.id_for_label }}">{{ treat_form.prioridade.label }}</label>
+          {{ treat_form.prioridade }}
+        </div>
+      </div>
     {% if aviso_tipo %}
       <div class="{% if aviso_tipo_ok %}modal-ok{% else %}modal-erro{% endif %}" role="alert">{{ aviso_tipo }}</div>
     {% endif %}

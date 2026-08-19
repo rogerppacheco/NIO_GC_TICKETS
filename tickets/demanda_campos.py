@@ -306,7 +306,6 @@ def contexto_demanda_para_resposta(ticket) -> list[dict]:
 ABAS_TRATAMENTO_EXTRAS = [
     ("complemento_retorno", "Complemento"),
     ("resultado_status", "STATUS"),
-    ("status", "Fila"),
     ("nota_interna", "DETALHES"),
     ("solicitante_contato", "WhatsApp"),
 ]

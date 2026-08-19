@@ -372,6 +372,10 @@ body.modal-open { overflow: hidden; }
 }
 .modal-tipo-field { flex: 1; min-width: min(100%, 16rem); }
 .modal-tipo-field label { margin-bottom: 0.25rem; }
+.modal-fila {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem;
+  padding: 0.35rem 1.1rem 0.55rem;
+}
 .modal-erro {
   margin: 0.75rem 1.1rem 0; padding: 0.75rem 0.9rem;
   background: #fef3f2; border: 1px solid #f3c6c2; color: var(--danger);
@@ -405,6 +409,7 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 700px) {
   .ctx-grid { grid-template-columns: 1fr; }
   .modal-h { flex-wrap: wrap; }
+  .modal-fila { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 900px) {

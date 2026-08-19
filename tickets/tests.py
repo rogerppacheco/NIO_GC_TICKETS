@@ -230,6 +230,7 @@ class TratamentoModalTests(TestCase):
         abas = montar_abas_tratamento(form)
         self.assertTrue(abas[0]["principal"])
         self.assertEqual(abas[0]["id"], "senha_resetada")
+        self.assertFalse(any(aba["id"] == "status" for aba in abas))
 
     def test_clicar_responder_inicia_cronometro_e_salvar_registra(self):
         self.client.force_login(self.user)
@@ -345,6 +346,8 @@ class TratamentoModalTests(TestCase):
         )
         self.assertContains(r, "Aplicar tipo")
         self.assertContains(r, "id_tipo_tratamento")
+        self.assertContains(r, "Situação na fila")
+        self.assertNotContains(r, 'data-tab="status"')
 
         r = self.client.post(
             reverse("ticket_responder", args=[self.ticket.protocolo]),
