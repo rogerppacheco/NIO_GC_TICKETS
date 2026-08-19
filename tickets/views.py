@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from django.contrib import messages
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView, LogoutView
 from django.db.models import Count, Q
@@ -37,6 +37,7 @@ from .forms import (
     MascaraForm,
     MensagemForm,
     ParceiroForm,
+    StaffPerfilForm,
     TicketCreateForm,
     TicketPublicCreateForm,
     TicketTreatForm,
@@ -64,6 +65,23 @@ class StaffLoginView(LoginView):
 
 class StaffLogoutView(LogoutView):
     next_page = "login"
+
+
+@login_required
+def meu_perfil(request: HttpRequest) -> HttpResponse:
+    form = StaffPerfilForm(instance=request.user)
+    if request.method == "POST":
+        form = StaffPerfilForm(request.POST, instance=request.user)
+        if form.is_valid():
+            user = form.save()
+            update_session_auth_hash(request, user)
+            messages.success(request, "Perfil atualizado.")
+            return redirect("meu_perfil")
+    return render(
+        request,
+        "tickets/perfil.html",
+        {"form": form},
+    )
 
 
 def home(request: HttpRequest) -> HttpResponse:

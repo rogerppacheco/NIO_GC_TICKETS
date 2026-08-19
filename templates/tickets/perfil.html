@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Meu perfil · NIO GC Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Meu perfil</h1>
+    <p>Nome, login e e-mail do seu acesso de gestor/especialista.</p>
+  </div>
+</div>
+<div class="panel">
+  <div class="panel-h"><h2>Acesso</h2></div>
+  <div class="panel-b">
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      {% for field in form %}
+        <div class="full">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+          {% if field.errors %}<div class="help" style="color:var(--danger)">{{ field.errors|striptags }}</div>{% endif %}
+        </div>
+      {% endfor %}
+      <div class="full" style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <button class="btn btn-primary" type="submit">Salvar</button>
+        <a class="btn btn-secondary" href="{% url 'fila' %}">Voltar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

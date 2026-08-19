@@ -127,6 +127,23 @@ class EspecialistaAcessoTests(TestCase):
         self.assertTrue(u.is_staff)
         self.assertEqual(u.perfil_staff.papel, PerfilStaff.Papel.ESPECIALISTA)
 
+    def test_nao_permite_renomear_especialista_para_login_do_gestor(self):
+        from .forms import EspecialistaForm
+
+        form = EspecialistaForm(
+            {
+                "first_name": "Ana",
+                "username": "gestor",
+                "email": "a@x.com",
+                "is_active": "on",
+            },
+            instance=self.spec,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("username", form.errors)
+        self.spec.refresh_from_db()
+        self.assertEqual(self.spec.username, "ana")
+
 
 class TratamentoModalTests(TestCase):
     def setUp(self):

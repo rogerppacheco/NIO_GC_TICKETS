@@ -119,8 +119,13 @@ class EspecialistaForm(forms.Form):
         qs = User.objects.filter(username__iexact=username)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise forms.ValidationError("Já existe um usuário com este login.")
+        outro = qs.first()
+        if outro:
+            raise forms.ValidationError(
+                f"Já existe um usuário com o login “{outro.username}”. "
+                "Esse é outro acesso (não este especialista). "
+                "Se for o seu usuário de gestor, altere em Meu perfil."
+            )
         return username
 
     def save(self):
@@ -151,6 +156,49 @@ class EspecialistaForm(forms.Form):
             user=user,
             defaults={"papel": PerfilStaff.Papel.ESPECIALISTA},
         )
+        return user
+
+
+class StaffPerfilForm(forms.Form):
+    first_name = forms.CharField(label="Nome", max_length=150)
+    username = forms.CharField(label="Usuário (login)", max_length=150)
+    email = forms.EmailField(label="E-mail", required=False)
+    password = forms.CharField(
+        label="Senha",
+        widget=forms.PasswordInput,
+        required=False,
+        help_text="Deixe em branco para manter a senha atual.",
+    )
+
+    def __init__(self, *args, instance=None, **kwargs):
+        self.instance = instance
+        if instance and "initial" not in kwargs:
+            kwargs["initial"] = {
+                "first_name": instance.first_name,
+                "username": instance.username,
+                "email": instance.email,
+            }
+        super().__init__(*args, **kwargs)
+
+    def clean_username(self):
+        User = get_user_model()
+        username = (self.cleaned_data.get("username") or "").strip()
+        qs = User.objects.filter(username__iexact=username)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError("Já existe um usuário com este login.")
+        return username
+
+    def save(self):
+        user = self.instance
+        dados = self.cleaned_data
+        user.first_name = dados["first_name"]
+        user.username = dados["username"]
+        user.email = dados.get("email") or ""
+        if dados.get("password"):
+            user.set_password(dados["password"])
+        user.save()
         return user
 
 
