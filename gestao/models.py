@@ -281,3 +281,102 @@ class RelatorioFPD(models.Model):
         ordering = ["-percentual", "pdv_nome"]
         verbose_name = "Relatório FPD"
         verbose_name_plural = "Relatórios FPD"
+
+
+class Destinatario(models.Model):
+    class TipoDestino(models.TextChoices):
+        INDIVIDUAL = "individual", "Número / contato"
+        GRUPO = "grupo", "Grupo WhatsApp"
+
+    parceiro = models.ForeignKey(
+        "tickets.Parceiro",
+        on_delete=models.CASCADE,
+        related_name="destinatarios_gestao",
+    )
+    nome = models.CharField("Nome do destino", max_length=150)
+    jid = models.CharField(
+        "JID WhatsApp",
+        max_length=80,
+        help_text="Número com DDI (ex.: 5531999999999) ou JID de grupo (…@g.us).",
+    )
+    tipo = models.CharField(
+        max_length=20,
+        choices=TipoDestino.choices,
+        default=TipoDestino.INDIVIDUAL,
+    )
+    ativo = models.BooleanField(default=True)
+    prioridade = models.PositiveIntegerField(default=100)
+    envio_osab = models.BooleanField("OSAB", default=True)
+    envio_capilaridade = models.BooleanField("Capilaridade", default=True)
+    envio_fpd = models.BooleanField("FPD", default=True)
+    envio_fpd_critico = models.BooleanField("FPD crítico (global)", default=False)
+    envio_churn = models.BooleanField("Churn", default=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["prioridade", "nome"]
+        verbose_name = "Destinatário WhatsApp"
+        verbose_name_plural = "Destinatários WhatsApp"
+
+    def __str__(self) -> str:
+        return f"{self.nome} ({self.parceiro.nome})"
+
+
+class EnvioWhatsApp(models.Model):
+    class Tipo(models.TextChoices):
+        CAPILARIDADE = "capilaridade", "Capilaridade"
+        OSAB = "osab", "OSAB"
+        FPD = "fpd", "FPD"
+        FPD_CRITICO = "fpd_critico", "FPD crítico"
+        CHURN = "churn", "Churn"
+        RESUMO = "resumo", "Resumo geral"
+        TESTE = "teste", "Teste SyncWA"
+
+    class Status(models.TextChoices):
+        PENDENTE = "pendente", "Pendente"
+        ENVIADO = "enviado", "Enviado (fila SyncWA)"
+        ERRO = "erro", "Erro"
+        IGNORADO = "ignorado", "Ignorado"
+
+    tipo = models.CharField(max_length=30, choices=Tipo.choices, db_index=True)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDENTE, db_index=True
+    )
+    parceiro = models.ForeignKey(
+        "tickets.Parceiro",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="envios_whatsapp",
+    )
+    destinatario = models.ForeignKey(
+        Destinatario,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="envios",
+    )
+    destino_jid = models.CharField(max_length=80)
+    destino_nome = models.CharField(max_length=150, blank=True)
+    mensagem = models.TextField()
+    modo_teste = models.BooleanField(default=False)
+    syncwa_message_id = models.CharField(max_length=80, blank=True)
+    syncwa_status = models.CharField(max_length=40, blank=True)
+    erro = models.TextField(blank=True)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="envios_gestao",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-criado_em"]
+        verbose_name = "Envio WhatsApp"
+        verbose_name_plural = "Envios WhatsApp"
+
+    def __str__(self) -> str:
+        return f"{self.get_tipo_display()} → {self.destino_nome or self.destino_jid}"

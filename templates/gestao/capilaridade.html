@@ -5,15 +5,24 @@
 <div class="hero">
   <div>
     <h1>Capilaridade</h1>
-    <p>Máscaras do período {{ mes|stringformat:"02d" }}/{{ ano }} para copiar no WhatsApp.</p>
+    <p>Máscaras do período {{ mes|stringformat:"02d" }}/{{ ano }}{% if modo_teste %} · modo teste SyncWA{% endif %}.</p>
   </div>
-  {% if pode_recalcular %}
-  <form method="post">
-    {% csrf_token %}
-    <input type="hidden" name="action" value="recalcular">
-    <button class="btn btn-secondary" type="submit">Recalcular</button>
-  </form>
-  {% endif %}
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    {% if pode_recalcular %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="recalcular">
+      <button class="btn btn-secondary" type="submit">Recalcular</button>
+    </form>
+    {% endif %}
+    {% if pode_enviar %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="enviar_todos">
+      <button class="btn btn-primary" type="submit">Enviar todos (WhatsApp)</button>
+    </form>
+    {% endif %}
+  </div>
 </div>
 <div class="panel" style="margin-bottom:1rem">
   <div class="panel-h">
@@ -31,7 +40,17 @@
         <div class="help">Meta {{ card.meta }} vendedor(es)</div>
       </div>
       <textarea id="cap-{{ card.parceiro.id }}" hidden>{{ card.mascara }}</textarea>
-      <button class="btn btn-primary" type="button" data-copy-target="cap-{{ card.parceiro.id }}">Copiar</button>
+      <div style="display:flex;gap:0.4rem">
+        <button class="btn btn-primary" type="button" data-copy-target="cap-{{ card.parceiro.id }}">Copiar</button>
+        {% if pode_enviar %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="enviar_pdv">
+          <input type="hidden" name="parceiro" value="{{ card.parceiro.id }}">
+          <button class="btn btn-secondary" type="submit">Enviar</button>
+        </form>
+        {% endif %}
+      </div>
     </div>
     <div class="long-text">{{ card.mascara|linebreaksbr }}</div>
   </div>

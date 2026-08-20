@@ -4,6 +4,39 @@ from django import forms
 
 from tickets.models import Parceiro
 
+from .models import Destinatario
+
+
+class DestinatarioForm(forms.ModelForm):
+    class Meta:
+        model = Destinatario
+        fields = (
+            "parceiro",
+            "nome",
+            "jid",
+            "tipo",
+            "ativo",
+            "prioridade",
+            "envio_osab",
+            "envio_capilaridade",
+            "envio_fpd",
+            "envio_fpd_critico",
+            "envio_churn",
+        )
+        widgets = {
+            "nome": forms.TextInput(attrs={"placeholder": "Ex.: Grupo Inova / João"}),
+            "jid": forms.TextInput(
+                attrs={"placeholder": "5531999999999 ou 120363...@g.us", "class": "mono"}
+            ),
+            "prioridade": forms.NumberInput(attrs={"min": 1}),
+        }
+
+    def clean_jid(self):
+        jid = (self.cleaned_data.get("jid") or "").strip()
+        if not jid:
+            raise forms.ValidationError("Informe o número ou o JID do grupo.")
+        return jid
+
 
 class UploadBaseForm(forms.Form):
     arquivo = forms.FileField(label="Arquivo")

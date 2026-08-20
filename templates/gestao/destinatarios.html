@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Destinatários · Gestão{% endblock %}
+{% block content %}
+{% include "gestao/_nav.html" %}
+<div class="hero">
+  <div>
+    <h1>Destinatários WhatsApp</h1>
+    <p>Cadastre o JID (número com DDI ou grupo @g.us). Sem JID o SyncWA não envia.</p>
+  </div>
+</div>
+
+{% if not syncwa_ok %}
+  <div class="panel" style="margin-bottom:1rem">
+    <div class="panel-b">
+      <p class="help" style="color:var(--danger)">Configure <code>SYNCWA_BASE_URL</code> e <code>SYNCWA_API_KEY</code> no Railway para enviar.</p>
+    </div>
+  </div>
+{% elif modo_teste %}
+  <div class="panel" style="margin-bottom:1rem">
+    <div class="panel-b">
+      <p class="help" style="color:var(--warn)">Modo teste ativo: tudo vai para <code>SYNCWA_TEST_JID</code>.</p>
+    </div>
+  </div>
+{% endif %}
+
+<div class="grid-2" style="margin-bottom:1rem">
+  <div class="panel">
+    <div class="panel-h"><h2>Novo destinatário</h2></div>
+    <div class="panel-b">
+      <form method="post" class="form-grid">
+        {% csrf_token %}
+        <div>{{ form.parceiro.label_tag }}{{ form.parceiro }}</div>
+        <div>{{ form.nome.label_tag }}{{ form.nome }}</div>
+        <div class="full">{{ form.jid.label_tag }}{{ form.jid }}<div class="help">{{ form.jid.help_text }}</div></div>
+        <div>{{ form.tipo.label_tag }}{{ form.tipo }}</div>
+        <div>{{ form.prioridade.label_tag }}{{ form.prioridade }}</div>
+        <div class="full" style="display:flex;flex-wrap:wrap;gap:1rem;align-items:center">
+          <label>{{ form.ativo }} Ativo</label>
+          <label>{{ form.envio_osab }} OSAB</label>
+          <label>{{ form.envio_capilaridade }} Capilaridade</label>
+          <label>{{ form.envio_fpd }} FPD</label>
+          <label>{{ form.envio_fpd_critico }} FPD crítico</label>
+          <label>{{ form.envio_churn }} Churn</label>
+        </div>
+        <div class="full"><button class="btn btn-primary" type="submit">Salvar</button></div>
+      </form>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h2>Como obter o JID do grupo</h2></div>
+    <div class="panel-b">
+      <p class="help">1. Pareie a instância no SyncWA (QR).</p>
+      <p class="help">2. Pegue o JID do grupo (termina em <code>@g.us</code>) uma vez e cadastre aqui.</p>
+      <p class="help">3. Número individual: DDI + DDD + número, ex. <code>5531999999999</code>.</p>
+      <p style="margin-top:0.8rem"><a class="btn btn-secondary" href="{% url 'gestao_envios' %}">Ir para Envios</a></p>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="table-scroll">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>PDV</th>
+          <th>Nome</th>
+          <th>JID</th>
+          <th>Tipo</th>
+          <th>Flags</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in destinatarios %}
+        <tr {% if not d.ativo %}style="opacity:0.6"{% endif %}>
+          <td>{{ d.parceiro.nome }}</td>
+          <td>{{ d.nome }}</td>
+          <td class="mono">{{ d.jid }}</td>
+          <td>{{ d.get_tipo_display }}</td>
+          <td class="help">
+            {% if d.envio_osab %}OSAB {% endif %}
+            {% if d.envio_capilaridade %}Cap {% endif %}
+            {% if d.envio_fpd %}FPD {% endif %}
+            {% if d.envio_fpd_critico %}FPD+ {% endif %}
+            {% if d.envio_churn %}Churn{% endif %}
+          </td>
+          <td>{% if d.ativo %}<span class="pill resolvido">Ativo</span>{% else %}<span class="pill cancelado">Inativo</span>{% endif %}</td>
+          <td>
+            <div class="fila-actions">
+              <a class="btn btn-ghost" href="{% url 'gestao_destinatario_editar' d.pk %}">Editar</a>
+              <form method="post" action="{% url 'gestao_destinatario_toggle' d.pk %}">{% csrf_token %}<button class="btn btn-ghost" type="submit">{% if d.ativo %}Inativar{% else %}Ativar{% endif %}</button></form>
+              <form method="post" action="{% url 'gestao_destinatario_excluir' d.pk %}" onsubmit="return confirm('Excluir destinatário?');">{% csrf_token %}<button class="btn btn-ghost" type="submit">Excluir</button></form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7">Nenhum destinatário ainda.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

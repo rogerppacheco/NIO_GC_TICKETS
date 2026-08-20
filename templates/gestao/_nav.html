@@ -7,5 +7,7 @@
   <a href="{% url 'gestao_churn' %}" {% if request.resolver_match.url_name == 'gestao_churn' %}class="is-on"{% endif %}>Churn</a>
   {% if eh_gestor %}
     <a href="{% url 'gestao_configs' %}" {% if request.resolver_match.url_name == 'gestao_configs' %}class="is-on"{% endif %}>Metas</a>
+    <a href="{% url 'gestao_destinatarios' %}" {% if 'destinatario' in request.resolver_match.url_name %}class="is-on"{% endif %}>Destinatários</a>
+    <a href="{% url 'gestao_envios' %}" {% if request.resolver_match.url_name == 'gestao_envios' %}class="is-on"{% endif %}>Envios</a>
   {% endif %}
 </div>

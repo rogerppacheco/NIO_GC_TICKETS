@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Envios WhatsApp · Gestão{% endblock %}
+{% block content %}
+{% include "gestao/_nav.html" %}
+<div class="hero">
+  <div>
+    <h1>Envios WhatsApp</h1>
+    <p>Dispara capilaridade, OSAB, FPD e Churn via SyncWA. {{ qtd_destinatarios }} destinatário(s) ativo(s).</p>
+  </div>
+  <a class="btn btn-secondary" href="{% url 'gestao_destinatarios' %}">Destinatários</a>
+</div>
+
+<div class="cards">
+  <div class="card">
+    <div class="label">SyncWA</div>
+    <div class="value" style="font-size:1.1rem">{% if syncwa_ok %}ligado{% else %}off{% endif %}</div>
+  </div>
+  <div class="card">
+    <div class="label">Modo teste</div>
+    <div class="value" style="font-size:1.1rem">{% if modo_teste %}sim{% else %}não{% endif %}</div>
+  </div>
+  <div class="card">
+    <div class="label">Health</div>
+    <div class="value" style="font-size:1.1rem">{% if health.ok %}ok{% else %}falha{% endif %}</div>
+  </div>
+</div>
+
+{% if pode_enviar %}
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-h"><h2>Disparar</h2></div>
+  <div class="panel-b">
+    <form method="post" class="fila-toolbar" style="gap:0.6rem">
+      {% csrf_token %}
+      <select name="parceiro" class="fila-pick">
+        <option value="">Todos / escolha o PDV</option>
+        {% for p in parceiros %}
+          <option value="{{ p.id }}">{{ p.nome }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-secondary" type="submit" name="action" value="teste">Teste SyncWA</button>
+      <button class="btn btn-primary" type="submit" name="action" value="capilaridade">Capilaridade</button>
+      <button class="btn btn-secondary" type="submit" name="action" value="resumo_capilaridade">Resumo capilaridade</button>
+      <button class="btn btn-secondary" type="submit" name="action" value="osab">OSAB (PDV)</button>
+      <button class="btn btn-secondary" type="submit" name="action" value="fpd">FPD (PDV)</button>
+      <button class="btn btn-secondary" type="submit" name="action" value="churn">Churn (PDV)</button>
+    </form>
+    <p class="help">OSAB, FPD e Churn exigem PDV selecionado. Capilaridade sem PDV envia para todos.</p>
+  </div>
+</div>
+{% endif %}
+
+<div class="panel">
+  <div class="panel-h"><h2>Histórico</h2></div>
+  <div class="table-scroll">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Quando</th>
+          <th>Tipo</th>
+          <th>PDV</th>
+          <th>Destino</th>
+          <th>Status</th>
+          <th>SyncWA</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in logs %}
+        <tr>
+          <td>{{ e.criado_em|date:"d/m H:i" }}</td>
+          <td>{{ e.get_tipo_display }}{% if e.modo_teste %} <span class="help">teste</span>{% endif %}</td>
+          <td>{{ e.parceiro.nome|default:"—" }}</td>
+          <td>
+            <div>{{ e.destino_nome|default:"—" }}</div>
+            <div class="help mono">{{ e.destino_jid }}</div>
+            {% if e.erro %}<div class="help" style="color:var(--danger)">{{ e.erro|truncatechars:120 }}</div>{% endif %}
+          </td>
+          <td>
+            {% if e.status == "enviado" %}<span class="pill resolvido">{{ e.get_status_display }}</span>
+            {% elif e.status == "erro" %}<span class="pill cancelado">{{ e.get_status_display }}</span>
+            {% else %}<span class="pill em_analise">{{ e.get_status_display }}</span>{% endif %}
+          </td>
+          <td class="help mono">{{ e.syncwa_message_id|default:e.syncwa_status|default:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6">Nenhum envio ainda.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

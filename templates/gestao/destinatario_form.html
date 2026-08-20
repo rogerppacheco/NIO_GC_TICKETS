@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Editar destinatário · Gestão{% endblock %}
+{% block content %}
+{% include "gestao/_nav.html" %}
+<div class="hero">
+  <div>
+    <h1>Editar {{ destinatario.nome }}</h1>
+    <p>{{ destinatario.parceiro.nome }}</p>
+  </div>
+  <a class="btn btn-secondary" href="{% url 'gestao_destinatarios' %}">Voltar</a>
+</div>
+<div class="panel">
+  <div class="panel-b">
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      <div>{{ form.parceiro.label_tag }}{{ form.parceiro }}</div>
+      <div>{{ form.nome.label_tag }}{{ form.nome }}</div>
+      <div class="full">{{ form.jid.label_tag }}{{ form.jid }}</div>
+      <div>{{ form.tipo.label_tag }}{{ form.tipo }}</div>
+      <div>{{ form.prioridade.label_tag }}{{ form.prioridade }}</div>
+      <div class="full" style="display:flex;flex-wrap:wrap;gap:1rem">
+        <label>{{ form.ativo }} Ativo</label>
+        <label>{{ form.envio_osab }} OSAB</label>
+        <label>{{ form.envio_capilaridade }} Capilaridade</label>
+        <label>{{ form.envio_fpd }} FPD</label>
+        <label>{{ form.envio_fpd_critico }} FPD crítico</label>
+        <label>{{ form.envio_churn }} Churn</label>
+      </div>
+      <div class="full"><button class="btn btn-primary" type="submit">Salvar</button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}

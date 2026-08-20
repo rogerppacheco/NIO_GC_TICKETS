@@ -156,3 +156,16 @@ LOGOUT_REDIRECT_URL = "login"
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
+
+# --- SyncWA (WhatsApp API) — 2ª onda gestão ---
+SYNCWA_BASE_URL = os.environ.get("SYNCWA_BASE_URL", "").strip()
+SYNCWA_API_KEY = os.environ.get("SYNCWA_API_KEY", "").strip()
+SYNCWA_TEST_JID = os.environ.get("SYNCWA_TEST_JID", "").strip()
+SYNCWA_MODO_TESTE = os.environ.get("SYNCWA_MODO_TESTE", "False").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+SYNCWA_TIMEOUT = int(os.environ.get("SYNCWA_TIMEOUT", "60"))
+FPD_PERCENTUAL_CRITICO = float(os.environ.get("FPD_PERCENTUAL_CRITICO", "30"))

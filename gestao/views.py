@@ -2,17 +2,29 @@ from __future__ import annotations
 
 from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
 from django.db.models import Count, Max, Q
 
 from tickets.acesso import eh_gestor, gestor_required, parceiros_visiveis
 from tickets.models import Parceiro
 
-from .forms import GrossForm, PeriodoForm, UploadBaseForm
+from .forms import DestinatarioForm, GrossForm, PeriodoForm, UploadBaseForm
+from .messaging.envio import (
+    enviar_capilaridade_pdv,
+    enviar_capilaridade_todos,
+    enviar_churn_pdv,
+    enviar_fpd_pdv,
+    enviar_osab_pdv,
+    enviar_resumo_capilaridade,
+    enviar_teste,
+)
+from .messaging.syncwa import healthcheck, modo_teste_ativo, syncwa_configurado
 from .models import (
     CadastroTerceiro,
     ConfiguracaoOSAB,
+    Destinatario,
+    EnvioWhatsApp,
     GrossMensal,
     HistoricoChurn,
     HistoricoOSAB,
@@ -117,10 +129,26 @@ def importar_sysmap_view(request: HttpRequest) -> HttpResponse:
 @login_required
 def capilaridade_view(request: HttpRequest) -> HttpResponse:
     ano, mes = periodo_ativo()
-    if request.method == "POST" and eh_gestor(request.user) and request.POST.get("action") == "recalcular":
-        resumo = persistir_capilaridade(ano, mes)
-        messages.success(request, f"Capilaridade recalculada: {resumo['linhas']} TTs, {resumo['ativos']} ativos.")
-        return redirect("gestao_capilaridade")
+    if request.method == "POST" and eh_gestor(request.user):
+        action = request.POST.get("action")
+        if action == "recalcular":
+            resumo = persistir_capilaridade(ano, mes)
+            messages.success(
+                request,
+                f"Capilaridade recalculada: {resumo['linhas']} TTs, {resumo['ativos']} ativos.",
+            )
+            return redirect("gestao_capilaridade")
+        if action == "enviar_pdv":
+            parceiro = get_object_or_404(_parceiros(request), pk=request.POST.get("parceiro"))
+            _flash_resumo(request, "Capilaridade", enviar_capilaridade_pdv(parceiro, request.user))
+            return redirect("gestao_capilaridade")
+        if action == "enviar_todos":
+            _flash_resumo(
+                request,
+                "Capilaridade (todos)",
+                enviar_capilaridade_todos(list(_parceiros(request)), request.user),
+            )
+            return redirect("gestao_capilaridade")
 
     parceiros = list(_parceiros(request))
     cards = []
@@ -142,6 +170,8 @@ def capilaridade_view(request: HttpRequest) -> HttpResponse:
             "resumo": resumo_geral(parceiros, ano, mes),
             "cards": cards,
             "pode_recalcular": eh_gestor(request.user),
+            "pode_enviar": eh_gestor(request.user) and syncwa_configurado(),
+            "modo_teste": modo_teste_ativo(),
         },
     )
 
@@ -336,3 +366,137 @@ def configs_view(request: HttpRequest) -> HttpResponse:
     for p in parceiros:
         linhas.append({"parceiro": p, "meta": metas.get(p.id), "osab": configs.get(p.id)})
     return render(request, "gestao/configs.html", {"ano": ano, "mes": mes, "linhas": linhas})
+
+
+def _flash_resumo(request, titulo: str, resumo) -> None:
+    texto = (
+        f"{titulo}: {resumo.enviados} enviado(s), {resumo.erros} erro(s), "
+        f"{resumo.ignorados} ignorado(s)."
+    )
+    if resumo.erros:
+        messages.error(request, texto)
+    elif resumo.enviados:
+        messages.success(request, texto)
+    else:
+        messages.warning(request, texto)
+    for linha in (resumo.detalhes or [])[:8]:
+        messages.info(request, linha)
+
+
+@gestor_required
+def destinatarios_view(request: HttpRequest) -> HttpResponse:
+    form = DestinatarioForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Destinatário salvo.")
+        return redirect("gestao_destinatarios")
+    lista = Destinatario.objects.select_related("parceiro").all()
+    return render(
+        request,
+        "gestao/destinatarios.html",
+        {
+            "form": form,
+            "destinatarios": lista,
+            "syncwa_ok": syncwa_configurado(),
+            "modo_teste": modo_teste_ativo(),
+        },
+    )
+
+
+@gestor_required
+def destinatario_editar(request: HttpRequest, pk: int) -> HttpResponse:
+    dest = get_object_or_404(Destinatario, pk=pk)
+    form = DestinatarioForm(request.POST or None, instance=dest)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Destinatário atualizado.")
+        return redirect("gestao_destinatarios")
+    return render(
+        request,
+        "gestao/destinatario_form.html",
+        {"form": form, "destinatario": dest},
+    )
+
+
+@gestor_required
+def destinatario_excluir(request: HttpRequest, pk: int) -> HttpResponse:
+    dest = get_object_or_404(Destinatario, pk=pk)
+    if request.method == "POST":
+        dest.delete()
+        messages.success(request, "Destinatário excluído.")
+    return redirect("gestao_destinatarios")
+
+
+@gestor_required
+def destinatario_toggle(request: HttpRequest, pk: int) -> HttpResponse:
+    dest = get_object_or_404(Destinatario, pk=pk)
+    if request.method == "POST":
+        dest.ativo = not dest.ativo
+        dest.save(update_fields=["ativo", "atualizado_em"])
+        messages.success(request, f"{dest.nome}: {'ativo' if dest.ativo else 'inativo'}.")
+    return redirect("gestao_destinatarios")
+
+
+@login_required
+def envios_view(request: HttpRequest) -> HttpResponse:
+    if request.method == "POST" and eh_gestor(request.user):
+        action = request.POST.get("action") or ""
+        parceiro_id = request.POST.get("parceiro") or ""
+        parceiro = None
+        if parceiro_id:
+            parceiro = get_object_or_404(_parceiros(request), pk=parceiro_id)
+
+        if action == "teste":
+            _flash_resumo(request, "Teste SyncWA", enviar_teste(request.user))
+            return redirect("gestao_envios")
+        if action == "capilaridade":
+            if parceiro:
+                _flash_resumo(request, "Capilaridade", enviar_capilaridade_pdv(parceiro, request.user))
+            else:
+                _flash_resumo(
+                    request,
+                    "Capilaridade (todos)",
+                    enviar_capilaridade_todos(list(_parceiros(request)), request.user),
+                )
+            return redirect("gestao_envios")
+        if action == "resumo_capilaridade":
+            _flash_resumo(
+                request,
+                "Resumo capilaridade",
+                enviar_resumo_capilaridade(list(_parceiros(request)), request.user),
+            )
+            return redirect("gestao_envios")
+        if action == "osab":
+            if not parceiro:
+                messages.error(request, "Escolha o PDV para enviar OSAB.")
+            else:
+                _flash_resumo(request, "OSAB", enviar_osab_pdv(parceiro, request.user))
+            return redirect("gestao_envios")
+        if action == "fpd":
+            if not parceiro:
+                messages.error(request, "Escolha o PDV para enviar FPD.")
+            else:
+                _flash_resumo(request, "FPD", enviar_fpd_pdv(parceiro, request.user))
+            return redirect("gestao_envios")
+        if action == "churn":
+            if not parceiro:
+                messages.error(request, "Escolha o PDV para enviar Churn.")
+            else:
+                _flash_resumo(request, "Churn", enviar_churn_pdv(parceiro, request.user))
+            return redirect("gestao_envios")
+
+    health = healthcheck() if syncwa_configurado() else {"ok": False, "error": "não configurado"}
+    logs = EnvioWhatsApp.objects.select_related("parceiro", "destinatario")[:60]
+    return render(
+        request,
+        "gestao/envios.html",
+        {
+            "parceiros": _parceiros(request),
+            "pode_enviar": eh_gestor(request.user),
+            "syncwa_ok": syncwa_configurado(),
+            "modo_teste": modo_teste_ativo(),
+            "health": health,
+            "logs": logs,
+            "qtd_destinatarios": Destinatario.objects.filter(ativo=True).count(),
+        },
+    )

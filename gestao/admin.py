@@ -4,6 +4,8 @@ from .models import (
     AnaliseCapilaridade,
     CadastroTerceiro,
     ConfiguracaoOSAB,
+    Destinatario,
+    EnvioWhatsApp,
     GrossMensal,
     HistoricoChurn,
     HistoricoOSAB,
@@ -31,6 +33,20 @@ class TerceiroAdmin(admin.ModelAdmin):
 class VendaAdmin(admin.ModelAdmin):
     list_display = ("pedido", "pdv_nome", "matricula_vendedor", "data_abertura", "situacao")
     search_fields = ("pedido", "pdv_nome", "matricula_vendedor")
+
+
+@admin.register(Destinatario)
+class DestinatarioAdmin(admin.ModelAdmin):
+    list_display = ("nome", "parceiro", "jid", "tipo", "ativo", "prioridade")
+    list_filter = ("ativo", "tipo", "envio_capilaridade", "envio_fpd", "envio_churn")
+    search_fields = ("nome", "jid", "parceiro__nome")
+
+
+@admin.register(EnvioWhatsApp)
+class EnvioAdmin(admin.ModelAdmin):
+    list_display = ("criado_em", "tipo", "status", "parceiro", "destino_nome", "modo_teste")
+    list_filter = ("tipo", "status", "modo_teste")
+    search_fields = ("destino_jid", "destino_nome", "syncwa_message_id")
 
 
 admin.site.register(AnaliseCapilaridade)
