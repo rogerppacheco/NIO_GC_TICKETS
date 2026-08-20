@@ -3,6 +3,11 @@
     return document.getElementById("modal-root");
   };
 
+  /** URL do form — NÃO usar form.action: input[name=action] sobrescreve a propriedade. */
+  function formUrl(form) {
+    return form.getAttribute("action") || form.getAttribute("data-action") || "";
+  }
+
   function csrfToken() {
     const el = document.querySelector("[name=csrfmiddlewaretoken]");
     if (el && el.value) return el.value;
@@ -99,7 +104,7 @@
     fd.set("action", "atualizar_tipo");
     showModalNotice(overlay, "Atualizando tipo da demanda…", true);
     try {
-      const res = await fetch(form.action, {
+      const res = await fetch(formUrl(form), {
         method: "POST",
         body: fd,
         credentials: "same-origin",
@@ -204,7 +209,7 @@
     }
     showModalNotice(overlay, "Salvando resposta…", true);
     try {
-      const res = await fetch(form.action, {
+      const res = await fetch(formUrl(form), {
         method: "POST",
         body: new FormData(form),
         credentials: "same-origin",
