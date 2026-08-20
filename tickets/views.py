@@ -476,7 +476,7 @@ def ticket_responder(request: HttpRequest, protocolo: str) -> HttpResponse:
             return JsonResponse(
                 {
                     "ok": True,
-                    "redirect": proximo,
+                    "redirect": proximo or reverse("fila"),
                     "message": "Resposta salva.",
                 }
             )
@@ -484,6 +484,25 @@ def ticket_responder(request: HttpRequest, protocolo: str) -> HttpResponse:
 
     ctx = _ctx_modal_resposta(request, ticket, treat_form)
     if _eh_ajax(request):
+        accept = (request.headers.get("Accept") or "").lower()
+        if "application/json" in accept:
+            msgs = []
+            for field, errs in treat_form.errors.items():
+                label = field
+                if field in treat_form.fields:
+                    label = str(treat_form.fields[field].label or field)
+                elif field == "__all__":
+                    label = "Formulário"
+                for err in errs:
+                    msgs.append(f"{label}: {err}")
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "error": " ".join(msgs) or "Não foi possível salvar. Verifique os campos.",
+                    "errors": treat_form.errors.get_json_data(),
+                },
+                status=400,
+            )
         return render(request, "tickets/_modal_responder.html", ctx, status=400)
     messages.error(request, "Não foi possível salvar. Verifique os campos.")
     return redirect("ticket_detalhe", protocolo=ticket.protocolo)

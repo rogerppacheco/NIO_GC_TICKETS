@@ -35,13 +35,19 @@
         <button type="button" class="btn btn-secondary" data-atualizar-tipo>Aplicar tipo</button>
       </div>
       <div class="modal-fila">
-        <div class="modal-tipo-field">
-          <label for="{{ treat_form.status.id_for_label }}">{{ treat_form.status.label }}</label>
+        <div class="modal-tipo-field{% if treat_form.status.errors %} has-error{% endif %}">
+          <label for="{{ treat_form.status.id_for_label }}">{{ treat_form.status.label }} *</label>
           {{ treat_form.status }}
+          {% if treat_form.status.errors %}
+            <div class="help" style="color:var(--danger)">{{ treat_form.status.errors|striptags }}</div>
+          {% endif %}
         </div>
-        <div class="modal-tipo-field">
+        <div class="modal-tipo-field{% if treat_form.prioridade.errors %} has-error{% endif %}">
           <label for="{{ treat_form.prioridade.id_for_label }}">{{ treat_form.prioridade.label }}</label>
           {{ treat_form.prioridade }}
+          {% if treat_form.prioridade.errors %}
+            <div class="help" style="color:var(--danger)">{{ treat_form.prioridade.errors|striptags }}</div>
+          {% endif %}
         </div>
       </div>
     {% if aviso_tipo %}
@@ -49,7 +55,12 @@
     {% endif %}
     {% if treat_form.errors %}
       <div class="modal-erro" role="alert">
-        Não foi possível salvar. Corrija os campos nas abas em vermelho.
+        Não foi possível salvar.
+        {% if treat_form.status.errors %}
+          Escolha a <strong>Situação na fila</strong> acima (não pode ficar em Novo / Selecione).
+        {% else %}
+          Corrija os campos destacados em vermelho.
+        {% endif %}
         <ul>
           {% for field in treat_form %}
             {% for err in field.errors %}

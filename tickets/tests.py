@@ -295,6 +295,29 @@ class TratamentoModalTests(TestCase):
         self.ticket.refresh_from_db()
         self.assertEqual(self.ticket.status, StatusTicket.NOVO)
         self.assertContains(r, "não pode permanecer como Novo", status_code=400)
+        self.assertContains(r, "Situação na fila", status_code=400)
+
+    def test_salvar_sem_situacao_retorna_json_claro_para_ajax(self):
+        self.client.force_login(self.user)
+        r = self.client.post(
+            reverse("ticket_responder", args=[self.ticket.protocolo]),
+            {
+                "action": "tratar",
+                "tipo": TipoDemanda.RESET_SENHA,
+                "status": "",
+                "prioridade": self.ticket.prioridade,
+                "senha_resetada": "Nio@123",
+                "resultado_status": "SENHA RESETADA",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            HTTP_ACCEPT="application/json",
+        )
+        self.assertEqual(r.status_code, 400)
+        data = r.json()
+        self.assertFalse(data["ok"])
+        self.assertIn("Situação", data["error"])
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, StatusTicket.NOVO)
 
     @override_settings(
         STORAGES={

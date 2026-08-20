@@ -208,20 +208,37 @@
         method: "POST",
         body: new FormData(form),
         credentials: "same-origin",
-        headers: { "X-Requested-With": "XMLHttpRequest", "Accept": "application/json" },
+        headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" },
       });
       const ct = res.headers.get("content-type") || "";
       if (ct.indexOf("application/json") !== -1) {
         const data = await res.json();
-        if (data.ok && data.redirect) {
+        if (data.ok) {
           showModalNotice(overlay, data.message || "Resposta salva. Atualizando…", true);
-          window.location.href = data.redirect;
+          window.location.href = data.redirect || "/fila/";
           return;
         }
-        showModalNotice(overlay, data.error || "Não foi possível salvar.", false);
+        showModalNotice(
+          overlay,
+          data.error || "Não foi possível salvar. Escolha a Situação na fila e preencha os campos obrigatórios.",
+          false
+        );
+        const statusEl = overlay && overlay.querySelector("#id_status");
+        if (statusEl && /situa/i.test(data.error || "")) {
+          statusEl.focus();
+          statusEl.classList.add("is-invalid");
+        }
         return;
       }
       const html = await res.text();
+      if (html.indexOf("id=\"modal-responder\"") === -1 && html.indexOf("id='modal-responder'") === -1) {
+        showModalNotice(
+          overlay,
+          "Falha ao salvar (HTTP " + res.status + "). Atualize a página (Ctrl+F5) e tente de novo.",
+          false
+        );
+        return;
+      }
       const box = root();
       if (box) {
         box.innerHTML = html;
