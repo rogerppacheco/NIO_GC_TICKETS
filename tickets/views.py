@@ -895,14 +895,29 @@ def dashboard(request: HttpRequest) -> HttpResponse:
     por_status = dict(
         base.values_list("status").annotate(c=Count("id")).values_list("status", "c")
     )
-    por_tipo = list(
-        base.values("tipo").annotate(c=Count("id")).order_by("-c")
-    )
+    total = base.count()
+    por_tipo_raw = list(base.values("tipo").annotate(c=Count("id")).order_by("-c"))
+    labels = dict(TipoDemanda.choices)
+    por_tipo = []
+    for row in por_tipo_raw:
+        qtd = int(row["c"] or 0)
+        full = labels.get(row["tipo"], row["tipo"])
+        # rótulo curto para o painel (corta código/parênteses longos)
+        curto = full.split(" — ")[0].split(" (")[0].strip()
+        por_tipo.append(
+            {
+                "tipo": row["tipo"],
+                "label": curto,
+                "label_full": full,
+                "c": qtd,
+                "pct": round((100.0 * qtd / total), 1) if total else 0.0,
+            }
+        )
     return render(
         request,
         "tickets/dashboard.html",
         {
-            "total": base.count(),
+            "total": total,
             "abertos": base.exclude(
                 status__in=[
                     StatusTicket.RESOLVIDO,
@@ -913,6 +928,7 @@ def dashboard(request: HttpRequest) -> HttpResponse:
             "novos": base.filter(status=StatusTicket.NOVO).count(),
             "por_status": por_status,
             "por_tipo": por_tipo,
+            "por_tipo_total": sum(r["c"] for r in por_tipo),
             "recentes": base.select_related("parceiro")[:15],
         },
     )

@@ -38,13 +38,35 @@
   <div class="panel">
     <div class="panel-h"><h2>Por tipo</h2></div>
     <div class="panel-b">
-      {% for row in por_tipo %}
-        <div style="display:flex;justify-content:space-between;padding:0.45rem 0;border-bottom:1px solid var(--line)">
-          <span>{{ row.tipo }}</span><strong>{{ row.c }}</strong>
-        </div>
-      {% empty %}
+      {% if por_tipo %}
+      <table class="table table-compact por-tipo">
+        <thead>
+          <tr>
+            <th>Tipo</th>
+            <th class="num">Qtd</th>
+            <th class="num">%</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in por_tipo %}
+          <tr>
+            <td title="{{ row.label_full }}">{{ row.label }}</td>
+            <td class="num"><strong>{{ row.c }}</strong></td>
+            <td class="num">{{ row.pct }}%</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <th>Total</th>
+            <th class="num">{{ por_tipo_total }}</th>
+            <th class="num">100%</th>
+          </tr>
+        </tfoot>
+      </table>
+      {% else %}
         <p class="help">Sem dados.</p>
-      {% endfor %}
+      {% endif %}
     </div>
   </div>
 </div>

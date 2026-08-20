@@ -388,12 +388,18 @@ body.modal-open { overflow: hidden; }
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem;
   padding: 0.35rem 1.1rem 0.55rem;
 }
-.modal-tipo-field.has-error select,
-.modal-tipo-field.has-error input,
-.modal-tipo-field.has-error textarea,
-select.is-invalid {
-  border-color: var(--danger) !important;
-  box-shadow: 0 0 0 2px rgba(180, 35, 24, 0.15);
+.table.por-tipo th.num,
+.table.por-tipo td.num {
+  text-align: right;
+  white-space: nowrap;
+  width: 4.5rem;
+}
+.table.por-tipo tfoot th {
+  border-top: 2px solid var(--line);
+  padding-top: 0.65rem;
+}
+.table.por-tipo tbody td:first-child {
+  overflow-wrap: anywhere;
 }
 .modal-erro {
   margin: 0.75rem 1.1rem 0; padding: 0.75rem 0.9rem;
