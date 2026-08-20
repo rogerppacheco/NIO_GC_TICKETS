@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Churn · Gestão{% endblock %}
+{% block content %}
+{% include "gestao/_nav.html" %}
+<div class="hero">
+  <div>
+    <h1>Churn</h1>
+    <p>Cancelamentos por safra de instalação. Cadastre o Gross mensal para a taxa fechar.</p>
+  </div>
+</div>
+{% if form %}
+<div class="grid-2" style="margin-bottom:1rem">
+  <div class="panel">
+    <div class="panel-h"><h2>Importar Churn</h2></div>
+    <div class="panel-b">
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ form.arquivo }}
+        <button class="btn btn-primary" type="submit" style="margin-top:0.7rem">Processar Churn</button>
+      </form>
+    </div>
+  </div>
+  {% if gross_form %}
+  <div class="panel">
+    <div class="panel-h"><h2>Gross mensal</h2></div>
+    <div class="panel-b">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="gross">
+        <div class="form-grid">
+          <div>{{ gross_form.parceiro.label_tag }}{{ gross_form.parceiro }}</div>
+          <div>{{ gross_form.anomes.label_tag }}{{ gross_form.anomes }}</div>
+          <div>{{ gross_form.gross.label_tag }}{{ gross_form.gross }}</div>
+        </div>
+        <button class="btn btn-secondary" type="submit" style="margin-top:0.7rem">Salvar gross</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% for m in mensagens %}
+  <div class="mask-card">
+    <div class="mask-card-h">
+      <strong>{{ m.pdv_nome }}</strong>
+      <textarea id="churn-{{ m.id }}" hidden>{{ m.mensagem }}</textarea>
+      <button class="btn btn-primary" type="button" data-copy-target="churn-{{ m.id }}">Copiar</button>
+    </div>
+    <div class="long-text">{{ m.mensagem|linebreaksbr }}</div>
+  </div>
+{% empty %}
+  <p class="help">Nenhum churn processado ainda.</p>
+{% endfor %}
+
+<div class="panel" style="margin-top:1rem">
+  <div class="panel-h"><h2>Safras</h2></div>
+  <table class="table">
+    <thead><tr><th>PDV</th><th>Safra</th><th>Gross</th><th>Churn</th><th>Taxa</th><th>Remanescentes</th></tr></thead>
+    <tbody>
+      {% for h in historico %}
+      <tr>
+        <td>{{ h.pdv_nome }}</td>
+        <td>{{ h.anomes_gross }}</td>
+        <td>{{ h.gross }}</td>
+        <td>{{ h.churn }}</td>
+        <td>{{ h.taxa_churn|floatformat:2 }}%</td>
+        <td>{{ h.remanescentes }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6">Sem safras.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

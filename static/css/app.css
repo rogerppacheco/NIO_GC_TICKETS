@@ -49,6 +49,18 @@ a:hover { text-decoration: underline; }
 .nav { display: flex; gap: 0.85rem; flex-wrap: wrap; align-items: center; }
 .nav a { color: var(--muted); font-weight: 600; font-size: 0.95rem; }
 .nav a:hover, .nav a.active { color: var(--ink); text-decoration: none; }
+.gestao-nav {
+  display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0 0 1.1rem;
+}
+.gestao-nav a {
+  border: 1px solid var(--line); background: #fff; color: var(--muted);
+  border-radius: 999px; padding: 0.32rem 0.75rem; font-size: 0.85rem; font-weight: 700;
+}
+.gestao-nav a:hover, .gestao-nav a.is-on {
+  color: var(--ink); border-color: var(--brand); text-decoration: none;
+}
+.gestao-nav a.is-on { background: #eef8f5; }
+.mono { font-family: var(--mono); font-size: 0.9rem; }
 .logout-form { display: inline; margin: 0; }
 .nav-btn {
   border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 600;

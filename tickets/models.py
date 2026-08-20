@@ -316,15 +316,10 @@ class Ticket(models.Model):
         return formatar_duracao(self.tempo_retorno_segundos)
 
     def iniciar_tratamento(self, user) -> None:
+        """Abre o modal e inicia o cronômetro. Não muda a situação na fila."""
         agora = timezone.now()
         campos = ["resposta_iniciada_em", "atualizado_em"]
         self.resposta_iniciada_em = agora
-        if not self.primeiro_atendimento_em:
-            self.primeiro_atendimento_em = agora
-            campos.append("primeiro_atendimento_em")
-        if self.status == StatusTicket.NOVO:
-            self.status = StatusTicket.EM_ANALISE
-            campos.append("status")
         if not self.atendente and user is not None:
             self.atendente = user
             campos.append("atendente")

@@ -449,10 +449,30 @@ class TicketTreatForm(forms.ModelForm):
         }
         help_texts = {
             "tipo": "Altere se a demanda foi aberta no tipo errado. Ao salvar, campos e máscaras se atualizam.",
+            "status": "Obrigatório ao salvar. Abrir o modal não muda a fila.",
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        situacoes = [
+            (valor, rotulo)
+            for valor, rotulo in StatusTicket.choices
+            if valor != StatusTicket.NOVO
+        ]
+        campo_status = self.fields["status"]
+        campo_status.required = True
+        campo_status.error_messages["required"] = (
+            "Escolha a situação na fila. Depois de salvar, o ticket não pode permanecer como Novo."
+        )
+        campo_status.error_messages["invalid_choice"] = (
+            "Escolha a situação na fila. Depois de salvar, o ticket não pode permanecer como Novo."
+        )
+        if getattr(self.instance, "status", None) == StatusTicket.NOVO:
+            campo_status.choices = [("", "Selecione a situação")] + situacoes
+            if not self.is_bound:
+                campo_status.initial = ""
+        else:
+            campo_status.choices = situacoes
         # Em POST, usa o tipo enviado para montar os campos de resposta
         tipo = self.instance.tipo
         if self.is_bound:
@@ -487,6 +507,14 @@ class TicketTreatForm(forms.ModelForm):
                 self.fields["complemento_retorno"].initial = atual[len(montado) :].strip()
             elif not dados:
                 self.fields["complemento_retorno"].initial = atual
+
+    def clean_status(self):
+        status = self.cleaned_data.get("status")
+        if not status or status == StatusTicket.NOVO:
+            raise forms.ValidationError(
+                "Escolha a situação na fila. Depois de salvar, o ticket não pode permanecer como Novo."
+            )
+        return status
 
     def retorno_dados_limpos(self) -> dict:
         dados = {}

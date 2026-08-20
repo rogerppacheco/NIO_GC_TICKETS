@@ -5,6 +5,7 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("gestao/", include("gestao.urls")),
     path("", include("tickets.urls")),
 ]
 

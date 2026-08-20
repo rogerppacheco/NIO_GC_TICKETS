@@ -10,7 +10,7 @@ from django.utils.datastructures import MultiValueDict
 from .acesso import eh_gestor, qs_equipe, qs_especialistas, tickets_visiveis
 from .demanda_campos import montar_abas_tratamento
 from .forms import LoginForm, MultipleFileField, ParceiroForm, TicketCreateForm, TicketTreatForm
-from .models import Anexo, Mensagem, Parceiro, PerfilStaff, Ticket, TipoDemanda, formatar_duracao
+from .models import Anexo, Mensagem, Parceiro, PerfilStaff, StatusTicket, Ticket, TipoDemanda, formatar_duracao
 
 
 class MultipleFileFieldTests(SimpleTestCase):
@@ -242,6 +242,8 @@ class TratamentoModalTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.ticket.refresh_from_db()
         self.assertIsNotNone(self.ticket.resposta_iniciada_em)
+        self.assertEqual(self.ticket.status, StatusTicket.NOVO)
+        self.assertContains(r, "Selecione a situação")
         self.ticket.resposta_iniciada_em = timezone.now() - timedelta(seconds=12)
         self.ticket.save(update_fields=["resposta_iniciada_em"])
 
@@ -250,7 +252,7 @@ class TratamentoModalTests(TestCase):
             {
                 "action": "tratar",
                 "tipo": TipoDemanda.RESET_SENHA,
-                "status": self.ticket.status,
+                "status": StatusTicket.EM_ANALISE,
                 "prioridade": self.ticket.prioridade,
                 "senha_resetada": "Nio@123",
                 "resultado_status": "SENHA RESETADA",
@@ -259,9 +261,40 @@ class TratamentoModalTests(TestCase):
         )
         self.assertEqual(r.status_code, 200)
         self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, StatusTicket.EM_ANALISE)
         self.assertIsNotNone(self.ticket.tempo_retorno_segundos)
         self.assertGreaterEqual(self.ticket.tempo_retorno_segundos, 12)
         self.assertIn("Nio@123", self.ticket.resposta_publica)
+
+    def test_abrir_modal_nao_muda_situacao_na_fila(self):
+        self.client.force_login(self.user)
+        r = self.client.post(
+            reverse("ticket_responder", args=[self.ticket.protocolo]),
+            {"action": "abrir"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, StatusTicket.NOVO)
+
+    def test_salvar_como_novo_e_rejeitado(self):
+        self.client.force_login(self.user)
+        r = self.client.post(
+            reverse("ticket_responder", args=[self.ticket.protocolo]),
+            {
+                "action": "tratar",
+                "tipo": TipoDemanda.RESET_SENHA,
+                "status": StatusTicket.NOVO,
+                "prioridade": self.ticket.prioridade,
+                "senha_resetada": "Nio@123",
+                "resultado_status": "SENHA RESETADA",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, StatusTicket.NOVO)
+        self.assertContains(r, "não pode permanecer como Novo", status_code=400)
 
     @override_settings(
         STORAGES={
@@ -328,7 +361,7 @@ class TratamentoModalTests(TestCase):
             {
                 "action": "tratar",
                 "tipo": TipoDemanda.RESET_SENHA,
-                "status": self.ticket.status,
+                "status": StatusTicket.EM_ANALISE,
                 "prioridade": self.ticket.prioridade,
             },
             HTTP_X_REQUESTED_WITH="XMLHttpRequest",

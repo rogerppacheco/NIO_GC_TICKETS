@@ -1,0 +1,283 @@
+from __future__ import annotations
+
+from django.conf import settings
+from django.db import models
+
+
+class GestaoConfig(models.Model):
+    chave = models.CharField(max_length=80, unique=True)
+    valor = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        verbose_name = "Configuração de gestão"
+        verbose_name_plural = "Configurações de gestão"
+
+    def __str__(self) -> str:
+        return f"{self.chave}={self.valor}"
+
+
+class LoteImportacao(models.Model):
+    class Tipo(models.TextChoices):
+        SYSMAP = "sysmap", "Sysmap / Supply"
+        OSAB = "osab", "OSAB"
+        FPD = "fpd", "FPD"
+        CHURN = "churn", "Churn"
+
+    tipo = models.CharField(max_length=20, choices=Tipo.choices, db_index=True)
+    arquivo_nome = models.CharField(max_length=255)
+    ok = models.BooleanField(default=True)
+    erro = models.TextField(blank=True)
+    resumo = models.JSONField(default=dict, blank=True)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="lotes_gestao",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-criado_em"]
+        verbose_name = "Lote de importação"
+        verbose_name_plural = "Lotes de importação"
+
+    def __str__(self) -> str:
+        return f"{self.get_tipo_display()} · {self.arquivo_nome}"
+
+
+class CadastroTerceiro(models.Model):
+    chave_acesso = models.CharField(max_length=50, unique=True, db_index=True)
+    nome_terceiro = models.CharField(max_length=200, blank=True)
+    cpf = models.CharField(max_length=30, blank=True)
+    email = models.CharField(max_length=200, blank=True)
+    razao_social = models.CharField(max_length=200, blank=True, db_index=True)
+    parceiro = models.ForeignKey(
+        "tickets.Parceiro",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="terceiros",
+    )
+    vinculo = models.CharField(max_length=50, blank=True)
+    cargo_funcao = models.CharField(max_length=100, blank=True)
+    situacao_empresa = models.CharField(max_length=50, blank=True)
+    situacao_funcional = models.CharField(max_length=80, blank=True)
+    situacao_contrato = models.CharField(max_length=50, blank=True)
+    data_alocacao = models.DateField(null=True, blank=True)
+    data_desalocacao = models.DateField(null=True, blank=True)
+    data_inativacao = models.DateField(null=True, blank=True)
+    ativo = models.BooleanField(default=False, db_index=True)
+    data_referencia = models.DateField(null=True, blank=True)
+    data_importacao = models.DateTimeField(auto_now_add=True)
+    data_atualizacao = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["nome_terceiro", "chave_acesso"]
+        verbose_name = "Terceiro (Sysmap)"
+        verbose_name_plural = "Terceiros (Sysmap)"
+
+    def __str__(self) -> str:
+        return f"{self.chave_acesso} · {self.nome_terceiro}"
+
+
+class VendaOSAB(models.Model):
+    pedido = models.CharField(max_length=100, unique=True, db_index=True)
+    dt_ref = models.DateTimeField(null=True, blank=True, db_index=True)
+    matricula_vendedor = models.CharField(max_length=100, blank=True, db_index=True)
+    nome_vendedor = models.CharField(max_length=200, blank=True)
+    pdv_nome = models.CharField(max_length=150, db_index=True)
+    parceiro = models.ForeignKey(
+        "tickets.Parceiro",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="vendas_osab",
+    )
+    data_abertura = models.DateTimeField(null=True, blank=True, db_index=True)
+    data_fechamento = models.DateTimeField(null=True, blank=True)
+    situacao = models.CharField(max_length=200, blank=True)
+    velocidade = models.CharField(max_length=100, blank=True)
+    meio_pagamento = models.CharField(max_length=100, blank=True)
+    data_importacao = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-data_abertura"]
+        verbose_name = "Venda OSAB"
+        verbose_name_plural = "Vendas OSAB"
+
+    def __str__(self) -> str:
+        return self.pedido
+
+
+class AnaliseCapilaridade(models.Model):
+    data_analise = models.DateField()
+    ano_referencia = models.IntegerField(db_index=True)
+    mes_referencia = models.IntegerField(db_index=True)
+    matricula_vendedor = models.CharField(max_length=100, db_index=True)
+    nome_vendedor = models.CharField(max_length=200, blank=True)
+    pdv_nome = models.CharField(max_length=150, db_index=True)
+    parceiro = models.ForeignKey(
+        "tickets.Parceiro",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="analises_capilaridade",
+    )
+    dias_sem_vender = models.IntegerField(null=True, blank=True)
+    status = models.CharField(max_length=50)
+    ultima_venda = models.DateTimeField(null=True, blank=True)
+    sem_venda_osab = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["pdv_nome", "matricula_vendedor"]
+        indexes = [
+            models.Index(fields=["ano_referencia", "mes_referencia"]),
+        ]
+        verbose_name = "Análise de capilaridade"
+        verbose_name_plural = "Análises de capilaridade"
+
+
+class MetaCapilaridade(models.Model):
+    parceiro = models.ForeignKey(
+        "tickets.Parceiro",
+        on_delete=models.CASCADE,
+        related_name="metas_capilaridade",
+    )
+    ano = models.IntegerField()
+    mes = models.IntegerField()
+    meta_vendedores = models.IntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["parceiro", "ano", "mes"],
+                name="uniq_meta_cap_parceiro_periodo",
+            )
+        ]
+        verbose_name = "Meta de capilaridade"
+        verbose_name_plural = "Metas de capilaridade"
+
+
+class ConfiguracaoOSAB(models.Model):
+    parceiro = models.ForeignKey(
+        "tickets.Parceiro",
+        on_delete=models.CASCADE,
+        related_name="configs_osab",
+    )
+    ano = models.IntegerField()
+    mes = models.IntegerField()
+    meta_vl = models.IntegerField(default=0)
+    du_vl = models.FloatField(default=0)
+    meta_gross = models.IntegerField(default=0)
+    du_gross = models.FloatField(default=0)
+    pesos_diarios_vl = models.TextField(blank=True)
+    pesos_diarios_gross = models.TextField(blank=True)
+    comissao_500 = models.IntegerField(default=0)
+    comissao_700 = models.IntegerField(default=0)
+    comissao_1000 = models.IntegerField(default=0)
+    tem_bonus = models.BooleanField(default=False)
+    comissao_bonus = models.IntegerField(default=0)
+    tem_bonus_m10 = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["parceiro", "ano", "mes"],
+                name="uniq_config_osab_parceiro_periodo",
+            )
+        ]
+        verbose_name = "Configuração OSAB"
+        verbose_name_plural = "Configurações OSAB"
+
+
+class HistoricoOSAB(models.Model):
+    data_processamento = models.DateTimeField(auto_now_add=True, db_index=True)
+    parceiro = models.ForeignKey(
+        "tickets.Parceiro",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="historicos_osab",
+    )
+    descricao_pdv = models.CharField(max_length=150)
+    status = models.CharField(max_length=50, default="Ok")
+    detalhes = models.JSONField(default=dict, blank=True)
+    realizado_vl = models.FloatField(null=True, blank=True)
+    atingimento_vl = models.FloatField(null=True, blank=True)
+    realizado_gross = models.IntegerField(null=True, blank=True)
+    atingimento_gross = models.FloatField(null=True, blank=True)
+    comissao_total_projetada = models.FloatField(null=True, blank=True)
+    mensagem = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-data_processamento", "descricao_pdv"]
+        verbose_name = "Histórico OSAB"
+        verbose_name_plural = "Históricos OSAB"
+
+
+class GrossMensal(models.Model):
+    parceiro = models.ForeignKey(
+        "tickets.Parceiro",
+        on_delete=models.CASCADE,
+        related_name="gross_mensal",
+    )
+    anomes = models.IntegerField()
+    gross = models.IntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["parceiro", "anomes"],
+                name="uniq_gross_parceiro_anomes",
+            )
+        ]
+        verbose_name = "Gross mensal"
+        verbose_name_plural = "Gross mensal"
+
+
+class HistoricoChurn(models.Model):
+    data_analise = models.DateField(db_index=True)
+    parceiro = models.ForeignKey(
+        "tickets.Parceiro",
+        on_delete=models.CASCADE,
+        related_name="historicos_churn",
+    )
+    pdv_nome = models.CharField(max_length=100)
+    anomes_gross = models.IntegerField()
+    gross = models.IntegerField()
+    churn = models.IntegerField()
+    taxa_churn = models.FloatField()
+    remanescentes = models.IntegerField()
+    bonus_m10 = models.FloatField()
+    mensagem = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["pdv_nome", "-anomes_gross"]
+        verbose_name = "Histórico de churn"
+        verbose_name_plural = "Históricos de churn"
+
+
+class RelatorioFPD(models.Model):
+    lote = models.ForeignKey(
+        LoteImportacao,
+        on_delete=models.CASCADE,
+        related_name="relatorios_fpd",
+    )
+    parceiro = models.ForeignKey(
+        "tickets.Parceiro",
+        on_delete=models.CASCADE,
+        related_name="relatorios_fpd",
+    )
+    pdv_nome = models.CharField(max_length=150)
+    percentual = models.FloatField()
+    total_faturas = models.IntegerField()
+    total_abertas = models.IntegerField()
+    mensagem = models.TextField(blank=True)
+    detalhes = models.JSONField(default=dict, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-percentual", "pdv_nome"]
+        verbose_name = "Relatório FPD"
+        verbose_name_plural = "Relatórios FPD"

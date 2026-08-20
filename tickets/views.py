@@ -412,6 +412,8 @@ def _aplicar_tratamento(request: HttpRequest, ticket: Ticket, treat_form: Ticket
     t.registrar_tempo_resposta()
     if not t.atendente:
         t.atendente = request.user
+    if not t.primeiro_atendimento_em:
+        t.primeiro_atendimento_em = timezone.now()
     t.save()
     if t.resposta_publica:
         Mensagem.objects.create(

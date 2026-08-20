@@ -83,9 +83,12 @@
     document.body.classList.add("modal-open");
     startTimer(overlay);
     firstErrorTab(overlay);
-    overlay.addEventListener("click", function (ev) {
-      if (ev.target === overlay) closeModal();
-    });
+    const caixa = overlay.querySelector(".modal-responder");
+    if (caixa) {
+      caixa.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+      });
+    }
   }
 
   async function recarregarModal(html) {
@@ -170,7 +173,9 @@
   });
 
   document.addEventListener("keydown", function (ev) {
-    if (ev.key === "Escape") closeModal();
+    if (ev.key === "Escape") {
+      ev.preventDefault();
+    }
   });
 
   function showModalNotice(overlay, text, ok) {

@@ -16,7 +16,6 @@
           {% if tempo_ja_registrado %}{{ ticket.tempo_retorno_tratamento }}{% else %}00:00{% endif %}
         </strong>
       </div>
-      <button type="button" class="icon-btn" data-fechar-modal aria-label="Fechar">×</button>
     </div>
 
     <form method="post" action="{% url 'ticket_responder' ticket.protocolo %}" id="form-responder" class="modal-form" novalidate>

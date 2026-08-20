@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}OSAB · Gestão{% endblock %}
+{% block content %}
+{% include "gestao/_nav.html" %}
+<div class="hero">
+  <div>
+    <h1>OSAB</h1>
+    <p>Base de vendas do período {{ mes|stringformat:"02d" }}/{{ ano }}. {{ total_vendas }} pedido(s) no banco.</p>
+  </div>
+  {% if pode_importar %}
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="recalcular">
+    <button class="btn btn-secondary" type="submit">Recalcular relatórios</button>
+  </form>
+  {% endif %}
+</div>
+{% if form %}
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-h"><h2>Importar OSAB</h2></div>
+  <div class="panel-b">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      {{ form.arquivo }}
+      <p class="help">Arquivo .xlsb ou .xlsx. Merge por PEDIDO + DT_REF. Recalcula capilaridade e VL/Gross.</p>
+      <button class="btn btn-primary" type="submit" style="margin-top:0.7rem">Atualizar base OSAB</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+<div class="panel">
+  <div class="panel-h"><h2>Relatórios por PDV</h2></div>
+  {% for h in historico %}
+    <div class="mask-card">
+      <div class="mask-card-h">
+        <div>
+          <strong>{{ h.descricao_pdv }}</strong>
+          <div class="help">{{ h.status }} · VL {{ h.realizado_vl|default:"—" }} · Gross {{ h.realizado_gross|default:"—" }} · {{ h.data_processamento|date:"d/m H:i" }}</div>
+        </div>
+        {% if h.mensagem %}
+          <textarea id="osab-{{ h.id }}" hidden>{{ h.mensagem }}</textarea>
+          <button class="btn btn-primary" type="button" data-copy-target="osab-{{ h.id }}">Copiar</button>
+        {% endif %}
+      </div>
+      {% if h.mensagem %}<div class="long-text">{{ h.mensagem|linebreaksbr }}</div>{% endif %}
+    </div>
+  {% empty %}
+    <div class="panel-b"><p class="help">Importe a OSAB ou cadastre as metas em Metas.</p></div>
+  {% endfor %}
+</div>
+{% endblock %}

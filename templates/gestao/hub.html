@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Gestão · NIO{% endblock %}
+{% block content %}
+{% include "gestao/_nav.html" %}
+<div class="hero">
+  <div>
+    <h1>Gestão de bases</h1>
+    <p>Importar OSAB, FPD, Churn e Sysmap e gerar os relatórios no próprio NIO. Envio WhatsApp fica para a próxima onda.</p>
+  </div>
+</div>
+
+<div class="cards">
+  <div class="card"><div class="label">Período ativo</div><div class="value">{{ mes|stringformat:"02d" }}/{{ ano }}</div></div>
+  <div class="card"><div class="label">Vendas OSAB</div><div class="value">{{ osab.n|default:0 }}</div></div>
+  <div class="card"><div class="label">Terceiros Sysmap</div><div class="value">{{ sysmap.n|default:0 }}</div></div>
+  <div class="card"><div class="label">Relatórios FPD</div><div class="value">{{ fpd.n|default:0 }}</div></div>
+</div>
+
+{% if pode_importar %}
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-h"><h2>Período de cálculo</h2></div>
+  <div class="panel-b">
+    <form method="post" class="fila-toolbar">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="periodo">
+      {{ periodo_form.ano }}
+      {{ periodo_form.mes }}
+      <button class="btn btn-primary" type="submit">Salvar período</button>
+    </form>
+    <p class="help">Usado na OSAB, capilaridade e metas. Importe o Sysmap antes da OSAB para a capilaridade fechar certo.</p>
+  </div>
+</div>
+{% endif %}
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-h"><h2>Atalhos</h2></div>
+    <div class="panel-b">
+      <p><a href="{% url 'gestao_sysmap' %}">1. Sysmap / Supply</a> — cadastro de terceiros</p>
+      <p><a href="{% url 'gestao_osab' %}">2. OSAB</a> — vendas, VL/Gross e histórico</p>
+      <p><a href="{% url 'gestao_capilaridade' %}">3. Capilaridade</a> — máscaras para copiar</p>
+      <p><a href="{% url 'gestao_fpd' %}">4. FPD</a> — faturas em aberto</p>
+      <p><a href="{% url 'gestao_churn' %}">5. Churn</a> — safras vs gross</p>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h2>Últimas importações</h2></div>
+    <table class="table">
+      <thead><tr><th>Tipo</th><th>Arquivo</th><th>Quando</th><th></th></tr></thead>
+      <tbody>
+        {% for lote in lotes %}
+        <tr>
+          <td>{{ lote.get_tipo_display }}</td>
+          <td>{{ lote.arquivo_nome }}</td>
+          <td>{{ lote.criado_em|date:"d/m H:i" }}</td>
+          <td>{% if lote.ok %}<span class="pill resolvido">ok</span>{% else %}<span class="pill cancelado">erro</span>{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4">Nenhuma importação ainda.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

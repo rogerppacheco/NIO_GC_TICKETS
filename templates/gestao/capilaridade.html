@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Capilaridade · Gestão{% endblock %}
+{% block content %}
+{% include "gestao/_nav.html" %}
+<div class="hero">
+  <div>
+    <h1>Capilaridade</h1>
+    <p>Máscaras do período {{ mes|stringformat:"02d" }}/{{ ano }} para copiar no WhatsApp.</p>
+  </div>
+  {% if pode_recalcular %}
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="recalcular">
+    <button class="btn btn-secondary" type="submit">Recalcular</button>
+  </form>
+  {% endif %}
+</div>
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-h">
+    <h2>Resumo geral</h2>
+    <textarea id="cap-resumo" hidden>{{ resumo }}</textarea>
+    <button class="btn btn-primary" type="button" data-copy-target="cap-resumo">Copiar</button>
+  </div>
+  <div class="panel-b"><div class="long-text">{{ resumo|linebreaksbr }}</div></div>
+</div>
+{% for card in cards %}
+  <div class="mask-card">
+    <div class="mask-card-h">
+      <div>
+        <strong>{{ card.parceiro.nome }}</strong>
+        <div class="help">Meta {{ card.meta }} vendedor(es)</div>
+      </div>
+      <textarea id="cap-{{ card.parceiro.id }}" hidden>{{ card.mascara }}</textarea>
+      <button class="btn btn-primary" type="button" data-copy-target="cap-{{ card.parceiro.id }}">Copiar</button>
+    </div>
+    <div class="long-text">{{ card.mascara|linebreaksbr }}</div>
+  </div>
+{% empty %}
+  <p class="help">Nenhum parceiro visível. Importe o Sysmap e a OSAB.</p>
+{% endfor %}
+{% endblock %}
