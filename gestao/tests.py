@@ -236,8 +236,8 @@ class SyncWAClientTests(TestCase):
     def test_normalizar_numero_br(self):
         from gestao.messaging.syncwa import normalizar_destino
 
-        self.assertEqual(normalizar_destino("31999999999"), "5531999999999")
-        self.assertEqual(normalizar_destino("5531999999999"), "5531999999999")
+        self.assertEqual(normalizar_destino("31999999999"), "5531999999999@s.whatsapp.net")
+        self.assertEqual(normalizar_destino("5531999999999"), "5531999999999@s.whatsapp.net")
         self.assertEqual(normalizar_destino("120363@g.us"), "120363@g.us")
 
     @override_settings(
@@ -259,7 +259,7 @@ class SyncWAClientTests(TestCase):
         self.assertEqual(result.message_log_id, "ml-1")
         post.assert_called_once()
         kwargs = post.call_args.kwargs
-        self.assertEqual(kwargs["json"]["to"], "5531999999999")
+        self.assertEqual(kwargs["json"]["to"], "5531999999999@s.whatsapp.net")
         self.assertEqual(kwargs["headers"]["x-api-key"], "syncwa.key")
 
     @override_settings(
@@ -279,7 +279,7 @@ class SyncWAClientTests(TestCase):
         with patch("gestao.messaging.syncwa.requests.post", return_value=fake) as post:
             result = enviar_texto("120363xxx@g.us", "teste")
         self.assertTrue(result.ok)
-        self.assertEqual(post.call_args.kwargs["json"]["to"], "5531888888888")
+        self.assertEqual(post.call_args.kwargs["json"]["to"], "5531888888888@s.whatsapp.net")
 
 
 @override_settings(

@@ -33,7 +33,11 @@ def jid_teste() -> str:
 
 
 def normalizar_destino(valor: str) -> str:
-    """Aceita JID completo (@g.us / @s.whatsapp.net) ou número BR com DDI."""
+    """Aceita JID completo (@g.us / @s.whatsapp.net) ou número BR com DDI.
+
+    Números individuais vão como JID completo (@s.whatsapp.net) para o SyncWA
+    não reescrever o nono dígito BR (ex.: 5531988… → 5531888…).
+    """
     bruto = (valor or "").strip()
     if not bruto:
         raise SyncWAError("Destino vazio.")
@@ -44,7 +48,7 @@ def normalizar_destino(valor: str) -> str:
         raise SyncWAError(f"Destino inválido: {valor!r}")
     if len(digitos) in (10, 11):
         digitos = f"55{digitos}"
-    return digitos
+    return f"{digitos}@s.whatsapp.net"
 
 
 def destino_efetivo(jid: str) -> tuple[str, bool]:
