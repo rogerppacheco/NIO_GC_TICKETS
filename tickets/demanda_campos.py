@@ -213,6 +213,8 @@ LABELS_POR_TIPO: dict[str, dict[str, str]] = {
         "tt_backoffice": "TT do backoffice de cadastro do pedido com problema",
         "observacoes": "Etapa do erro",
         "solicitante_nome": "Login / nome",
+        "documento_cliente": "CNPJ/CPF do cliente",
+        "descricao": "Cenário reportado",
     },
     TipoDemanda.ENDERECO_DOC: {
         "pedido": "Pedido",
@@ -250,7 +252,14 @@ CAMPOS_CONTEXTO_RESPOSTA: dict[str, list[str]] = {
     TipoDemanda.AGENDAR_REAGENDAR: ["pedido", "documento_cliente", "data_desejada", "turno"],
     TipoDemanda.PRIORIDADE_ELITE: ["pedido", "endereco_completo", "data_desejada", "turno"],
     TipoDemanda.ACESSO_APP: ["documento_cliente", "descricao"],
-    TipoDemanda.ABRIR_CHAMADO_TI: ["tt_vendedor", "tt_backoffice", "pedido", "observacoes"],
+    TipoDemanda.ABRIR_CHAMADO_TI: [
+        "tt_vendedor",
+        "tt_backoffice",
+        "documento_cliente",
+        "pedido",
+        "observacoes",
+        "descricao",
+    ],
     TipoDemanda.SEM_SLOT: ["pedido", "data_desejada", "turno", "solicitante_contato"],
     TipoDemanda.INSTALACAO_FISICA: ["pedido", "endereco_completo", "descricao"],
     TipoDemanda.REPARO: [

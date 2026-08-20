@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.utils.datastructures import MultiValueDict
 
 from .acesso import eh_gestor, qs_equipe, qs_especialistas, tickets_visiveis
-from .demanda_campos import montar_abas_tratamento
+from .demanda_campos import contexto_demanda_para_resposta, montar_abas_tratamento
 from .forms import LoginForm, MultipleFileField, ParceiroForm, TicketCreateForm, TicketTreatForm
 from .models import Anexo, Mensagem, Parceiro, PerfilStaff, StatusTicket, Ticket, TipoDemanda, formatar_duracao
 
@@ -395,6 +395,21 @@ class TratamentoModalTests(TestCase):
         self.assertEqual(self.ticket.tipo, TipoDemanda.ABRIR_CHAMADO_TI)
         self.assertContains(r, "Nº do chamado TI")
         self.assertContains(r, "Tipo alterado")
+        self.assertContains(r, "CNPJ/CPF do cliente")
+
+    def test_abrir_chamado_ti_mostra_cpf_no_contexto(self):
+        self.ticket.tipo = TipoDemanda.ABRIR_CHAMADO_TI
+        self.ticket.documento_cliente = "37161261600"
+        self.ticket.tt_vendedor = "Tr832209"
+        self.ticket.tt_backoffice = "Tr832215"
+        self.ticket.pedido = "10958838"
+        self.ticket.save()
+        itens = contexto_demanda_para_resposta(self.ticket)
+        nomes = [i["name"] for i in itens]
+        self.assertIn("documento_cliente", nomes)
+        cpf = next(i for i in itens if i["name"] == "documento_cliente")
+        self.assertEqual(cpf["valor"], "37161261600")
+        self.assertIn("CPF", cpf["label"])
 
 
 class IsolamentoAuthTests(SimpleTestCase):
