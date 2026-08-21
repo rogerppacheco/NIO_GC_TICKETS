@@ -113,9 +113,16 @@
   <div class="panel">
     <div class="panel-h"><h2>Como vincular um grupo</h2></div>
     <div class="panel-b">
-      <p class="help">1. Clique em <strong>Listar grupos SyncWA</strong> (chip precisa estar pareado).</p>
-      <p class="help">2. Filtre pelo nome do grupo do PDV.</p>
-      <p class="help">3. Escolha o PDV e <strong>Vincular</strong> — ou use «Usar no formulário» para ajustar flags.</p>
+      {% if syncwa_ok %}
+        <p style="margin-bottom:0.8rem">
+          <a class="btn btn-primary" href="{% url 'gestao_destinatarios' %}?grupos=1">Listar grupos SyncWA</a>
+        </p>
+        <p class="help">1. Clique no botão acima (chip precisa estar pareado).</p>
+        <p class="help">2. Filtre pelo nome do grupo do PDV.</p>
+        <p class="help">3. Escolha o PDV e <strong>Vincular</strong> — ou use «Usar no formulário» para ajustar flags.</p>
+      {% else %}
+        <p class="help" style="color:var(--danger)">SyncWA não configurado — não dá para listar grupos ainda.</p>
+      {% endif %}
       <p class="help">4. Número individual: DDI + DDD + número, ex. <code>5531999999999</code>.</p>
       <p style="margin-top:0.8rem"><a class="btn btn-secondary" href="{% url 'gestao_envios' %}">Ir para Envios</a></p>
     </div>
