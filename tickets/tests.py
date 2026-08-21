@@ -213,6 +213,8 @@ class EspecialistaAcessoTests(TestCase):
         self.assertContains(r, "gestor")
         self.assertContains(r, "Ana")
         self.assertContains(r, "Admin")
+        self.assertContains(r, "Editar")
+        self.assertContains(r, "Excluir")
         self.assertNotContains(r, "DANIEL")
 
     def test_staff_de_outro_sistema_nao_e_gestor_nem_loga(self):
@@ -344,6 +346,39 @@ class EspecialistaAcessoTests(TestCase):
         outro.perfil_staff.refresh_from_db()
         self.assertEqual(outro.perfil_staff.papel, PerfilStaff.Papel.ESPECIALISTA)
         self.assertFalse(eh_gestor(outro))
+
+    def test_excluir_especialista(self):
+        User = get_user_model()
+        self.client.force_login(self.gestor)
+        r = self.client.post(reverse("especialista_excluir", args=[self.spec.pk]))
+        self.assertEqual(r.status_code, 302)
+        self.assertFalse(User.objects.filter(pk=self.spec.pk).exists())
+        self.pdv_ana.refresh_from_db()
+        self.assertIsNone(self.pdv_ana.especialista_id)
+
+    def test_nao_exclui_a_si_mesmo(self):
+        User = get_user_model()
+        self.client.force_login(self.gestor)
+        r = self.client.post(reverse("especialista_excluir", args=[self.gestor.pk]))
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(User.objects.filter(pk=self.gestor.pk).exists())
+
+    def test_excluir_outro_admin_quando_ha_mais_de_um(self):
+        User = get_user_model()
+        outro = User.objects.create_user(
+            "bruno", "br@x.com", "x", is_staff=True, first_name="Bruno"
+        )
+        PerfilStaff.objects.create(user=outro, papel=PerfilStaff.Papel.GESTOR)
+        self.client.force_login(self.gestor)
+        r = self.client.post(reverse("especialista_excluir", args=[outro.pk]))
+        self.assertEqual(r.status_code, 302)
+        self.assertFalse(User.objects.filter(pk=outro.pk).exists())
+        self.assertTrue(User.objects.filter(pk=self.gestor.pk).exists())
+
+    def test_especialista_nao_exclui(self):
+        self.client.force_login(self.spec)
+        r = self.client.post(reverse("especialista_excluir", args=[self.gestor.pk]))
+        self.assertEqual(r.status_code, 404)
 
 
 class TratamentoModalTests(TestCase):
@@ -580,3 +615,55 @@ class IsolamentoAuthTests(SimpleTestCase):
         resultado = isolar_auth_schema(connection)
         self.assertTrue(resultado["ok"])
         self.assertEqual(resultado.get("motivo"), "nao_postgres")
+
+
+class FilaOsabTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.gestor = User.objects.create_superuser("gestor", "g@x.com", "x")
+        PerfilStaff.objects.create(user=self.gestor, papel=PerfilStaff.Papel.GESTOR)
+        self.pdv = Parceiro.objects.create(codigo_pdv="100", nome="PDV")
+        self.ticket = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.STATUS_PEDIDO,
+            pedido="10721324",
+        )
+        self.storages = {
+            "STORAGES": {
+                "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+                "staticfiles": {
+                    "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+                },
+            }
+        }
+
+    def test_fila_mostra_situacao_e_atualizacao_osab(self):
+        from gestao.models import VendaOSAB
+
+        dt_ref = timezone.now().replace(year=2026, month=8, day=21, hour=14, minute=30)
+        VendaOSAB.objects.create(
+            pedido="10721324",
+            pdv_nome="PDV",
+            situacao="Concluído",
+            dt_ref=dt_ref,
+        )
+        self.client.force_login(self.gestor)
+        with override_settings(**self.storages):
+            r = self.client.get(reverse("fila"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "SITUAÇÃO OSAB")
+        self.assertContains(r, "Atualização OSAB")
+        self.assertContains(r, "Concluído")
+        self.assertContains(r, "21/08/2026")
+        ticket = r.context["tickets"][0]
+        self.assertEqual(ticket.osab_situacao, "Concluído")
+        self.assertEqual(ticket.osab_atualizacao, dt_ref)
+
+    def test_fila_sem_osab_fica_em_branco(self):
+        self.client.force_login(self.gestor)
+        with override_settings(**self.storages):
+            r = self.client.get(reverse("fila"))
+        self.assertEqual(r.status_code, 200)
+        ticket = r.context["tickets"][0]
+        self.assertEqual(ticket.osab_situacao, "")
+        self.assertIsNone(ticket.osab_atualizacao)

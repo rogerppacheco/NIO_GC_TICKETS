@@ -27,6 +27,14 @@
           <a class="btn btn-secondary" href="{% url 'especialistas' %}">Voltar</a>
         </div>
       </form>
+      {% if especialista %}
+      <form method="post" action="{% url 'especialista_excluir' especialista.pk %}"
+            onsubmit="return confirm('Excluir {{ especialista.get_full_name|default:especialista.username|escapejs }}? O acesso será removido.');"
+            style="margin-top:0.75rem">
+        {% csrf_token %}
+        <button type="submit" class="btn" style="background:var(--danger);color:#fff">Excluir especialista</button>
+      </form>
+      {% endif %}
     </div>
   </div>
 

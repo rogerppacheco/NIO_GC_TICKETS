@@ -124,7 +124,7 @@ a:hover { text-decoration: underline; }
   flex: 1;
   overflow: auto;
 }
-.wrap-fila .table { min-width: 1080px; }
+.wrap-fila .table { min-width: 1280px; }
 .wrap-fila .table th,
 .wrap-fila .table td { padding: 0.48rem 0.65rem; white-space: nowrap; }
 .wrap-fila .table thead th {

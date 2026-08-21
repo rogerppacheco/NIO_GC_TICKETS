@@ -53,6 +53,7 @@ from .models import (
     Mascara,
     Mensagem,
     Parceiro,
+    PerfilStaff,
     StatusTicket,
     Ticket,
     TipoDemanda,
@@ -90,6 +91,34 @@ def home(request: HttpRequest) -> HttpResponse:
     if request.user.is_authenticated:
         return redirect("fila")
     return redirect("abrir_demanda")
+
+
+def _chave_pedido(pedido: str | None) -> str:
+    if not pedido:
+        return ""
+    chave = str(pedido).strip()
+    if chave.endswith(".0") and chave[:-2].isdigit():
+        chave = chave[:-2]
+    return chave
+
+
+def _anexar_osab_fila(tickets: list) -> None:
+    from gestao.models import VendaOSAB
+
+    pedidos = {_chave_pedido(t.pedido) for t in tickets}
+    pedidos.discard("")
+    mapa = {}
+    if pedidos:
+        mapa = {
+            v.pedido: v
+            for v in VendaOSAB.objects.filter(pedido__in=pedidos).only(
+                "pedido", "situacao", "dt_ref"
+            )
+        }
+    for t in tickets:
+        venda = mapa.get(_chave_pedido(t.pedido))
+        t.osab_situacao = (venda.situacao if venda else "") or ""
+        t.osab_atualizacao = venda.dt_ref if venda else None
 
 
 @login_required
@@ -132,12 +161,14 @@ def fila(request: HttpRequest) -> HttpResponse:
         (request.GET.get(k) or "").strip()
         for k in ("q", "status", "tipo", "parceiro", "especialista")
     )
+    tickets = list(qs[:200])
+    _anexar_osab_fila(tickets)
     return render(
         request,
         "tickets/fila.html",
         {
             "form": form,
-            "tickets": qs[:200],
+            "tickets": tickets,
             "abertos_count": abertos.count(),
             "mostrar_filtro_especialista": eh_gestor(request.user),
             "filtros_ativos": filtros_ativos,
@@ -902,6 +933,33 @@ def especialista_form(request: HttpRequest, pk: int | None = None) -> HttpRespon
             "titulo": "Editar acesso" if instance else "Novo especialista",
         },
     )
+
+
+@gestor_required
+@require_POST
+def especialista_excluir(request: HttpRequest, pk: int) -> HttpResponse:
+    User = get_user_model()
+    alvo = get_object_or_404(
+        User.objects.filter(perfil_staff__isnull=False).select_related("perfil_staff"),
+        pk=pk,
+    )
+    if alvo.pk == request.user.pk:
+        messages.error(request, "Não é possível excluir o próprio acesso.")
+        return redirect("especialistas")
+    if eh_gestor(alvo):
+        outros_admins = PerfilStaff.objects.filter(
+            papel=PerfilStaff.Papel.GESTOR
+        ).exclude(user_id=alvo.pk)
+        if not outros_admins.exists():
+            messages.error(
+                request,
+                "Não é possível excluir o último admin. Marque outra pessoa como admin antes.",
+            )
+            return redirect("especialistas")
+    nome = alvo.get_full_name() or alvo.username
+    alvo.delete()
+    messages.success(request, f"{nome} excluído da equipe.")
+    return redirect("especialistas")
 
 
 @login_required

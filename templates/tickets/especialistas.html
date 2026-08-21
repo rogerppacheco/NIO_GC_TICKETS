@@ -46,11 +46,18 @@
             {% endif %}
           </td>
           <td>
-            {% if u.pk == user.pk %}
-              <a class="btn btn-secondary" href="{% url 'meu_perfil' %}">Meu perfil</a>
-            {% else %}
-              <a class="btn btn-secondary" href="{% url 'especialista_editar' u.pk %}">Editar</a>
-            {% endif %}
+            <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
+              {% if u.pk == user.pk %}
+                <a class="btn btn-secondary" href="{% url 'meu_perfil' %}">Meu perfil</a>
+              {% else %}
+                <a class="btn btn-secondary" href="{% url 'especialista_editar' u.pk %}">Editar</a>
+                <form method="post" action="{% url 'especialista_excluir' u.pk %}"
+                      onsubmit="return confirm('Excluir {{ u.get_full_name|default:u.username|escapejs }}? O acesso será removido.');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn" style="background:var(--danger);color:#fff">Excluir</button>
+                </form>
+              {% endif %}
+            </div>
           </td>
         </tr>
         {% empty %}

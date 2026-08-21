@@ -25,6 +25,7 @@ urlpatterns = [
     path("parceiros/", views.parceiros_lista, name="parceiros"),
     path("especialistas/", views.especialistas_lista, name="especialistas"),
     path("especialistas/novo/", views.especialista_form, name="especialista_novo"),
+    path("especialistas/<int:pk>/excluir/", views.especialista_excluir, name="especialista_excluir"),
     path("especialistas/<int:pk>/", views.especialista_form, name="especialista_editar"),
     path("parceiros/novo/", views.parceiro_form, name="parceiro_novo"),
     path("parceiros/<int:pk>/", views.parceiro_form, name="parceiro_editar"),
