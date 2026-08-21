@@ -432,6 +432,28 @@ class TratamentoModalTests(TestCase):
         self.assertGreaterEqual(self.ticket.tempo_retorno_segundos, 12)
         self.assertIn("Nio@123", self.ticket.resposta_publica)
 
+    def test_salvar_resposta_preserva_filtro_da_fila(self):
+        self.client.force_login(self.user)
+        destino = reverse("fila") + "?situacao_osab=Em+Aprovisionamento&status=em_analise"
+        r = self.client.post(
+            reverse("ticket_responder", args=[self.ticket.protocolo]),
+            {
+                "action": "tratar",
+                "tipo": TipoDemanda.RESET_SENHA,
+                "status": StatusTicket.EM_ANALISE,
+                "prioridade": self.ticket.prioridade,
+                "senha_resetada": "Nio@123",
+                "resultado_status": "SENHA RESETADA",
+                "next": destino,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            HTTP_ACCEPT="application/json",
+        )
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["redirect"], destino)
+
     def test_abrir_modal_nao_muda_situacao_na_fila(self):
         self.client.force_login(self.user)
         r = self.client.post(
@@ -692,6 +714,18 @@ class FilaOsabTests(TestCase):
             r = self.client.get(reverse("fila"), {"situacao_osab": "__sem__"})
         self.assertEqual(len(r.context["tickets"]), 1)
         self.assertEqual(r.context["tickets"][0].pedido, "99999999")
+
+    def test_botao_responder_leva_filtros_no_next(self):
+        self.client.force_login(self.gestor)
+        with override_settings(**self.storages):
+            r = self.client.get(
+                reverse("fila"),
+                {"tipo": TipoDemanda.STATUS_PEDIDO, "situacao_osab": "__sem__"},
+            )
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "data-next=")
+        self.assertContains(r, "tipo=status_pedido")
+        self.assertContains(r, "situacao_osab=__sem__")
 
 
 class SeedNioParceirosTests(TestCase):

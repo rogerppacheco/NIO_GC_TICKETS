@@ -11,6 +11,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
 from .acesso import (
@@ -425,8 +426,19 @@ def _eh_ajax(request: HttpRequest) -> bool:
     return request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
 
+def _proximo_seguro(request: HttpRequest, fallback: str = "") -> str:
+    bruto = (request.POST.get("next") or request.GET.get("next") or "").strip()
+    if bruto and url_has_allowed_host_and_scheme(
+        bruto,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return bruto
+    return fallback
+
+
 def _ctx_modal_resposta(request: HttpRequest, ticket: Ticket, treat_form: TicketTreatForm) -> dict:
-    proximo = request.POST.get("next") or request.GET.get("next") or ""
+    proximo = _proximo_seguro(request)
     mascaras = [
         m for m in Mascara.objects.filter(ativo=True) if m.aplica_para(ticket.tipo)
     ]
@@ -487,7 +499,7 @@ def _aplicar_novo_tipo(ticket: Ticket, novo_tipo: str) -> tuple[bool, str]:
 @login_required
 def ticket_responder(request: HttpRequest, protocolo: str) -> HttpResponse:
     ticket = ticket_para_usuario(request.user, protocolo)
-    proximo = request.POST.get("next") or request.GET.get("next") or reverse("fila")
+    proximo = _proximo_seguro(request, reverse("fila"))
 
     if request.method == "GET" or request.POST.get("action") == "abrir":
         ticket.iniciar_tratamento(request.user)

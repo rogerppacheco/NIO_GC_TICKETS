@@ -21,7 +21,7 @@
     <form method="post" action="{% url 'ticket_responder' ticket.protocolo %}" id="form-responder" class="modal-form" novalidate>
       {% csrf_token %}
       <input type="hidden" name="action" value="tratar">
-      <input type="hidden" name="next" value="{{ next|default:request.path }}">
+      <input type="hidden" name="next" value="{{ next|default:request.get_full_path }}">
       <div hidden>
         <input type="hidden" name="atendente" value="{{ ticket.atendente_id|default:'' }}">
         <input type="hidden" name="solicitante_nome" value="{{ ticket.solicitante_nome }}">

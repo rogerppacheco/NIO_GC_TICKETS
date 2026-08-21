@@ -69,7 +69,7 @@
                 </svg>
               </button>
               <a class="btn btn-primary" href="{% url 'ticket_detalhe' t.protocolo %}?responder=1"
-                 data-abrir-resposta="{{ t.protocolo }}" data-next="{% url 'fila' %}">Responder</a>
+                 data-abrir-resposta="{{ t.protocolo }}" data-next="{{ request.get_full_path }}">Responder</a>
             </div>
           </td>
         </tr>
