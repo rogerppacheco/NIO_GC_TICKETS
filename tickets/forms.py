@@ -11,6 +11,7 @@ from .models import (
     Mascara,
     Mensagem,
     Parceiro,
+    PerfilStaff,
     StatusTicket,
     Ticket,
     TipoDemanda,
@@ -113,15 +114,27 @@ class EspecialistaForm(forms.Form):
         help_text="Deixe em branco para manter a senha atual.",
     )
     is_active = forms.BooleanField(label="Ativo", required=False, initial=True)
+    eh_admin = forms.BooleanField(
+        label="Admin — vê todos os tickets",
+        required=False,
+        help_text=(
+            "Se marcado, esta pessoa vê a fila inteira, todos os parceiros e a equipe. "
+            "Se desmarcado, vê só os PDVs em que é o especialista."
+        ),
+    )
 
     def __init__(self, *args, instance=None, **kwargs):
         self.instance = instance
         if instance and "initial" not in kwargs:
+            perfil = getattr(instance, "perfil_staff", None)
             kwargs["initial"] = {
                 "first_name": instance.first_name,
                 "username": instance.username,
                 "email": instance.email,
                 "is_active": instance.is_active,
+                "eh_admin": bool(
+                    perfil and perfil.papel == PerfilStaff.Papel.GESTOR
+                ),
             }
         super().__init__(*args, **kwargs)
         if instance is None:
@@ -140,15 +153,44 @@ class EspecialistaForm(forms.Form):
             raise forms.ValidationError(
                 f"Já existe um usuário com o login “{outro.username}”. "
                 "Esse é outro acesso (não este especialista). "
-                "Se for o seu usuário de gestor, altere em Meu perfil."
+                "Se for o seu usuário de admin, altere em Meu perfil."
             )
         return username
 
+    def clean(self):
+        cleaned = super().clean()
+        if not self.instance:
+            return cleaned
+
+        perfil = getattr(self.instance, "perfil_staff", None)
+        if not perfil or perfil.papel != PerfilStaff.Papel.GESTOR:
+            return cleaned
+        outros_admins = PerfilStaff.objects.filter(
+            papel=PerfilStaff.Papel.GESTOR
+        ).exclude(user_id=self.instance.pk)
+        if outros_admins.exists():
+            return cleaned
+        if not cleaned.get("eh_admin"):
+            self.add_error(
+                "eh_admin",
+                "Não é possível remover o último admin. Marque outra pessoa como admin antes.",
+            )
+        if not cleaned.get("is_active"):
+            self.add_error(
+                "is_active",
+                "Não é possível inativar o último admin.",
+            )
+        return cleaned
+
     def save(self):
         User = get_user_model()
-        from .models import PerfilStaff
 
         dados = self.cleaned_data
+        papel = (
+            PerfilStaff.Papel.GESTOR
+            if dados.get("eh_admin")
+            else PerfilStaff.Papel.ESPECIALISTA
+        )
         if self.instance:
             user = self.instance
             user.first_name = dados["first_name"]
@@ -168,10 +210,11 @@ class EspecialistaForm(forms.Form):
                 is_staff=True,
                 is_active=True,
             )
-        PerfilStaff.objects.update_or_create(
+        perfil, _ = PerfilStaff.objects.update_or_create(
             user=user,
-            defaults={"papel": PerfilStaff.Papel.ESPECIALISTA},
+            defaults={"papel": papel},
         )
+        user.perfil_staff = perfil
         return user
 
 

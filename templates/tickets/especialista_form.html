@@ -4,7 +4,7 @@
 <div class="hero">
   <div>
     <h1>{{ titulo }}</h1>
-    <p>O login abre a mesma área interna. A fila mostra só os tickets dos parceiros em que esta pessoa é o especialista.</p>
+    <p>O login abre a mesma área interna. Marque <strong>Admin</strong> para esta pessoa ver todos os tickets; sem isso, a fila mostra só os PDVs em que ela é o especialista.</p>
   </div>
 </div>
 
@@ -15,7 +15,7 @@
       <form method="post" class="form-grid">
         {% csrf_token %}
         {% for field in form %}
-          <div class="{% if field.name == 'is_active' %}full{% endif %}">
+          <div class="{% if field.name == 'is_active' or field.name == 'eh_admin' %}full{% endif %}">
             <label for="{{ field.id_for_label }}">{{ field.label }}</label>
             {{ field }}
             {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
@@ -23,7 +23,7 @@
           </div>
         {% endfor %}
         <div class="full" style="display:flex;gap:0.5rem;flex-wrap:wrap">
-          <button class="btn btn-primary" type="submit">Salvar especialista</button>
+          <button class="btn btn-primary" type="submit">Salvar</button>
           <a class="btn btn-secondary" href="{% url 'especialistas' %}">Voltar</a>
         </div>
       </form>

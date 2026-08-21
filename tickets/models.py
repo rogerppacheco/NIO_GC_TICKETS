@@ -451,7 +451,7 @@ class ConfigRespostaTipo(models.Model):
 
 class PerfilStaff(models.Model):
     class Papel(models.TextChoices):
-        GESTOR = "gestor", "Gestor"
+        GESTOR = "gestor", "Admin"
         ESPECIALISTA = "especialista", "Especialista"
 
     user = models.OneToOneField(

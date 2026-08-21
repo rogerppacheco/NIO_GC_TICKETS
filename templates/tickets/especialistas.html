@@ -4,7 +4,7 @@
 <div class="hero">
   <div>
     <h1>Especialistas</h1>
-    <p>Equipe deste sistema. Gestores também podem ser vinculados no cadastro do parceiro. Para nome, e-mail ou senha do seu login, use <a href="{% url 'meu_perfil' %}">Meu perfil</a>.</p>
+    <p>Equipe deste sistema. Marque <strong>Admin</strong> no cadastro para a pessoa ver todos os tickets. Sem isso, ela vê só os PDVs em que é especialista. Para nome, e-mail ou senha do seu login, use <a href="{% url 'meu_perfil' %}">Meu perfil</a>.</p>
   </div>
   <a class="btn btn-primary" href="{% url 'especialista_novo' %}">Novo especialista</a>
 </div>
@@ -27,7 +27,13 @@
         <tr {% if not u.is_active %}style="opacity:0.65"{% endif %}>
           <td>{{ u.get_full_name|default:"—" }}</td>
           <td class="mono">{{ u.username }}</td>
-          <td>{{ u.perfil_staff.get_papel_display }}</td>
+          <td>
+            {% if u.perfil_staff.papel == "gestor" %}
+              <span class="pill resolvido">Admin</span>
+            {% else %}
+              Especialista
+            {% endif %}
+          </td>
           <td>{{ u.email|default:"—" }}</td>
           <td>{{ u.qtd_parceiros }}</td>
           <td>
@@ -38,12 +44,10 @@
             {% endif %}
           </td>
           <td>
-            {% if u.perfil_staff.papel == "especialista" %}
-              <a class="btn btn-secondary" href="{% url 'especialista_editar' u.pk %}">Editar</a>
-            {% elif u.pk == user.pk %}
+            {% if u.pk == user.pk %}
               <a class="btn btn-secondary" href="{% url 'meu_perfil' %}">Meu perfil</a>
             {% else %}
-              —
+              <a class="btn btn-secondary" href="{% url 'especialista_editar' u.pk %}">Editar</a>
             {% endif %}
           </td>
         </tr>

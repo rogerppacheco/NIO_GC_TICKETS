@@ -174,7 +174,7 @@ class EspecialistaAcessoTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "gestor")
         self.assertContains(r, "Ana")
-        self.assertContains(r, "Gestor")
+        self.assertContains(r, "Admin")
         self.assertNotContains(r, "DANIEL")
 
     def test_staff_de_outro_sistema_nao_e_gestor_nem_loga(self):
@@ -213,6 +213,99 @@ class EspecialistaAcessoTests(TestCase):
         )
         self.assertFalse(form.is_valid())
         self.assertIn("username", form.errors)
+
+    def test_promover_especialista_a_admin_ve_todos(self):
+        self.client.force_login(self.gestor)
+        r = self.client.post(
+            reverse("especialista_editar", args=[self.spec.pk]),
+            {
+                "first_name": "Ana",
+                "username": "ana",
+                "email": "a@x.com",
+                "is_active": "on",
+                "eh_admin": "on",
+            },
+        )
+        self.assertEqual(r.status_code, 302)
+        self.spec.refresh_from_db()
+        self.assertEqual(self.spec.perfil_staff.papel, PerfilStaff.Papel.GESTOR)
+        self.assertTrue(eh_gestor(self.spec))
+        self.assertEqual(tickets_visiveis(self.spec).count(), 2)
+
+    def test_criar_especialista_como_admin(self):
+        self.client.force_login(self.gestor)
+        r = self.client.post(
+            reverse("especialista_novo"),
+            {
+                "first_name": "Carla",
+                "username": "carla",
+                "email": "c@x.com",
+                "password": "SenhaForte123",
+                "is_active": "on",
+                "eh_admin": "on",
+            },
+        )
+        self.assertEqual(r.status_code, 302)
+        User = get_user_model()
+        u = User.objects.get(username="carla")
+        self.assertEqual(u.perfil_staff.papel, PerfilStaff.Papel.GESTOR)
+        self.assertTrue(eh_gestor(u))
+
+    def test_nao_remove_ultimo_admin(self):
+        from .forms import EspecialistaForm
+
+        form = EspecialistaForm(
+            {
+                "first_name": "Gestor",
+                "username": "gestor",
+                "email": "g@x.com",
+                "is_active": "on",
+            },
+            instance=self.gestor,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("eh_admin", form.errors)
+        self.gestor.refresh_from_db()
+        self.assertEqual(self.gestor.perfil_staff.papel, PerfilStaff.Papel.GESTOR)
+
+    def test_nao_edita_a_si_mesmo_nesta_tela(self):
+        self.client.force_login(self.gestor)
+        r = self.client.get(reverse("especialista_editar", args=[self.gestor.pk]))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/perfil/", r["Location"])
+
+    @override_settings(
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    )
+    def test_editar_outro_admin(self):
+        User = get_user_model()
+        outro = User.objects.create_user(
+            "bruno", "br@x.com", "x", is_staff=True, first_name="Bruno"
+        )
+        PerfilStaff.objects.create(user=outro, papel=PerfilStaff.Papel.GESTOR)
+        self.client.force_login(self.gestor)
+        r = self.client.get(reverse("especialista_editar", args=[outro.pk]))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Bruno")
+        r = self.client.post(
+            reverse("especialista_editar", args=[outro.pk]),
+            {
+                "first_name": "Bruno",
+                "username": "bruno",
+                "email": "br@x.com",
+                "is_active": "on",
+            },
+        )
+        self.assertEqual(r.status_code, 302)
+        outro.refresh_from_db()
+        outro.perfil_staff.refresh_from_db()
+        self.assertEqual(outro.perfil_staff.papel, PerfilStaff.Papel.ESPECIALISTA)
+        self.assertFalse(eh_gestor(outro))
 
 
 class TratamentoModalTests(TestCase):

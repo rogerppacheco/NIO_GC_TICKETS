@@ -51,7 +51,6 @@ from .models import (
     Mascara,
     Mensagem,
     Parceiro,
-    PerfilStaff,
     StatusTicket,
     Ticket,
     TipoDemanda,
@@ -860,19 +859,33 @@ def especialista_form(request: HttpRequest, pk: int | None = None) -> HttpRespon
     instance = None
     if pk:
         instance = get_object_or_404(
-            User.objects.filter(perfil_staff__papel=PerfilStaff.Papel.ESPECIALISTA),
+            User.objects.filter(perfil_staff__isnull=False).select_related("perfil_staff"),
             pk=pk,
         )
+        if instance.pk == request.user.pk:
+            messages.info(
+                request,
+                "Para nome, e-mail ou senha do seu login, use Meu perfil. "
+                "Peça a outro admin para alterar o seu papel.",
+            )
+            return redirect("meu_perfil")
     form = EspecialistaForm(instance=instance)
     if request.method == "POST":
         form = EspecialistaForm(request.POST, instance=instance)
         if form.is_valid():
             user = form.save()
-            messages.success(
-                request,
-                f"Especialista {user.get_full_name() or user.username} salvo. "
-                "Associe-o no cadastro de cada parceiro.",
-            )
+            nome = user.get_full_name() or user.username
+            if eh_gestor(user):
+                messages.success(
+                    request,
+                    f"{nome} salvo como admin e passa a ver todos os tickets.",
+                )
+            else:
+                messages.success(
+                    request,
+                    f"Especialista {nome} salvo. "
+                    "Associe-o no cadastro de cada parceiro.",
+                )
             return redirect("especialistas")
     parceiros = []
     if instance:
@@ -884,7 +897,7 @@ def especialista_form(request: HttpRequest, pk: int | None = None) -> HttpRespon
             "form": form,
             "especialista": instance,
             "parceiros": parceiros,
-            "titulo": "Editar especialista" if instance else "Novo especialista",
+            "titulo": "Editar acesso" if instance else "Novo especialista",
         },
     )
 
