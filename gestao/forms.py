@@ -22,6 +22,11 @@ class DestinatarioForm(forms.ModelForm):
             "envio_fpd",
             "envio_fpd_critico",
             "envio_churn",
+            "envio_comissionamento",
+            "envio_tarefas",
+            "envio_venda_indevida",
+            "envio_recompra",
+            "razoes_sociais_comissionamento",
         )
         widgets = {
             "nome": forms.TextInput(attrs={"placeholder": "Ex.: Grupo Inova / João"}),
@@ -29,6 +34,12 @@ class DestinatarioForm(forms.ModelForm):
                 attrs={"placeholder": "5531999999999 ou 120363...@g.us", "class": "mono"}
             ),
             "prioridade": forms.NumberInput(attrs={"min": 1}),
+            "razoes_sociais_comissionamento": forms.Textarea(
+                attrs={
+                    "rows": 3,
+                    "placeholder": "Uma razão social por linha (ou ;)\nEx.: LUISA SERVICOS DE TELEFONIA...",
+                }
+            ),
         }
 
     def clean_jid(self):

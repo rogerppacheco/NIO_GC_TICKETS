@@ -11,7 +11,11 @@ from .models import (
     HistoricoOSAB,
     LoteImportacao,
     MetaCapilaridade,
+    RelatorioComissionamento,
     RelatorioFPD,
+    RelatorioRecompra,
+    RelatorioTarefa,
+    RelatorioVendaIndevida,
     VendaOSAB,
 )
 
@@ -38,8 +42,43 @@ class VendaAdmin(admin.ModelAdmin):
 @admin.register(Destinatario)
 class DestinatarioAdmin(admin.ModelAdmin):
     list_display = ("nome", "parceiro", "jid", "tipo", "ativo", "prioridade")
-    list_filter = ("ativo", "tipo", "envio_capilaridade", "envio_fpd", "envio_churn")
-    search_fields = ("nome", "jid", "parceiro__nome")
+    list_filter = (
+        "ativo",
+        "tipo",
+        "envio_capilaridade",
+        "envio_fpd",
+        "envio_churn",
+        "envio_comissionamento",
+        "envio_tarefas",
+        "envio_venda_indevida",
+        "envio_recompra",
+    )
+    search_fields = ("nome", "jid", "parceiro__nome", "razoes_sociais_comissionamento")
+
+
+@admin.register(RelatorioComissionamento)
+class RelatorioComissionamentoAdmin(admin.ModelAdmin):
+    list_display = ("pdv_nome", "qtd_pedido", "qtd_linha", "criado_em", "lote")
+    list_filter = ("criado_em",)
+    search_fields = ("pdv_nome",)
+
+
+@admin.register(RelatorioTarefa)
+class RelatorioTarefaAdmin(admin.ModelAdmin):
+    list_display = ("tipo_relatorio", "pdv_nome", "total", "data_referencia", "criado_em")
+    list_filter = ("tipo_relatorio", "data_referencia")
+
+
+@admin.register(RelatorioVendaIndevida)
+class RelatorioVendaIndevidaAdmin(admin.ModelAdmin):
+    list_display = ("pdv_nome", "consolidado", "total", "data_referencia", "criado_em")
+    list_filter = ("consolidado", "data_referencia")
+
+
+@admin.register(RelatorioRecompra)
+class RelatorioRecompraAdmin(admin.ModelAdmin):
+    list_display = ("pdv_nome", "consolidado", "total", "data_referencia", "criado_em")
+    list_filter = ("consolidado", "data_referencia")
 
 
 @admin.register(EnvioWhatsApp)

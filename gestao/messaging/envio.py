@@ -1,16 +1,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from django.contrib.auth.models import AbstractBaseUser
 from django.db.models import QuerySet
 
 from tickets.models import Parceiro
 
-from ..models import Destinatario, EnvioWhatsApp, HistoricoChurn, HistoricoOSAB, RelatorioFPD
+from ..models import (
+    Destinatario,
+    EnvioWhatsApp,
+    HistoricoChurn,
+    HistoricoOSAB,
+    RelatorioComissionamento,
+    RelatorioFPD,
+    RelatorioRecompra,
+    RelatorioTarefa,
+    RelatorioVendaIndevida,
+)
 from ..periodo import periodo_ativo
 from ..relatorios import montar_mascara_pdv, resumo_geral
-from .syncwa import SyncWAResult, enviar_texto, modo_teste_ativo, syncwa_configurado
+from .syncwa import SyncWAResult, enviar_documento, enviar_texto, modo_teste_ativo, syncwa_configurado
 
 
 @dataclass
@@ -297,3 +308,308 @@ def enviar_churn_pdv(parceiro: Parceiro, user: AbstractBaseUser | None = None) -
         parceiro=parceiro,
         user=user,
     )
+
+
+def _enviar_com_anexo(
+    *,
+    tipo: str,
+    mensagem: str,
+    caption: str,
+    destinos: list[Destinatario],
+    parceiro: Parceiro | None,
+    user: AbstractBaseUser | None,
+    arquivo_bytes: bytes,
+    nome_arquivo: str,
+) -> ResumoEnvio:
+    """Envia documento (+ texto se caption/mensagem > 900 chars)."""
+    resumo = ResumoEnvio()
+    if not syncwa_configurado():
+        return ResumoEnvio(erros=1, detalhes=["SyncWA não configurado."])
+    if not destinos:
+        return ResumoEnvio(ignorados=1, detalhes=["Nenhum destinatário ativo para este envio."])
+
+    teste = modo_teste_ativo()
+    msg = (mensagem or "").strip() or caption
+    texto_extra = bool(msg) and (not arquivo_bytes or len(msg) > 900)
+
+    for dest in destinos:
+        if arquivo_bytes:
+            result_doc = enviar_documento(
+                dest.jid,
+                conteudo=arquivo_bytes,
+                file_name=nome_arquivo,
+                caption=caption if texto_extra else msg[:1024],
+            )
+            _registrar(
+                tipo=tipo,
+                mensagem=f"[anexo] {nome_arquivo}\n{caption}",
+                destinatario=dest,
+                parceiro=parceiro or dest.parceiro,
+                user=user,
+                result=result_doc,
+                modo_teste=teste,
+            )
+            if result_doc.ok:
+                resumo.enviados += 1
+                resumo.detalhes.append(f"OK anexo → {dest.nome}")
+            else:
+                resumo.erros += 1
+                resumo.detalhes.append(f"ERRO anexo → {dest.nome}: {result_doc.error}")
+                continue
+
+        if texto_extra or not arquivo_bytes:
+            result_txt = enviar_texto(dest.jid, msg)
+            _registrar(
+                tipo=tipo,
+                mensagem=msg,
+                destinatario=dest,
+                parceiro=parceiro or dest.parceiro,
+                user=user,
+                result=result_txt,
+                modo_teste=teste,
+            )
+            if result_txt.ok:
+                resumo.enviados += 1
+                resumo.detalhes.append(f"OK texto → {dest.nome}")
+            else:
+                resumo.erros += 1
+                resumo.detalhes.append(f"ERRO texto → {dest.nome}: {result_txt.error}")
+    return resumo
+
+
+def _ler_arquivo_relatorio(arquivo_field, nome_fallback: str) -> tuple[bytes, str]:
+    if not arquivo_field:
+        return b"", nome_fallback
+    try:
+        with arquivo_field.open("rb") as fh:
+            return fh.read(), Path(arquivo_field.name).name
+    except Exception as exc:
+        raise RuntimeError(f"Falha ao ler anexo: {exc}") from exc
+
+
+def _caption_curta(rel: RelatorioComissionamento) -> str:
+    return (
+        f"📁 *Comissionamento* — {rel.pdv_nome}\n"
+        f"Pedidos: {rel.qtd_pedido} · Linhas: {rel.qtd_linha}"
+    )
+
+
+def enviar_comissionamento_pdv(
+    parceiro: Parceiro,
+    user: AbstractBaseUser | None = None,
+    *,
+    relatorio: RelatorioComissionamento | None = None,
+) -> ResumoEnvio:
+    rel = relatorio or (
+        RelatorioComissionamento.objects.filter(parceiro=parceiro)
+        .order_by("-criado_em")
+        .first()
+    )
+    if not rel:
+        return ResumoEnvio(ignorados=1, detalhes=[f"{parceiro.nome}: sem relatório de comissionamento."])
+    destinos = list(destinatarios_para("envio_comissionamento", parceiro))
+    try:
+        arquivo_bytes, nome_arquivo = _ler_arquivo_relatorio(
+            rel.arquivo, f"comissionamento_{parceiro.nome}.xlsx"
+        )
+    except RuntimeError as exc:
+        return ResumoEnvio(erros=1, detalhes=[str(exc)])
+    return _enviar_com_anexo(
+        tipo=EnvioWhatsApp.Tipo.COMISSIONAMENTO,
+        mensagem=rel.mensagem,
+        caption=_caption_curta(rel),
+        destinos=destinos,
+        parceiro=parceiro,
+        user=user,
+        arquivo_bytes=arquivo_bytes,
+        nome_arquivo=nome_arquivo,
+    )
+
+
+def enviar_comissionamento_lote(
+    lote_id: int,
+    user: AbstractBaseUser | None = None,
+) -> ResumoEnvio:
+    total = ResumoEnvio()
+    qs = RelatorioComissionamento.objects.filter(lote_id=lote_id).select_related("parceiro")
+    if not qs.exists():
+        return ResumoEnvio(ignorados=1, detalhes=["Lote sem relatórios de comissionamento."])
+    for rel in qs:
+        parte = enviar_comissionamento_pdv(rel.parceiro, user, relatorio=rel)
+        total.enviados += parte.enviados
+        total.erros += parte.erros
+        total.ignorados += parte.ignorados
+        total.detalhes.append(
+            f"— {rel.pdv_nome}: {parte.enviados} ok / {parte.erros} erro / {parte.ignorados} ign"
+        )
+    return total
+
+
+def enviar_tarefa(rel: RelatorioTarefa, user: AbstractBaseUser | None = None) -> ResumoEnvio:
+    if rel.parceiro_id:
+        destinos = list(destinatarios_para("envio_tarefas", rel.parceiro))
+    else:
+        # Fechadas / futuros → grupos com flag tarefas
+        destinos = list(destinatarios_para("envio_tarefas", somente_grupos=True))
+        vistos: set[str] = set()
+        unicos: list[Destinatario] = []
+        for d in destinos:
+            chave = d.jid.strip().lower()
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            unicos.append(d)
+        destinos = unicos
+
+    try:
+        arquivo_bytes, nome_arquivo = _ler_arquivo_relatorio(
+            rel.arquivo, f"tarefas_{rel.tipo_relatorio}.xlsx"
+        )
+    except RuntimeError as exc:
+        return ResumoEnvio(erros=1, detalhes=[str(exc)])
+
+    caption = (
+        f"📋 *Tarefas* — {rel.get_tipo_relatorio_display()}\n"
+        f"{rel.pdv_nome or 'MG'} · total {rel.total}"
+    )
+    return _enviar_com_anexo(
+        tipo=EnvioWhatsApp.Tipo.TAREFAS,
+        mensagem=rel.mensagem,
+        caption=caption,
+        destinos=destinos,
+        parceiro=rel.parceiro,
+        user=user,
+        arquivo_bytes=arquivo_bytes,
+        nome_arquivo=nome_arquivo,
+    )
+
+
+def enviar_tarefas_lote(lote_id: int, user: AbstractBaseUser | None = None) -> ResumoEnvio:
+    total = ResumoEnvio()
+    qs = RelatorioTarefa.objects.filter(lote_id=lote_id).select_related("parceiro")
+    if not qs.exists():
+        return ResumoEnvio(ignorados=1, detalhes=["Lote sem relatórios de tarefas."])
+    for rel in qs:
+        parte = enviar_tarefa(rel, user)
+        total.enviados += parte.enviados
+        total.erros += parte.erros
+        total.ignorados += parte.ignorados
+        rotulo = rel.pdv_nome or rel.get_tipo_relatorio_display()
+        total.detalhes.append(f"— {rotulo}: {parte.enviados} ok / {parte.erros} erro")
+    return total
+
+
+def enviar_venda_indevida(rel: RelatorioVendaIndevida, user: AbstractBaseUser | None = None) -> ResumoEnvio:
+    if rel.consolidado or not rel.parceiro_id:
+        destinos = list(destinatarios_para("envio_venda_indevida", somente_grupos=True))
+        vistos: set[str] = set()
+        unicos: list[Destinatario] = []
+        for d in destinos:
+            chave = d.jid.strip().lower()
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            unicos.append(d)
+        destinos = unicos
+    else:
+        destinos = list(destinatarios_para("envio_venda_indevida", rel.parceiro))
+
+    try:
+        arquivo_bytes, nome_arquivo = _ler_arquivo_relatorio(rel.arquivo, "vi.xlsx")
+    except RuntimeError as exc:
+        return ResumoEnvio(erros=1, detalhes=[str(exc)])
+
+    caption = (
+        f"🚨 *VI* — {'consolidado' if rel.consolidado else rel.pdv_nome}\n"
+        f"Total: {rel.total}"
+    )
+    return _enviar_com_anexo(
+        tipo=EnvioWhatsApp.Tipo.VENDA_INDEVIDA,
+        mensagem=rel.mensagem,
+        caption=caption,
+        destinos=destinos,
+        parceiro=rel.parceiro,
+        user=user,
+        arquivo_bytes=arquivo_bytes,
+        nome_arquivo=nome_arquivo,
+    )
+
+
+def enviar_venda_indevida_lote(
+    lote_id: int,
+    user: AbstractBaseUser | None = None,
+    *,
+    incluir_consolidado: bool = True,
+) -> ResumoEnvio:
+    total = ResumoEnvio()
+    qs = RelatorioVendaIndevida.objects.filter(lote_id=lote_id).select_related("parceiro")
+    if not incluir_consolidado:
+        qs = qs.filter(consolidado=False)
+    if not qs.exists():
+        return ResumoEnvio(ignorados=1, detalhes=["Lote sem relatórios de venda indevida."])
+    for rel in qs:
+        parte = enviar_venda_indevida(rel, user)
+        total.enviados += parte.enviados
+        total.erros += parte.erros
+        total.ignorados += parte.ignorados
+        rotulo = "consolidado" if rel.consolidado else rel.pdv_nome
+        total.detalhes.append(f"— {rotulo}: {parte.enviados} ok / {parte.erros} erro")
+    return total
+
+
+def enviar_recompra(rel: RelatorioRecompra, user: AbstractBaseUser | None = None) -> ResumoEnvio:
+    if rel.consolidado or not rel.parceiro_id:
+        destinos = list(destinatarios_para("envio_recompra", somente_grupos=True))
+        vistos: set[str] = set()
+        unicos: list[Destinatario] = []
+        for d in destinos:
+            chave = d.jid.strip().lower()
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            unicos.append(d)
+        destinos = unicos
+    else:
+        destinos = list(destinatarios_para("envio_recompra", rel.parceiro))
+
+    try:
+        arquivo_bytes, nome_arquivo = _ler_arquivo_relatorio(rel.arquivo, "recompra.xlsx")
+    except RuntimeError as exc:
+        return ResumoEnvio(erros=1, detalhes=[str(exc)])
+
+    caption = (
+        f"🔁 *Recompra* — {'consolidado' if rel.consolidado else rel.pdv_nome}\n"
+        f"Total: {rel.total}"
+    )
+    return _enviar_com_anexo(
+        tipo=EnvioWhatsApp.Tipo.RECOMPRA,
+        mensagem=rel.mensagem,
+        caption=caption,
+        destinos=destinos,
+        parceiro=rel.parceiro,
+        user=user,
+        arquivo_bytes=arquivo_bytes,
+        nome_arquivo=nome_arquivo,
+    )
+
+
+def enviar_recompra_lote(
+    lote_id: int,
+    user: AbstractBaseUser | None = None,
+    *,
+    incluir_consolidado: bool = True,
+) -> ResumoEnvio:
+    total = ResumoEnvio()
+    qs = RelatorioRecompra.objects.filter(lote_id=lote_id).select_related("parceiro")
+    if not incluir_consolidado:
+        qs = qs.filter(consolidado=False)
+    if not qs.exists():
+        return ResumoEnvio(ignorados=1, detalhes=["Lote sem relatórios de recompra."])
+    for rel in qs:
+        parte = enviar_recompra(rel, user)
+        total.enviados += parte.enviados
+        total.erros += parte.erros
+        total.ignorados += parte.ignorados
+        rotulo = "consolidado" if rel.consolidado else rel.pdv_nome
+        total.detalhes.append(f"— {rotulo}: {parte.enviados} ok / {parte.erros} erro")
+    return total

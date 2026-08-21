@@ -14,10 +14,18 @@ from .messaging.envio import (
     enviar_capilaridade_pdv,
     enviar_capilaridade_todos,
     enviar_churn_pdv,
+    enviar_comissionamento_lote,
+    enviar_comissionamento_pdv,
     enviar_fpd_pdv,
     enviar_osab_pdv,
     enviar_resumo_capilaridade,
+    enviar_tarefa,
+    enviar_tarefas_lote,
     enviar_teste,
+    enviar_recompra,
+    enviar_recompra_lote,
+    enviar_venda_indevida,
+    enviar_venda_indevida_lote,
 )
 from .messaging.syncwa import healthcheck, modo_teste_ativo, syncwa_configurado
 from .models import (
@@ -30,13 +38,21 @@ from .models import (
     HistoricoOSAB,
     LoteImportacao,
     MetaCapilaridade,
+    RelatorioComissionamento,
     RelatorioFPD,
+    RelatorioRecompra,
+    RelatorioTarefa,
+    RelatorioVendaIndevida,
     VendaOSAB,
 )
 from .periodo import periodo_ativo, salvar_periodo
 from .pipelines.churn import processar_churn
+from .pipelines.comissionamento import mapa_pdv_razoes, processar_comissionamento
 from .pipelines.fpd import processar_fpd
 from .pipelines.osab import calcular_osab, persistir_capilaridade, processar_osab
+from .pipelines.recompra import processar_recompra
+from .pipelines.tarefas import processar_tarefas
+from .pipelines.venda_indevida import processar_venda_indevida
 from .relatorios import montar_mascara_pdv, resumo_geral
 from .terceiros import importar_sysmap
 
@@ -330,6 +346,287 @@ def _render_churn(request, form):
 
 
 @gestor_required
+def importar_comissionamento_view(request: HttpRequest) -> HttpResponse:
+    form = UploadBaseForm(request.POST or None, request.FILES or None)
+    enviar = bool(request.POST.get("enviar_whatsapp"))
+    if request.method == "POST" and form.is_valid():
+        arquivo = form.cleaned_data["arquivo"]
+        lote = _lote(request, LoteImportacao.Tipo.COMISSIONAMENTO, arquivo.name, True, {})
+        try:
+            resumo = processar_comissionamento(arquivo, arquivo.name, lote)
+            lote.resumo = resumo
+            lote.save(update_fields=["resumo"])
+            messages.success(
+                request,
+                f"Comissionamento: {resumo['pdvs']} PDV(s) gerado(s)"
+                f" ({resumo['sem_linhas']} sem linhas / {resumo['pdvs_configurados']} configurados).",
+            )
+            if enviar and resumo["pdvs"]:
+                _flash_resumo(
+                    request,
+                    "Envio comissionamento",
+                    enviar_comissionamento_lote(lote.id, request.user),
+                )
+            return redirect("gestao_comissionamento")
+        except Exception as exc:
+            lote.ok = False
+            lote.erro = str(exc)
+            lote.save(update_fields=["ok", "erro"])
+            messages.error(request, f"Falha no comissionamento: {exc}")
+    return _render_comissionamento(request, form)
+
+
+@login_required
+def comissionamento_view(request: HttpRequest) -> HttpResponse:
+    if request.method == "POST" and eh_gestor(request.user):
+        action = request.POST.get("action") or ""
+        if action == "enviar_pdv":
+            parceiro = get_object_or_404(_parceiros(request), pk=request.POST.get("parceiro"))
+            _flash_resumo(request, "Comissionamento", enviar_comissionamento_pdv(parceiro, request.user))
+            return redirect("gestao_comissionamento")
+        if action == "enviar_lote":
+            lote_id = request.POST.get("lote")
+            if not lote_id:
+                messages.error(request, "Informe o lote.")
+            else:
+                _flash_resumo(
+                    request,
+                    "Comissionamento (lote)",
+                    enviar_comissionamento_lote(int(lote_id), request.user),
+                )
+            return redirect("gestao_comissionamento")
+        if request.FILES:
+            return importar_comissionamento_view(request)
+    return _render_comissionamento(
+        request, UploadBaseForm() if eh_gestor(request.user) else None
+    )
+
+
+def _render_comissionamento(request, form):
+    visiveis = _parceiros(request)
+    relatorios = (
+        RelatorioComissionamento.objects.select_related("parceiro", "lote")
+        .filter(parceiro__in=visiveis)[:80]
+    )
+    lotes = LoteImportacao.objects.filter(
+        tipo=LoteImportacao.Tipo.COMISSIONAMENTO, ok=True
+    )[:15]
+    return render(
+        request,
+        "gestao/comissionamento.html",
+        {
+            "form": form,
+            "relatorios": relatorios,
+            "lotes": lotes,
+            "mapa_razoes": mapa_pdv_razoes(),
+            "pode_importar": eh_gestor(request.user),
+            "syncwa_ok": syncwa_configurado(),
+        },
+    )
+
+
+@gestor_required
+def importar_tarefas_view(request: HttpRequest) -> HttpResponse:
+    form = UploadBaseForm(request.POST or None, request.FILES or None)
+    enviar = bool(request.POST.get("enviar_whatsapp"))
+    if request.method == "POST" and form.is_valid():
+        arquivo = form.cleaned_data["arquivo"]
+        lote = _lote(request, LoteImportacao.Tipo.TAREFAS, arquivo.name, True, {})
+        try:
+            resumo = processar_tarefas(arquivo, arquivo.name, lote)
+            lote.resumo = resumo
+            lote.save(update_fields=["resumo"])
+            messages.success(
+                request,
+                f"Tarefas ({resumo.get('indicador')}): {resumo.get('relatorios', 0)} relatório(s).",
+            )
+            if enviar and resumo.get("relatorios"):
+                _flash_resumo(request, "Envio tarefas", enviar_tarefas_lote(lote.id, request.user))
+            return redirect("gestao_tarefas")
+        except Exception as exc:
+            lote.ok = False
+            lote.erro = str(exc)
+            lote.save(update_fields=["ok", "erro"])
+            messages.error(request, f"Falha em Tarefas: {exc}")
+    return _render_tarefas(request, form)
+
+
+@login_required
+def tarefas_view(request: HttpRequest) -> HttpResponse:
+    if request.method == "POST" and eh_gestor(request.user):
+        action = request.POST.get("action") or ""
+        if action == "enviar" and request.POST.get("relatorio"):
+            rel = get_object_or_404(RelatorioTarefa, pk=request.POST.get("relatorio"))
+            _flash_resumo(request, "Tarefas", enviar_tarefa(rel, request.user))
+            return redirect("gestao_tarefas")
+        if action == "enviar_lote" and request.POST.get("lote"):
+            _flash_resumo(
+                request,
+                "Tarefas (lote)",
+                enviar_tarefas_lote(int(request.POST.get("lote")), request.user),
+            )
+            return redirect("gestao_tarefas")
+        if request.FILES:
+            return importar_tarefas_view(request)
+    return _render_tarefas(request, UploadBaseForm() if eh_gestor(request.user) else None)
+
+
+def _render_tarefas(request, form):
+    visiveis = _parceiros(request)
+    relatorios = RelatorioTarefa.objects.select_related("parceiro", "lote").filter(
+        Q(parceiro__isnull=True) | Q(parceiro__in=visiveis)
+    )[:80]
+    lotes = LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.TAREFAS, ok=True)[:15]
+    return render(
+        request,
+        "gestao/tarefas.html",
+        {
+            "form": form,
+            "relatorios": relatorios,
+            "lotes": lotes,
+            "pode_importar": eh_gestor(request.user),
+            "syncwa_ok": syncwa_configurado(),
+        },
+    )
+
+
+@gestor_required
+def importar_venda_indevida_view(request: HttpRequest) -> HttpResponse:
+    form = UploadBaseForm(request.POST or None, request.FILES or None)
+    enviar = bool(request.POST.get("enviar_whatsapp"))
+    if request.method == "POST" and form.is_valid():
+        arquivo = form.cleaned_data["arquivo"]
+        lote = _lote(request, LoteImportacao.Tipo.VENDA_INDEVIDA, arquivo.name, True, {})
+        try:
+            resumo = processar_venda_indevida(arquivo, arquivo.name, lote)
+            lote.resumo = resumo
+            lote.save(update_fields=["resumo"])
+            messages.success(
+                request,
+                f"Venda indevida: {resumo['pdvs']} PDV(s), {resumo['total_linhas']} linha(s).",
+            )
+            if enviar:
+                _flash_resumo(
+                    request,
+                    "Envio VI",
+                    enviar_venda_indevida_lote(lote.id, request.user),
+                )
+            return redirect("gestao_venda_indevida")
+        except Exception as exc:
+            lote.ok = False
+            lote.erro = str(exc)
+            lote.save(update_fields=["ok", "erro"])
+            messages.error(request, f"Falha em Venda indevida: {exc}")
+    return _render_venda_indevida(request, form)
+
+
+@login_required
+def venda_indevida_view(request: HttpRequest) -> HttpResponse:
+    if request.method == "POST" and eh_gestor(request.user):
+        action = request.POST.get("action") or ""
+        if action == "enviar" and request.POST.get("relatorio"):
+            rel = get_object_or_404(RelatorioVendaIndevida, pk=request.POST.get("relatorio"))
+            _flash_resumo(request, "Venda indevida", enviar_venda_indevida(rel, request.user))
+            return redirect("gestao_venda_indevida")
+        if action == "enviar_lote" and request.POST.get("lote"):
+            _flash_resumo(
+                request,
+                "VI (lote)",
+                enviar_venda_indevida_lote(int(request.POST.get("lote")), request.user),
+            )
+            return redirect("gestao_venda_indevida")
+        if request.FILES:
+            return importar_venda_indevida_view(request)
+    return _render_venda_indevida(
+        request, UploadBaseForm() if eh_gestor(request.user) else None
+    )
+
+
+def _render_venda_indevida(request, form):
+    visiveis = _parceiros(request)
+    relatorios = RelatorioVendaIndevida.objects.select_related("parceiro", "lote").filter(
+        Q(parceiro__isnull=True) | Q(parceiro__in=visiveis)
+    )[:80]
+    lotes = LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.VENDA_INDEVIDA, ok=True)[:15]
+    return render(
+        request,
+        "gestao/venda_indevida.html",
+        {
+            "form": form,
+            "relatorios": relatorios,
+            "lotes": lotes,
+            "pode_importar": eh_gestor(request.user),
+            "syncwa_ok": syncwa_configurado(),
+        },
+    )
+
+
+@gestor_required
+def importar_recompra_view(request: HttpRequest) -> HttpResponse:
+    form = UploadBaseForm(request.POST or None, request.FILES or None)
+    enviar = bool(request.POST.get("enviar_whatsapp"))
+    if request.method == "POST" and form.is_valid():
+        arquivo = form.cleaned_data["arquivo"]
+        lote = _lote(request, LoteImportacao.Tipo.RECOMPRA, arquivo.name, True, {})
+        try:
+            resumo = processar_recompra(arquivo, arquivo.name, lote)
+            lote.resumo = resumo
+            lote.save(update_fields=["resumo"])
+            messages.success(
+                request,
+                f"Recompra: {resumo['pdvs']} PDV(s), {resumo['total_linhas']} linha(s).",
+            )
+            if enviar:
+                _flash_resumo(request, "Envio recompra", enviar_recompra_lote(lote.id, request.user))
+            return redirect("gestao_recompra")
+        except Exception as exc:
+            lote.ok = False
+            lote.erro = str(exc)
+            lote.save(update_fields=["ok", "erro"])
+            messages.error(request, f"Falha em Recompra: {exc}")
+    return _render_recompra(request, form)
+
+
+@login_required
+def recompra_view(request: HttpRequest) -> HttpResponse:
+    if request.method == "POST" and eh_gestor(request.user):
+        action = request.POST.get("action") or ""
+        if action == "enviar" and request.POST.get("relatorio"):
+            rel = get_object_or_404(RelatorioRecompra, pk=request.POST.get("relatorio"))
+            _flash_resumo(request, "Recompra", enviar_recompra(rel, request.user))
+            return redirect("gestao_recompra")
+        if action == "enviar_lote" and request.POST.get("lote"):
+            _flash_resumo(
+                request,
+                "Recompra (lote)",
+                enviar_recompra_lote(int(request.POST.get("lote")), request.user),
+            )
+            return redirect("gestao_recompra")
+        if request.FILES:
+            return importar_recompra_view(request)
+    return _render_recompra(request, UploadBaseForm() if eh_gestor(request.user) else None)
+
+
+def _render_recompra(request, form):
+    visiveis = _parceiros(request)
+    relatorios = RelatorioRecompra.objects.select_related("parceiro", "lote").filter(
+        Q(parceiro__isnull=True) | Q(parceiro__in=visiveis)
+    )[:80]
+    lotes = LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.RECOMPRA, ok=True)[:15]
+    return render(
+        request,
+        "gestao/recompra.html",
+        {
+            "form": form,
+            "relatorios": relatorios,
+            "lotes": lotes,
+            "pode_importar": eh_gestor(request.user),
+            "syncwa_ok": syncwa_configurado(),
+        },
+    )
+
+
+@gestor_required
 def configs_view(request: HttpRequest) -> HttpResponse:
     ano, mes = periodo_ativo()
     parceiros = list(Parceiro.objects.filter(ativo=True).order_by("nome"))
@@ -483,6 +780,71 @@ def envios_view(request: HttpRequest) -> HttpResponse:
                 messages.error(request, "Escolha o PDV para enviar Churn.")
             else:
                 _flash_resumo(request, "Churn", enviar_churn_pdv(parceiro, request.user))
+            return redirect("gestao_envios")
+        if action == "comissionamento":
+            if not parceiro:
+                messages.error(request, "Escolha o PDV para enviar Comissionamento.")
+            else:
+                _flash_resumo(
+                    request,
+                    "Comissionamento",
+                    enviar_comissionamento_pdv(parceiro, request.user),
+                )
+            return redirect("gestao_envios")
+        if action == "tarefas":
+            # último relatório do PDV (abertas) ou consolidado se sem PDV
+            if parceiro:
+                rel = (
+                    RelatorioTarefa.objects.filter(parceiro=parceiro)
+                    .order_by("-criado_em")
+                    .first()
+                )
+            else:
+                rel = (
+                    RelatorioTarefa.objects.filter(parceiro__isnull=True)
+                    .order_by("-criado_em")
+                    .first()
+                )
+            if not rel:
+                messages.error(request, "Nenhum relatório de tarefas para enviar.")
+            else:
+                _flash_resumo(request, "Tarefas", enviar_tarefa(rel, request.user))
+            return redirect("gestao_envios")
+        if action == "venda_indevida":
+            if parceiro:
+                rel = (
+                    RelatorioVendaIndevida.objects.filter(parceiro=parceiro, consolidado=False)
+                    .order_by("-criado_em")
+                    .first()
+                )
+            else:
+                rel = (
+                    RelatorioVendaIndevida.objects.filter(consolidado=True)
+                    .order_by("-criado_em")
+                    .first()
+                )
+            if not rel:
+                messages.error(request, "Nenhum relatório de venda indevida para enviar.")
+            else:
+                _flash_resumo(request, "Venda indevida", enviar_venda_indevida(rel, request.user))
+            return redirect("gestao_envios")
+        if action == "recompra":
+            if parceiro:
+                rel = (
+                    RelatorioRecompra.objects.filter(parceiro=parceiro, consolidado=False)
+                    .order_by("-criado_em")
+                    .first()
+                )
+            else:
+                rel = (
+                    RelatorioRecompra.objects.filter(consolidado=True)
+                    .order_by("-criado_em")
+                    .first()
+                )
+            if not rel:
+                messages.error(request, "Nenhum relatório de recompra para enviar.")
+            else:
+                _flash_resumo(request, "Recompra", enviar_recompra(rel, request.user))
             return redirect("gestao_envios")
 
     health = healthcheck() if syncwa_configurado() else {"ok": False, "error": "não configurado"}

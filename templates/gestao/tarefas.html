@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Tarefas · Gestão{% endblock %}
+{% block content %}
+{% include "gestao/_nav.html" %}
+<div class="hero">
+  <div>
+    <h1>Tarefas</h1>
+    <p>Abertas (hoje por PDV), fechadas e agendamentos futuros — coluna INDICADOR.</p>
+  </div>
+</div>
+
+{% if form %}
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-h"><h2>Importar tarefas</h2></div>
+  <div class="panel-b">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      {{ form.arquivo }}
+      <label style="display:block;margin-top:0.7rem">
+        <input type="checkbox" name="enviar_whatsapp" value="1" {% if not syncwa_ok %}disabled{% endif %}>
+        Enviar WhatsApp após processar
+      </label>
+      <button class="btn btn-primary" type="submit" style="margin-top:0.7rem">Processar</button>
+    </form>
+    <p class="help" style="margin-top:0.6rem">
+      Abertas: destinatários do PDV com flag <strong>Tarefas</strong>.
+      Fechadas/futuros: grupos com a mesma flag.
+    </p>
+  </div>
+</div>
+{% endif %}
+
+{% if pode_importar and lotes %}
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-h"><h2>Reenviar lote</h2></div>
+  <div class="panel-b">
+    <form method="post" class="fila-toolbar" style="gap:0.6rem">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="enviar_lote">
+      <select name="lote" class="fila-pick">
+        {% for l in lotes %}
+          <option value="{{ l.id }}">{{ l.criado_em|date:"d/m H:i" }} · {{ l.arquivo_nome }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-secondary" type="submit">Enviar lote</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% for r in relatorios %}
+  <div class="mask-card">
+    <div class="mask-card-h">
+      <div>
+        <strong>{{ r.get_tipo_relatorio_display }}{% if r.pdv_nome %} · {{ r.pdv_nome }}{% endif %}</strong>
+        <div class="help">
+          {{ r.total }} · {{ r.data_referencia|date:"d/m/Y" }} · {{ r.criado_em|date:"d/m H:i" }}
+          {% if r.arquivo %} · <a href="{{ r.arquivo.url }}" target="_blank" rel="noopener">baixar</a>{% endif %}
+        </div>
+      </div>
+      <div class="fila-actions">
+        <textarea id="tar-{{ r.id }}" hidden>{{ r.mensagem }}</textarea>
+        <button class="btn btn-primary" type="button" data-copy-target="tar-{{ r.id }}">Copiar</button>
+        {% if pode_importar %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="enviar">
+          <input type="hidden" name="relatorio" value="{{ r.id }}">
+          <button class="btn btn-secondary" type="submit">WhatsApp</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    <div class="long-text">{{ r.mensagem|linebreaksbr }}</div>
+  </div>
+{% empty %}
+  <p class="help">Nenhum relatório de tarefas ainda.</p>
+{% endfor %}
+{% endblock %}

@@ -22,6 +22,10 @@ class LoteImportacao(models.Model):
         OSAB = "osab", "OSAB"
         FPD = "fpd", "FPD"
         CHURN = "churn", "Churn"
+        COMISSIONAMENTO = "comissionamento", "Comissionamento"
+        TAREFAS = "tarefas", "Tarefas"
+        VENDA_INDEVIDA = "venda_indevida", "Venda indevida"
+        RECOMPRA = "recompra", "Recompra"
 
     tipo = models.CharField(max_length=20, choices=Tipo.choices, db_index=True)
     arquivo_nome = models.CharField(max_length=255)
@@ -283,6 +287,141 @@ class RelatorioFPD(models.Model):
         verbose_name_plural = "Relatórios FPD"
 
 
+class RelatorioComissionamento(models.Model):
+    lote = models.ForeignKey(
+        LoteImportacao,
+        on_delete=models.CASCADE,
+        related_name="relatorios_comissionamento",
+    )
+    parceiro = models.ForeignKey(
+        "tickets.Parceiro",
+        on_delete=models.CASCADE,
+        related_name="relatorios_comissionamento",
+    )
+    pdv_nome = models.CharField(max_length=150)
+    qtd_pedido = models.IntegerField(default=0)
+    qtd_linha = models.IntegerField(default=0)
+    total_pedido = models.FloatField(default=0)
+    total_comissao = models.FloatField(default=0)
+    mensagem = models.TextField(blank=True)
+    arquivo = models.FileField(
+        upload_to="gestao/comissionamento/%Y/%m/",
+        blank=True,
+    )
+    detalhes = models.JSONField(default=dict, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-criado_em", "pdv_nome"]
+        verbose_name = "Relatório de comissionamento"
+        verbose_name_plural = "Relatórios de comissionamento"
+
+    def __str__(self) -> str:
+        return f"{self.pdv_nome} · {self.criado_em:%d/%m %H:%M}"
+
+
+class RelatorioTarefa(models.Model):
+    class TipoRelatorio(models.TextChoices):
+        ABERTAS = "abertas", "Tarefas abertas (hoje)"
+        FECHADAS = "fechadas", "Tarefas fechadas"
+        FUTUROS = "futuros", "Agendamentos futuros"
+
+    lote = models.ForeignKey(
+        LoteImportacao,
+        on_delete=models.CASCADE,
+        related_name="relatorios_tarefa",
+    )
+    tipo_relatorio = models.CharField(max_length=20, choices=TipoRelatorio.choices, db_index=True)
+    parceiro = models.ForeignKey(
+        "tickets.Parceiro",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="relatorios_tarefa",
+    )
+    pdv_nome = models.CharField(max_length=150, blank=True)
+    total = models.IntegerField(default=0)
+    data_referencia = models.DateField()
+    mensagem = models.TextField(blank=True)
+    arquivo = models.FileField(upload_to="gestao/tarefas/%Y/%m/", blank=True)
+    detalhes = models.JSONField(default=dict, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-criado_em", "pdv_nome"]
+        verbose_name = "Relatório de tarefas"
+        verbose_name_plural = "Relatórios de tarefas"
+
+    def __str__(self) -> str:
+        return f"{self.get_tipo_relatorio_display()} · {self.pdv_nome or 'MG'}"
+
+
+class RelatorioVendaIndevida(models.Model):
+    lote = models.ForeignKey(
+        LoteImportacao,
+        on_delete=models.CASCADE,
+        related_name="relatorios_vi",
+    )
+    parceiro = models.ForeignKey(
+        "tickets.Parceiro",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="relatorios_vi",
+    )
+    pdv_nome = models.CharField(max_length=150, blank=True)
+    total = models.IntegerField(default=0)
+    consolidado = models.BooleanField(default=False)
+    data_referencia = models.DateField()
+    mensagem = models.TextField(blank=True)
+    arquivo = models.FileField(upload_to="gestao/venda_indevida/%Y/%m/", blank=True)
+    detalhes = models.JSONField(default=dict, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-criado_em", "pdv_nome"]
+        verbose_name = "Relatório de venda indevida"
+        verbose_name_plural = "Relatórios de venda indevida"
+
+    def __str__(self) -> str:
+        if self.consolidado:
+            return f"VI consolidado · {self.data_referencia}"
+        return f"VI · {self.pdv_nome}"
+
+
+class RelatorioRecompra(models.Model):
+    lote = models.ForeignKey(
+        LoteImportacao,
+        on_delete=models.CASCADE,
+        related_name="relatorios_recompra",
+    )
+    parceiro = models.ForeignKey(
+        "tickets.Parceiro",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="relatorios_recompra",
+    )
+    pdv_nome = models.CharField(max_length=150, blank=True)
+    total = models.IntegerField(default=0)
+    consolidado = models.BooleanField(default=False)
+    data_referencia = models.DateField()
+    mensagem = models.TextField(blank=True)
+    arquivo = models.FileField(upload_to="gestao/recompra/%Y/%m/", blank=True)
+    detalhes = models.JSONField(default=dict, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-criado_em", "pdv_nome"]
+        verbose_name = "Relatório de recompra"
+        verbose_name_plural = "Relatórios de recompra"
+
+    def __str__(self) -> str:
+        if self.consolidado:
+            return f"Recompra consolidado · {self.data_referencia}"
+        return f"Recompra · {self.pdv_nome}"
+
+
 class Destinatario(models.Model):
     class TipoDestino(models.TextChoices):
         INDIVIDUAL = "individual", "Número / contato"
@@ -311,6 +450,15 @@ class Destinatario(models.Model):
     envio_fpd = models.BooleanField("FPD", default=True)
     envio_fpd_critico = models.BooleanField("FPD crítico (global)", default=False)
     envio_churn = models.BooleanField("Churn", default=True)
+    envio_comissionamento = models.BooleanField("Comissionamento", default=False)
+    envio_tarefas = models.BooleanField("Tarefas", default=False)
+    envio_venda_indevida = models.BooleanField("Venda indevida", default=False)
+    envio_recompra = models.BooleanField("Recompra", default=False)
+    razoes_sociais_comissionamento = models.TextField(
+        "Razões sociais (comissionamento)",
+        blank=True,
+        help_text="Uma por linha (ou separadas por ;). Filtra as abas PEDIDO / LINHA_A_LINHA.",
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -330,6 +478,10 @@ class EnvioWhatsApp(models.Model):
         FPD = "fpd", "FPD"
         FPD_CRITICO = "fpd_critico", "FPD crítico"
         CHURN = "churn", "Churn"
+        COMISSIONAMENTO = "comissionamento", "Comissionamento"
+        TAREFAS = "tarefas", "Tarefas"
+        VENDA_INDEVIDA = "venda_indevida", "Venda indevida"
+        RECOMPRA = "recompra", "Recompra"
         RESUMO = "resumo", "Resumo geral"
         TESTE = "teste", "Teste SyncWA"
 

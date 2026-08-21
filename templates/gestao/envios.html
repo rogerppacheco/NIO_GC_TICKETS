@@ -5,7 +5,7 @@
 <div class="hero">
   <div>
     <h1>Envios WhatsApp</h1>
-    <p>Dispara capilaridade, OSAB, FPD e Churn via SyncWA. {{ qtd_destinatarios }} destinatário(s) ativo(s).</p>
+    <p>Dispara capilaridade, OSAB, FPD, Churn e Comissionamento via SyncWA. {{ qtd_destinatarios }} destinatário(s) ativo(s).</p>
   </div>
   <a class="btn btn-secondary" href="{% url 'gestao_destinatarios' %}">Destinatários</a>
 </div>
@@ -43,8 +43,12 @@
       <button class="btn btn-secondary" type="submit" name="action" value="osab">OSAB (PDV)</button>
       <button class="btn btn-secondary" type="submit" name="action" value="fpd">FPD (PDV)</button>
       <button class="btn btn-secondary" type="submit" name="action" value="churn">Churn (PDV)</button>
+      <button class="btn btn-secondary" type="submit" name="action" value="comissionamento">Comissionamento (PDV)</button>
+      <button class="btn btn-secondary" type="submit" name="action" value="tarefas">Tarefas</button>
+      <button class="btn btn-secondary" type="submit" name="action" value="venda_indevida">Venda indevida</button>
+      <button class="btn btn-secondary" type="submit" name="action" value="recompra">Recompra</button>
     </form>
-    <p class="help">OSAB, FPD e Churn exigem PDV selecionado. Capilaridade sem PDV envia para todos.</p>
+    <p class="help">OSAB, FPD, Churn e Comissionamento exigem PDV. Tarefas/VI/Recompra sem PDV usam o último consolidado (grupos).</p>
   </div>
 </div>
 {% endif %}

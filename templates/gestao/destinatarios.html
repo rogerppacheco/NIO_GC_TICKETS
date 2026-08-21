@@ -41,6 +41,15 @@
           <label>{{ form.envio_fpd }} FPD</label>
           <label>{{ form.envio_fpd_critico }} FPD crítico</label>
           <label>{{ form.envio_churn }} Churn</label>
+          <label>{{ form.envio_comissionamento }} Comissionamento</label>
+          <label>{{ form.envio_tarefas }} Tarefas</label>
+          <label>{{ form.envio_venda_indevida }} Venda indevida</label>
+          <label>{{ form.envio_recompra }} Recompra</label>
+        </div>
+        <div class="full">
+          {{ form.razoes_sociais_comissionamento.label_tag }}
+          {{ form.razoes_sociais_comissionamento }}
+          <div class="help">{{ form.razoes_sociais_comissionamento.help_text }}</div>
         </div>
         <div class="full"><button class="btn btn-primary" type="submit">Salvar</button></div>
       </form>
@@ -83,7 +92,11 @@
             {% if d.envio_capilaridade %}Cap {% endif %}
             {% if d.envio_fpd %}FPD {% endif %}
             {% if d.envio_fpd_critico %}FPD+ {% endif %}
-            {% if d.envio_churn %}Churn{% endif %}
+            {% if d.envio_churn %}Churn {% endif %}
+            {% if d.envio_comissionamento %}Comis {% endif %}
+            {% if d.envio_tarefas %}Tar {% endif %}
+            {% if d.envio_venda_indevida %}VI {% endif %}
+            {% if d.envio_recompra %}Rec{% endif %}
           </td>
           <td>{% if d.ativo %}<span class="pill resolvido">Ativo</span>{% else %}<span class="pill cancelado">Inativo</span>{% endif %}</td>
           <td>

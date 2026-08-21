@@ -360,3 +360,241 @@ class DestinatarioEnvioTests(TestCase):
                 r = self.client.post(reverse("gestao_envios"), {"action": "teste"})
         self.assertEqual(r.status_code, 302)
         self.assertTrue(EnvioWhatsApp.objects.filter(tipo=EnvioWhatsApp.Tipo.TESTE).exists())
+
+
+class ComissionamentoTests(TestCase):
+    def setUp(self):
+        self.pdv = Parceiro.objects.create(codigo_pdv="31", nome="INOVA MG")
+        from gestao.models import Destinatario
+
+        Destinatario.objects.create(
+            parceiro=self.pdv,
+            nome="Grupo Comis",
+            jid="120363abc@g.us",
+            tipo=Destinatario.TipoDestino.GRUPO,
+            envio_comissionamento=True,
+            razoes_sociais_comissionamento="LUISA SERVICOS DE TELEFONIA MOVEL LTDA",
+        )
+
+    def _ciclo_xlsx(self):
+        wb = Workbook()
+        ws_p = wb.active
+        ws_p.title = "PEDIDO"
+        ws_p.append(
+            [
+                "DOCUMENTO DE COMPRAS",
+                "ITEM",
+                "VALOR",
+                "FORNECEDOR",
+                "RAZAO SOCIAL",
+                "CNPJ",
+                "CANAL",
+                "CENTRO",
+                "CICLO",
+            ]
+        )
+        ws_p.append(
+            [
+                "450001",
+                "10",
+                "100,50",
+                "HANA1",
+                "LUISA SERVICOS DE TELEFONIA MOVEL LTDA",
+                "123",
+                "VAREJO",
+                "MG",
+                "202608",
+            ]
+        )
+        ws_p.append(
+            [
+                "450002",
+                "20",
+                "50,00",
+                "HANA2",
+                "OUTRA EMPRESA LTDA",
+                "999",
+                "VAREJO",
+                "MG",
+                "202608",
+            ]
+        )
+        ws_l = wb.create_sheet("LINHA_A_LINHA")
+        ws_l.append(["RAZAO SOCIAL", "SUB_EVENTO", "COMISSAO"])
+        ws_l.append(["LUISA SERVICOS DE TELEFONIA MOVEL LTDA", "ATIVACAO", "100,50"])
+        ws_l.append(["OUTRA EMPRESA LTDA", "ATIVACAO", "50,00"])
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        buf.name = "ciclo.xlsx"
+        return buf
+
+    def test_processar_filtra_por_razao(self):
+        from gestao.models import LoteImportacao, RelatorioComissionamento
+        from gestao.pipelines.comissionamento import processar_comissionamento
+
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.COMISSIONAMENTO,
+            arquivo_nome="ciclo.xlsx",
+            ok=True,
+        )
+        resumo = processar_comissionamento(self._ciclo_xlsx(), "ciclo.xlsx", lote)
+        self.assertEqual(resumo["pdvs"], 1)
+        rel = RelatorioComissionamento.objects.get()
+        self.assertEqual(rel.parceiro_id, self.pdv.id)
+        self.assertEqual(rel.qtd_pedido, 1)
+        self.assertEqual(rel.qtd_linha, 1)
+        self.assertTrue(rel.arquivo)
+        self.assertIn("Comissionamento", rel.mensagem)
+
+    def test_exige_razoes_configuradas(self):
+        from gestao.models import Destinatario, LoteImportacao
+        from gestao.pipelines.comissionamento import processar_comissionamento
+
+        Destinatario.objects.all().delete()
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.COMISSIONAMENTO,
+            arquivo_nome="ciclo.xlsx",
+            ok=True,
+        )
+        with self.assertRaises(ValueError):
+            processar_comissionamento(self._ciclo_xlsx(), "ciclo.xlsx", lote)
+
+
+class TarefasTests(TestCase):
+    def setUp(self):
+        self.pdv = Parceiro.objects.create(codigo_pdv="31", nome="INOVA MG")
+
+    def _xlsx_abertas(self, data_agendamento):
+        from datetime import date as d
+
+        if isinstance(data_agendamento, d):
+            data_agendamento = data_agendamento.isoformat()
+        wb = Workbook()
+        ws = wb.active
+        ws.append(
+            [
+                "sg_uf",
+                "nm_municipio",
+                "INDICADOR",
+                "nm_pdv_rel",
+                "DT_AGENDAMENTO",
+                "nr_ordem",
+            ]
+        )
+        ws.append(["MG", "BH", "TAREFAS ABERTAS", "INOVA MG", data_agendamento, "1"])
+        ws.append(["MG", "Uberlândia", "TAREFAS ABERTAS", "INOVA MG", data_agendamento, "2"])
+        ws.append(["SP", "SP", "TAREFAS ABERTAS", "OUTRO", data_agendamento, "3"])
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        buf.name = "tarefas.xlsx"
+        return buf
+
+    def test_abertas_por_pdv(self):
+        from gestao.models import LoteImportacao, RelatorioTarefa
+        from gestao.periodo import hoje
+        from gestao.pipelines.tarefas import processar_tarefas
+
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.TAREFAS, arquivo_nome="t.xlsx", ok=True
+        )
+        resumo = processar_tarefas(self._xlsx_abertas(hoje()), "t.xlsx", lote)
+        self.assertEqual(resumo["modo"], "abertas")
+        self.assertEqual(resumo["relatorios"], 1)
+        rel = RelatorioTarefa.objects.get()
+        self.assertEqual(rel.parceiro_id, self.pdv.id)
+        self.assertEqual(rel.total, 2)
+        self.assertIn("Resumo de Tarefas", rel.mensagem)
+
+    def test_fechadas_consolidado(self):
+        from gestao.models import LoteImportacao, RelatorioTarefa
+        from gestao.periodo import hoje
+        from gestao.pipelines.tarefas import processar_tarefas
+
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["sg_uf", "nm_municipio", "INDICADOR", "dt_fim_execucao_real"])
+        ws.append(["MG", "BH", "TAREFAS FECHADAS", hoje().isoformat()])
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        buf.name = "fechadas.xlsx"
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.TAREFAS, arquivo_nome="f.xlsx", ok=True
+        )
+        resumo = processar_tarefas(buf, "f.xlsx", lote)
+        self.assertEqual(resumo["modo"], "fechadas")
+        rel = RelatorioTarefa.objects.get()
+        self.assertIsNone(rel.parceiro_id)
+        self.assertEqual(rel.total, 1)
+
+
+class VendaIndevidaTests(TestCase):
+    def setUp(self):
+        self.pdv = Parceiro.objects.create(codigo_pdv="31", nome="INOVA MG")
+
+    def _xlsx_vi(self):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "BASE_VI"
+        ws.append(["ANOMES_ABERTURA", "MOTIVO_CRV", "SUBMOTIVO_CRV", "REDE", "NUMERO_PEDIDO"])
+        ws.append(["202601", "INDEVIDA", "DOC", "INOVA MG", "P1"])
+        ws.append(["202602", "ERRADA", "END", "INOVA MG", "P2"])
+        ws.append(["202601", "INDEVIDA", "DOC", "OUTRO PDV X", "P3"])
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        buf.name = "vi.xlsx"
+        return buf
+
+    def test_processar_vi(self):
+        from gestao.models import LoteImportacao, RelatorioVendaIndevida
+        from gestao.pipelines.venda_indevida import processar_venda_indevida
+
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.VENDA_INDEVIDA, arquivo_nome="vi.xlsx", ok=True
+        )
+        resumo = processar_venda_indevida(self._xlsx_vi(), "vi.xlsx", lote)
+        self.assertEqual(resumo["total_linhas"], 3)
+        self.assertEqual(resumo["pdvs"], 2)
+        self.assertTrue(RelatorioVendaIndevida.objects.filter(consolidado=True).exists())
+        por_pdv = RelatorioVendaIndevida.objects.filter(parceiro=self.pdv, consolidado=False)
+        self.assertEqual(por_pdv.count(), 1)
+        self.assertEqual(por_pdv.get().total, 2)
+        self.assertIn("VENDA INDEVIDA", por_pdv.get().mensagem)
+
+
+class RecompraTests(TestCase):
+    def setUp(self):
+        self.pdv = Parceiro.objects.create(codigo_pdv="31", nome="INOVA MG")
+
+    def _xlsx_recompra(self):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "BASE"
+        ws.append(["ds_anomes", "resultado", "REDE", "nr_ordem"])
+        ws.append(["202601", "RECOMPRA", "INOVA MG", "1"])
+        ws.append(["202602", "SEM RECOMPRA", "INOVA MG", "2"])
+        ws.append(["202601", "RECOMPRA", "OUTRO PDV", "3"])
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        buf.name = "recompra.xlsx"
+        return buf
+
+    def test_processar_recompra(self):
+        from gestao.models import LoteImportacao, RelatorioRecompra
+        from gestao.pipelines.recompra import processar_recompra
+
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.RECOMPRA, arquivo_nome="r.xlsx", ok=True
+        )
+        resumo = processar_recompra(self._xlsx_recompra(), "r.xlsx", lote)
+        self.assertEqual(resumo["total_linhas"], 3)
+        self.assertEqual(resumo["pdvs"], 2)
+        self.assertTrue(RelatorioRecompra.objects.filter(consolidado=True).exists())
+        por_pdv = RelatorioRecompra.objects.filter(parceiro=self.pdv, consolidado=False)
+        self.assertEqual(por_pdv.count(), 1)
+        self.assertEqual(por_pdv.get().total, 2)
+        self.assertIn("RECOMPRA", por_pdv.get().mensagem)

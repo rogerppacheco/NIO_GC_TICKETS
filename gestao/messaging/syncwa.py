@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import mimetypes
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 import requests
 from django.conf import settings
@@ -161,3 +163,58 @@ def enviar_texto(to: str, text: str, timeout: float | None = None) -> SyncWAResu
             destino=destino,
         )
     return last
+
+
+def enviar_documento(
+    to: str,
+    *,
+    conteudo: bytes,
+    file_name: str,
+    caption: str = "",
+    mime_type: str | None = None,
+    timeout: float | None = None,
+) -> SyncWAResult:
+    """Envia anexo via POST /v1/messages/media/upload (multipart)."""
+    if not syncwa_configurado():
+        return SyncWAResult(ok=False, error="SyncWA não configurado (SYNCWA_BASE_URL / SYNCWA_API_KEY).")
+    if not conteudo:
+        return SyncWAResult(ok=False, error="Arquivo vazio.")
+    try:
+        destino, _ = destino_efetivo(to)
+    except SyncWAError as exc:
+        return SyncWAResult(ok=False, error=str(exc), destino=to)
+
+    timeout = timeout if timeout is not None else float(getattr(settings, "SYNCWA_TIMEOUT", 60))
+    nome = Path(file_name or "anexo.xlsx").name
+    mime = mime_type or mimetypes.guess_type(nome)[0] or "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    # SyncWA limita caption a 1024 chars
+    caption_envio = (caption or "")[:1024]
+
+    try:
+        r = requests.post(
+            f"{_base()}/v1/messages/media/upload",
+            headers={"x-api-key": settings.SYNCWA_API_KEY.strip()},
+            data={"to": destino, "caption": caption_envio, "fileName": nome},
+            files={"file": (nome, conteudo, mime)},
+            timeout=timeout,
+        )
+    except requests.RequestException as exc:
+        return SyncWAResult(ok=False, error=f"Falha de rede: {exc}", destino=destino)
+
+    if r.status_code >= 400:
+        try:
+            detail = r.json()
+        except Exception:
+            detail = r.text[:300]
+        return SyncWAResult(ok=False, error=f"HTTP {r.status_code}: {detail}", destino=destino)
+
+    try:
+        data = r.json()
+    except Exception:
+        data = {}
+    return SyncWAResult(
+        ok=True,
+        message_log_id=str(data.get("messageLogId") or ""),
+        status=str(data.get("status") or "QUEUED"),
+        destino=destino,
+    )
