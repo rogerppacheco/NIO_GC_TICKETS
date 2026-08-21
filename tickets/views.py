@@ -153,13 +153,27 @@ def fila(request: HttpRequest) -> HttpResponse:
             qs = qs.filter(parceiro=form.cleaned_data["parceiro"])
         if eh_gestor(request.user) and form.cleaned_data.get("especialista"):
             qs = qs.filter(parceiro__especialista=form.cleaned_data["especialista"])
+        sit_osab = form.cleaned_data.get("situacao_osab")
+        if sit_osab:
+            from gestao.models import VendaOSAB
+
+            if sit_osab == "__sem__":
+                pedidos_osab = VendaOSAB.objects.exclude(situacao="").values_list(
+                    "pedido", flat=True
+                )
+                qs = qs.filter(Q(pedido="") | ~Q(pedido__in=pedidos_osab))
+            else:
+                pedidos_osab = VendaOSAB.objects.filter(situacao=sit_osab).values_list(
+                    "pedido", flat=True
+                )
+                qs = qs.filter(pedido__in=pedidos_osab)
 
     abertos = qs.exclude(
         status__in=[StatusTicket.RESOLVIDO, StatusTicket.FECHADO, StatusTicket.CANCELADO]
     )
     filtros_ativos = any(
         (request.GET.get(k) or "").strip()
-        for k in ("q", "status", "tipo", "parceiro", "especialista")
+        for k in ("q", "status", "tipo", "parceiro", "especialista", "situacao_osab")
     )
     tickets = list(qs[:200])
     _anexar_osab_fila(tickets)

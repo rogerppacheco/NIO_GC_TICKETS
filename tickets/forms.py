@@ -663,8 +663,13 @@ class FilaFiltroForm(forms.Form):
         label="Especialista",
         widget=forms.Select(attrs={"class": "fila-pick", "aria-label": "Especialista"}),
     )
+    situacao_osab = forms.ChoiceField(
+        required=False,
+        choices=[("", "Todas situações OSAB")],
+        widget=forms.Select(attrs={"class": "fila-pick", "aria-label": "Situação OSAB"}),
+    )
 
-    def __init__(self, *args, parceiros_qs=None, especialistas_qs=None, **kwargs):
+    def __init__(self, *args, parceiros_qs=None, especialistas_qs=None, situacoes_osab=None, **kwargs):
         super().__init__(*args, **kwargs)
         if parceiros_qs is not None:
             self.fields["parceiro"].queryset = parceiros_qs
@@ -674,3 +679,17 @@ class FilaFiltroForm(forms.Form):
             from .acesso import qs_equipe
 
             self.fields["especialista"].queryset = qs_equipe()
+        if situacoes_osab is None:
+            from gestao.models import VendaOSAB
+
+            situacoes_osab = (
+                VendaOSAB.objects.exclude(situacao="")
+                .values_list("situacao", flat=True)
+                .distinct()
+                .order_by("situacao")
+            )
+        self.fields["situacao_osab"].choices = [
+            ("", "Todas situações OSAB"),
+            ("__sem__", "Sem OSAB"),
+            *[(s, s) for s in situacoes_osab],
+        ]

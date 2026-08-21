@@ -15,6 +15,9 @@
   {{ form.q }}
   {{ form.status }}
   {{ form.tipo }}
+  {% if form.situacao_osab %}
+    {{ form.situacao_osab }}
+  {% endif %}
   {{ form.parceiro }}
   {% if mostrar_filtro_especialista and form.especialista %}
     {{ form.especialista }}
@@ -29,17 +32,17 @@
     <table class="table">
       <thead>
         <tr>
-          <th>Protocolo</th>
-          <th>Parceiro</th>
-          <th>Tipo</th>
-          <th>Pedido</th>
-          <th>SITUAÇÃO OSAB</th>
-          <th>Atualização OSAB</th>
-          <th>Fila</th>
-          <th>STATUS</th>
-          <th>Retorno</th>
-          <th>Criado</th>
-          <th></th>
+          <th class="col-proto">Protocolo</th>
+          <th class="col-pdv">Parceiro</th>
+          <th class="col-tipo">Tipo</th>
+          <th class="col-pedido">Pedido</th>
+          <th class="col-osab">SITUAÇÃO OSAB</th>
+          <th class="col-osab-dt">Atualiz. OSAB</th>
+          <th class="col-fila">Fila</th>
+          <th class="col-status">STATUS</th>
+          <th class="col-ret">Retorno</th>
+          <th class="col-criado">Criado</th>
+          <th class="col-acoes"></th>
         </tr>
       </thead>
       <tbody>
@@ -50,11 +53,11 @@
           <td class="cell-clip" title="{{ t.get_tipo_display }}">{{ t.get_tipo_display }}</td>
           <td>{{ t.pedido|default:"—" }}</td>
           <td class="cell-clip" title="{{ t.osab_situacao }}">{{ t.osab_situacao|default:"—" }}</td>
-          <td>{% if t.osab_atualizacao %}{{ t.osab_atualizacao|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
+          <td>{% if t.osab_atualizacao %}{{ t.osab_atualizacao|date:"d/m/y H:i" }}{% else %}—{% endif %}</td>
           <td><span class="pill {{ t.status }}">{{ t.get_status_display }}</span></td>
           <td class="cell-clip" title="{{ t.resultado_status }}">{{ t.resultado_status|default:"—" }}</td>
           <td>{{ t.tempo_retorno_tratamento }}</td>
-          <td>{{ t.criado_em|date:"d/m/Y H:i" }}</td>
+          <td>{{ t.criado_em|date:"d/m/y H:i" }}</td>
           <td>
             <div class="fila-actions">
               <button type="button" class="icon-btn" title="Copiar máscara"
@@ -142,8 +145,8 @@
             "</button>";
         }).join("");
         menu.hidden = false;
-        menu.style.left = Math.max(8, rect.left + window.scrollX - 40) + "px";
-        menu.style.top = (rect.bottom + window.scrollY + 6) + "px";
+        menu.style.left = Math.max(8, rect.left - 40) + "px";
+        menu.style.top = (rect.bottom + 6) + "px";
         menu.querySelectorAll(".mask-menu-item").forEach(function (item) {
           item.addEventListener("click", function () {
             const m = list[Number(item.getAttribute("data-idx"))];

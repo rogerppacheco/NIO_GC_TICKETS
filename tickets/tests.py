@@ -652,9 +652,9 @@ class FilaOsabTests(TestCase):
             r = self.client.get(reverse("fila"))
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "SITUAÇÃO OSAB")
-        self.assertContains(r, "Atualização OSAB")
+        self.assertContains(r, "Atualiz. OSAB")
         self.assertContains(r, "Concluído")
-        self.assertContains(r, "21/08/2026")
+        self.assertContains(r, "21/08/26")
         ticket = r.context["tickets"][0]
         self.assertEqual(ticket.osab_situacao, "Concluído")
         self.assertEqual(ticket.osab_atualizacao, dt_ref)
@@ -667,6 +667,31 @@ class FilaOsabTests(TestCase):
         ticket = r.context["tickets"][0]
         self.assertEqual(ticket.osab_situacao, "")
         self.assertIsNone(ticket.osab_atualizacao)
+
+    def test_filtro_situacao_osab(self):
+        from gestao.models import VendaOSAB
+
+        Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.RESET_SENHA,
+            pedido="99999999",
+        )
+        VendaOSAB.objects.create(
+            pedido="10721324",
+            pdv_nome="PDV",
+            situacao="Em Aprovisionamento",
+        )
+        self.client.force_login(self.gestor)
+        with override_settings(**self.storages):
+            r = self.client.get(reverse("fila"), {"situacao_osab": "Em Aprovisionamento"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.context["tickets"]), 1)
+        self.assertEqual(r.context["tickets"][0].pedido, "10721324")
+        self.assertContains(r, "Todas situações OSAB")
+        with override_settings(**self.storages):
+            r = self.client.get(reverse("fila"), {"situacao_osab": "__sem__"})
+        self.assertEqual(len(r.context["tickets"]), 1)
+        self.assertEqual(r.context["tickets"][0].pedido, "99999999")
 
 
 class SeedNioParceirosTests(TestCase):
