@@ -336,11 +336,20 @@ class DestinatarioEnvioTests(TestCase):
         fake = MagicMock()
         fake.status_code = 200
         fake.json.return_value = {"messageLogId": "ml-9", "status": "QUEUED"}
+        fake_get = MagicMock()
+        fake_get.status_code = 200
+        fake_get.json.return_value = {
+            "id": "ml-9",
+            "status": "SENT",
+            "remoteJid": "5531999999999@s.whatsapp.net",
+            "errorMessage": None,
+        }
         with patch("gestao.messaging.syncwa.requests.post", return_value=fake):
-            r = self.client.post(
-                reverse("gestao_capilaridade"),
-                {"action": "enviar_pdv", "parceiro": self.pdv.id},
-            )
+            with patch("gestao.messaging.syncwa.requests.get", return_value=fake_get):
+                r = self.client.post(
+                    reverse("gestao_capilaridade"),
+                    {"action": "enviar_pdv", "parceiro": self.pdv.id},
+                )
         self.assertEqual(r.status_code, 302)
         log = EnvioWhatsApp.objects.get()
         self.assertEqual(log.status, EnvioWhatsApp.Status.ENVIADO)
@@ -355,9 +364,13 @@ class DestinatarioEnvioTests(TestCase):
         fake = MagicMock()
         fake.status_code = 200
         fake.json.return_value = {"messageLogId": "ml-t", "status": "QUEUED"}
+        fake_get = MagicMock()
+        fake_get.status_code = 200
+        fake_get.json.return_value = {"id": "ml-t", "status": "SENT", "errorMessage": None}
         with patch("gestao.messaging.syncwa.requests.post", return_value=fake):
-            with override_settings(SYNCWA_TEST_JID="5531777777777"):
-                r = self.client.post(reverse("gestao_envios"), {"action": "teste"})
+            with patch("gestao.messaging.syncwa.requests.get", return_value=fake_get):
+                with override_settings(SYNCWA_TEST_JID="5531777777777"):
+                    r = self.client.post(reverse("gestao_envios"), {"action": "teste"})
         self.assertEqual(r.status_code, 302)
         self.assertTrue(EnvioWhatsApp.objects.filter(tipo=EnvioWhatsApp.Tipo.TESTE).exists())
 

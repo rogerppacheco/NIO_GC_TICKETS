@@ -186,7 +186,63 @@ def enviar_texto(to: str, text: str, timeout: float | None = None) -> SyncWAResu
             status=str(data.get("status") or "QUEUED"),
             destino=destino,
         )
+        # Aguarda o worker concluir (SENT/FAILED) para não reportar falso "OK".
+        if last.message_log_id:
+            last = _aguardar_status_envio(last, timeout=min(timeout, 50.0))
+            if not last.ok:
+                return last
     return last
+
+
+def _aguardar_status_envio(result: SyncWAResult, timeout: float = 45.0) -> SyncWAResult:
+    """Poll GET /v1/messages/logs/:id até SENT/DELIVERED/READ ou FAILED."""
+    import time
+
+    deadline = time.time() + max(5.0, timeout)
+    mid = result.message_log_id
+    while time.time() < deadline:
+        try:
+            r = requests.get(
+                f"{_base()}/v1/messages/logs/{mid}",
+                headers=_headers(),
+                timeout=10,
+            )
+        except requests.RequestException:
+            time.sleep(1.5)
+            continue
+        if r.status_code >= 400:
+            time.sleep(1.5)
+            continue
+        try:
+            data = r.json()
+        except Exception:
+            time.sleep(1.5)
+            continue
+        status = str(data.get("status") or "").upper()
+        if status in {"SENT", "DELIVERED", "READ"}:
+            return SyncWAResult(
+                ok=True,
+                message_log_id=mid,
+                status=status,
+                destino=result.destino or str(data.get("remoteJid") or ""),
+            )
+        if status in {"FAILED", "ERROR"}:
+            return SyncWAResult(
+                ok=False,
+                message_log_id=mid,
+                status=status,
+                error=str(data.get("errorMessage") or "Falha no SyncWA ao enviar."),
+                destino=result.destino or str(data.get("remoteJid") or ""),
+            )
+        time.sleep(1.5)
+    # Ainda na fila após timeout: não fingir sucesso definitivo
+    return SyncWAResult(
+        ok=False,
+        message_log_id=mid,
+        status=result.status or "QUEUED",
+        error="SyncWA ainda processando / socket indisponível. Tente de novo em alguns segundos.",
+        destino=result.destino,
+    )
 
 
 def enviar_documento(
@@ -236,9 +292,12 @@ def enviar_documento(
         data = r.json()
     except Exception:
         data = {}
-    return SyncWAResult(
+    result = SyncWAResult(
         ok=True,
         message_log_id=str(data.get("messageLogId") or ""),
         status=str(data.get("status") or "QUEUED"),
         destino=destino,
     )
+    if result.message_log_id:
+        return _aguardar_status_envio(result, timeout=min(timeout, 50.0))
+    return result
