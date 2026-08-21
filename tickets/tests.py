@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -126,6 +127,43 @@ class EspecialistaAcessoTests(TestCase):
         u = User.objects.get(username="bruno")
         self.assertTrue(u.is_staff)
         self.assertEqual(u.perfil_staff.papel, PerfilStaff.Papel.ESPECIALISTA)
+        self.assertEqual(u.perfil_staff.fte, Decimal("1.00"))
+
+    def test_criar_especialista_com_fte_meio_periodo(self):
+        self.client.force_login(self.gestor)
+        r = self.client.post(
+            reverse("especialista_novo"),
+            {
+                "first_name": "Diego",
+                "username": "diego",
+                "email": "d@x.com",
+                "password": "SenhaForte123",
+                "is_active": "on",
+                "fte": "0.50",
+            },
+        )
+        self.assertEqual(r.status_code, 302)
+        User = get_user_model()
+        u = User.objects.get(username="diego")
+        self.assertEqual(u.perfil_staff.fte, Decimal("0.50"))
+
+    @override_settings(
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    )
+    def test_dashboard_calcula_fte_e_tickets_por_fte(self):
+        self.client.force_login(self.gestor)
+        r = self.client.get(reverse("dashboard"))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.context["fte_total"], Decimal("2.00"))
+        self.assertEqual(r.context["tickets_mes"], 2)
+        self.assertEqual(r.context["tickets_por_fte"], 1.0)
+        self.assertContains(r, "FTE da equipe")
+        self.assertContains(r, "Tickets / FTE")
 
     def test_nao_permite_renomear_especialista_para_login_do_gestor(self):
         from .forms import EspecialistaForm

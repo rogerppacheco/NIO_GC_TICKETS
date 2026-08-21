@@ -89,7 +89,7 @@ admin.site.register(Anexo)
 
 @admin.register(PerfilStaff)
 class PerfilStaffAdmin(admin.ModelAdmin):
-    list_display = ("user", "papel")
+    list_display = ("user", "papel", "fte")
     list_filter = ("papel",)
 
 

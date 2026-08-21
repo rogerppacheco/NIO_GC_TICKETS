@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm
@@ -113,6 +115,17 @@ class EspecialistaForm(forms.Form):
         required=False,
         help_text="Deixe em branco para manter a senha atual.",
     )
+    fte = forms.DecimalField(
+        label="FTE",
+        max_digits=3,
+        decimal_places=2,
+        required=False,
+        initial=Decimal("1.00"),
+        min_value=Decimal("0.01"),
+        max_value=Decimal("9.99"),
+        help_text="1.00 representa tempo integral e 0.5 representa meio período.",
+        widget=forms.NumberInput(attrs={"step": "0.01", "min": "0.01", "max": "9.99"}),
+    )
     is_active = forms.BooleanField(label="Ativo", required=False, initial=True)
     eh_admin = forms.BooleanField(
         label="Admin — vê todos os tickets",
@@ -135,6 +148,7 @@ class EspecialistaForm(forms.Form):
                 "eh_admin": bool(
                     perfil and perfil.papel == PerfilStaff.Papel.GESTOR
                 ),
+                "fte": perfil.fte if perfil else Decimal("1.00"),
             }
         super().__init__(*args, **kwargs)
         if instance is None:
@@ -212,7 +226,10 @@ class EspecialistaForm(forms.Form):
             )
         perfil, _ = PerfilStaff.objects.update_or_create(
             user=user,
-            defaults={"papel": papel},
+            defaults={
+                "papel": papel,
+                "fte": dados.get("fte") or Decimal("1.00"),
+            },
         )
         user.perfil_staff = perfil
         return user

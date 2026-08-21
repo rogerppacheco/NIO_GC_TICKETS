@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.conf import settings
 from django.db import models, transaction
 from django.db.models import Max
@@ -464,6 +466,13 @@ class PerfilStaff(models.Model):
         choices=Papel.choices,
         default=Papel.ESPECIALISTA,
         db_index=True,
+    )
+    fte = models.DecimalField(
+        "FTE",
+        max_digits=3,
+        decimal_places=2,
+        default=Decimal("1.00"),
+        help_text="1.00 representa tempo integral e 0.5 representa meio período.",
     )
 
     class Meta:

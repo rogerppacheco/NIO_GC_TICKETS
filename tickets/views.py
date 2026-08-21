@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.contrib import messages
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView, LogoutView
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -926,6 +928,13 @@ def dashboard(request: HttpRequest) -> HttpResponse:
                 "pct": round((100.0 * qtd / total), 1) if total else 0.0,
             }
         )
+    agora = timezone.localtime()
+    inicio_mes = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    fte_total = qs_equipe().aggregate(total=Sum("perfil_staff__fte"))["total"] or Decimal("0")
+    tickets_mes = base.filter(criado_em__gte=inicio_mes).count()
+    tickets_por_fte = (
+        round(float(tickets_mes) / float(fte_total), 1) if fte_total else 0.0
+    )
     return render(
         request,
         "tickets/dashboard.html",
@@ -943,6 +952,9 @@ def dashboard(request: HttpRequest) -> HttpResponse:
             "por_tipo": por_tipo,
             "por_tipo_total": sum(r["c"] for r in por_tipo),
             "recentes": base.select_related("parceiro")[:15],
+            "fte_total": fte_total,
+            "tickets_mes": tickets_mes,
+            "tickets_por_fte": tickets_por_fte,
         },
     )
 

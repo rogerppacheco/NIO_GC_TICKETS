@@ -14,6 +14,8 @@
   <div class="card"><div class="label">Abertos</div><div class="value">{{ abertos }}</div></div>
   <div class="card"><div class="label">Novos</div><div class="value">{{ novos }}</div></div>
   <div class="card"><div class="label">Resolvidos</div><div class="value">{{ por_status.resolvido|default:0 }}</div></div>
+  <div class="card"><div class="label">FTE da equipe</div><div class="value">{{ fte_total|floatformat:2 }}</div></div>
+  <div class="card"><div class="label">Tickets / FTE (mês)</div><div class="value">{{ tickets_por_fte|floatformat:1 }}</div></div>
 </div>
 
 <div class="grid-2">

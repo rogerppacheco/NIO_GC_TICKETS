@@ -16,6 +16,7 @@
           <th>Nome</th>
           <th>Login</th>
           <th>Papel</th>
+          <th>FTE</th>
           <th>E-mail</th>
           <th>PDVs</th>
           <th>Situação</th>
@@ -34,6 +35,7 @@
               Especialista
             {% endif %}
           </td>
+          <td class="mono">{{ u.perfil_staff.fte|floatformat:2 }}</td>
           <td>{{ u.email|default:"—" }}</td>
           <td>{{ u.qtd_parceiros }}</td>
           <td>
@@ -52,7 +54,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="7">Ninguém na equipe ainda. Crie um especialista e vincule no cadastro do parceiro.</td></tr>
+        <tr><td colspan="8">Ninguém na equipe ainda. Crie um especialista e vincule no cadastro do parceiro.</td></tr>
         {% endfor %}
       </tbody>
     </table>
