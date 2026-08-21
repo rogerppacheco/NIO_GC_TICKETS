@@ -15,6 +15,7 @@ urlpatterns = [
     path("recompra/", views.recompra_view, name="gestao_recompra"),
     path("configuracoes/", views.configs_view, name="gestao_configs"),
     path("destinatarios/", views.destinatarios_view, name="gestao_destinatarios"),
+    path("destinatarios/do-grupo/", views.destinatario_do_grupo, name="gestao_destinatario_do_grupo"),
     path("destinatarios/<int:pk>/", views.destinatario_editar, name="gestao_destinatario_editar"),
     path("destinatarios/<int:pk>/excluir/", views.destinatario_excluir, name="gestao_destinatario_excluir"),
     path("destinatarios/<int:pk>/toggle/", views.destinatario_toggle, name="gestao_destinatario_toggle"),

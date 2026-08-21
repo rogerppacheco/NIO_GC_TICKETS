@@ -7,6 +7,9 @@
     <h1>Destinatários WhatsApp</h1>
     <p>Cadastre o JID (número com DDI ou grupo @g.us). Sem JID o SyncWA não envia.</p>
   </div>
+  {% if syncwa_ok %}
+  <a class="btn btn-primary" href="{% url 'gestao_destinatarios' %}?grupos=1">Listar grupos SyncWA</a>
+  {% endif %}
 </div>
 
 {% if not syncwa_ok %}
@@ -23,11 +26,63 @@
   </div>
 {% endif %}
 
+{% if grupos and grupos.ok %}
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-h">
+    <h2>Grupos da sessão ({{ grupos.count }})</h2>
+    <a class="btn btn-ghost" href="{% url 'gestao_destinatarios' %}">Fechar</a>
+  </div>
+  <div class="panel-b">
+    <p class="help" style="margin-bottom:0.8rem">Escolha o PDV e clique em <strong>Vincular</strong>. O JID correto (@g.us) é preenchido automaticamente.</p>
+    <input type="search" id="filtro-grupos" class="fila-pick" placeholder="Filtrar por nome do grupo…" style="width:100%;max-width:28rem;margin-bottom:0.8rem">
+    <div class="table-scroll">
+      <table class="table" id="tabela-grupos">
+        <thead>
+          <tr>
+            <th>Grupo</th>
+            <th>Membros</th>
+            <th>JID</th>
+            <th>PDV</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in grupos.groups %}
+          <tr data-nome="{{ g.name|lower }}">
+            <td><strong>{{ g.name }}</strong></td>
+            <td>{{ g.size }}</td>
+            <td class="mono help">{{ g.jid }}</td>
+            <td colspan="2">
+              <form method="post" action="{% url 'gestao_destinatario_do_grupo' %}" class="fila-toolbar" style="gap:0.4rem;flex-wrap:wrap">
+                {% csrf_token %}
+                <input type="hidden" name="jid" value="{{ g.jid }}">
+                <input type="hidden" name="nome" value="{{ g.name }}">
+                <select name="parceiro" class="fila-pick" required>
+                  <option value="">PDV…</option>
+                  {% for p in parceiros %}
+                    <option value="{{ p.id }}">{{ p.nome }}</option>
+                  {% endfor %}
+                </select>
+                <button class="btn btn-primary" type="submit">Vincular</button>
+                <button class="btn btn-ghost" type="button" data-fill-jid="{{ g.jid }}" data-fill-nome="{{ g.name }}">Usar no formulário</button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5">Nenhum grupo encontrado nesta sessão.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <div class="grid-2" style="margin-bottom:1rem">
   <div class="panel">
     <div class="panel-h"><h2>Novo destinatário</h2></div>
     <div class="panel-b">
-      <form method="post" class="form-grid">
+      <form method="post" class="form-grid" id="form-destinatario">
         {% csrf_token %}
         <div>{{ form.parceiro.label_tag }}{{ form.parceiro }}</div>
         <div>{{ form.nome.label_tag }}{{ form.nome }}</div>
@@ -56,11 +111,12 @@
     </div>
   </div>
   <div class="panel">
-    <div class="panel-h"><h2>Como obter o JID do grupo</h2></div>
+    <div class="panel-h"><h2>Como vincular um grupo</h2></div>
     <div class="panel-b">
-      <p class="help">1. Pareie a instância no SyncWA (QR).</p>
-      <p class="help">2. Pegue o JID do grupo (termina em <code>@g.us</code>) uma vez e cadastre aqui.</p>
-      <p class="help">3. Número individual: DDI + DDD + número, ex. <code>5531999999999</code>.</p>
+      <p class="help">1. Clique em <strong>Listar grupos SyncWA</strong> (chip precisa estar pareado).</p>
+      <p class="help">2. Filtre pelo nome do grupo do PDV.</p>
+      <p class="help">3. Escolha o PDV e <strong>Vincular</strong> — ou use «Usar no formulário» para ajustar flags.</p>
+      <p class="help">4. Número individual: DDI + DDD + número, ex. <code>5531999999999</code>.</p>
       <p style="margin-top:0.8rem"><a class="btn btn-secondary" href="{% url 'gestao_envios' %}">Ir para Envios</a></p>
     </div>
   </div>
@@ -114,4 +170,30 @@
     </table>
   </div>
 </div>
+<script>
+(function () {
+  const filtro = document.getElementById("filtro-grupos");
+  if (filtro) {
+    filtro.addEventListener("input", function () {
+      const q = (filtro.value || "").toLowerCase().trim();
+      document.querySelectorAll("#tabela-grupos tbody tr[data-nome]").forEach(function (tr) {
+        tr.style.display = !q || tr.getAttribute("data-nome").includes(q) ? "" : "none";
+      });
+    });
+  }
+  document.querySelectorAll("[data-fill-jid]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const jid = btn.getAttribute("data-fill-jid");
+      const nome = btn.getAttribute("data-fill-nome");
+      const jidEl = document.getElementById("id_jid");
+      const nomeEl = document.getElementById("id_nome");
+      const tipoEl = document.getElementById("id_tipo");
+      if (jidEl) jidEl.value = jid;
+      if (nomeEl && nome) nomeEl.value = nome;
+      if (tipoEl) tipoEl.value = "grupo";
+      document.getElementById("form-destinatario")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
+})();
+</script>
 {% endblock %}

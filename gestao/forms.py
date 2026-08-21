@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from django import forms
 
 from tickets.models import Parceiro
@@ -46,6 +48,14 @@ class DestinatarioForm(forms.ModelForm):
         jid = (self.cleaned_data.get("jid") or "").strip()
         if not jid:
             raise forms.ValidationError("Informe o número ou o JID do grupo.")
+        if "@" in jid:
+            return jid
+        digitos = re.sub(r"\D", "", jid)
+        if not digitos:
+            raise forms.ValidationError(
+                "JID inválido. Use o número com DDI (ex.: 5531999999999) "
+                "ou o JID do grupo (…@g.us) — não o nome do contato."
+            )
         return jid
 
 

@@ -90,6 +90,30 @@ def healthcheck(timeout: float = 5.0) -> dict:
         return {"ok": False, "error": str(exc)}
 
 
+def listar_grupos(timeout: float | None = None) -> dict:
+    """GET /v1/groups — grupos da sessão SyncWA pareada."""
+    if not syncwa_configurado():
+        return {"ok": False, "error": "SyncWA não configurado.", "groups": []}
+    timeout = timeout if timeout is not None else float(getattr(settings, "SYNCWA_TIMEOUT", 60))
+    try:
+        r = requests.get(f"{_base()}/v1/groups", headers=_headers(), timeout=timeout)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": f"Falha de rede: {exc}", "groups": []}
+    if r.status_code >= 400:
+        try:
+            detail = r.json()
+            msg = detail.get("message") or detail.get("error") or detail
+        except Exception:
+            msg = r.text[:300]
+        return {"ok": False, "error": f"HTTP {r.status_code}: {msg}", "groups": []}
+    try:
+        data = r.json()
+    except Exception:
+        return {"ok": False, "error": "Resposta inválida do SyncWA.", "groups": []}
+    groups = data.get("groups") or []
+    return {"ok": True, "count": int(data.get("count") or len(groups)), "groups": groups}
+
+
 def _chunk_texto(texto: str, limite: int = 4000) -> list[str]:
     texto = (texto or "").strip()
     if not texto:

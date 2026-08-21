@@ -5,6 +5,7 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
 from django.db.models import Count, Max, Q
+from django.urls import reverse
 
 from tickets.acesso import eh_gestor, gestor_required, parceiros_visiveis
 from tickets.models import Parceiro
@@ -27,7 +28,7 @@ from .messaging.envio import (
     enviar_venda_indevida,
     enviar_venda_indevida_lote,
 )
-from .messaging.syncwa import healthcheck, modo_teste_ativo, syncwa_configurado
+from .messaging.syncwa import healthcheck, listar_grupos, modo_teste_ativo, syncwa_configurado
 from .models import (
     CadastroTerceiro,
     ConfiguracaoOSAB,
@@ -688,6 +689,11 @@ def destinatarios_view(request: HttpRequest) -> HttpResponse:
         messages.success(request, "Destinatário salvo.")
         return redirect("gestao_destinatarios")
     lista = Destinatario.objects.select_related("parceiro").all()
+    grupos = None
+    if request.GET.get("grupos") == "1" and syncwa_configurado():
+        grupos = listar_grupos()
+        if not grupos.get("ok"):
+            messages.error(request, f"Não foi possível listar grupos: {grupos.get('error')}")
     return render(
         request,
         "gestao/destinatarios.html",
@@ -696,8 +702,41 @@ def destinatarios_view(request: HttpRequest) -> HttpResponse:
             "destinatarios": lista,
             "syncwa_ok": syncwa_configurado(),
             "modo_teste": modo_teste_ativo(),
+            "grupos": grupos,
+            "parceiros": Parceiro.objects.filter(ativo=True).order_by("nome"),
         },
     )
+
+
+@gestor_required
+def destinatario_do_grupo(request: HttpRequest) -> HttpResponse:
+    """Cadastra rápido um grupo SyncWA como destinatário de um PDV."""
+    if request.method != "POST":
+        return redirect("gestao_destinatarios")
+    parceiro_id = request.POST.get("parceiro")
+    jid = (request.POST.get("jid") or "").strip()
+    nome = (request.POST.get("nome") or "").strip() or jid
+    if not parceiro_id or not jid or "@g.us" not in jid:
+        messages.error(request, "Informe o PDV e um JID de grupo válido (@g.us).")
+        return redirect(f"{reverse('gestao_destinatarios')}?grupos=1")
+    parceiro = get_object_or_404(Parceiro, pk=parceiro_id, ativo=True)
+    existente = Destinatario.objects.filter(parceiro=parceiro, jid=jid).first()
+    if existente:
+        messages.warning(request, f"Já existe destinatário {existente.nome} com este JID neste PDV.")
+        return redirect("gestao_destinatarios")
+    Destinatario.objects.create(
+        parceiro=parceiro,
+        nome=nome[:150],
+        jid=jid,
+        tipo=Destinatario.TipoDestino.GRUPO,
+        ativo=True,
+        envio_capilaridade=True,
+        envio_osab=True,
+        envio_fpd=True,
+        envio_churn=True,
+    )
+    messages.success(request, f"Grupo «{nome}» vinculado a {parceiro.nome}.")
+    return redirect("gestao_destinatarios")
 
 
 @gestor_required
