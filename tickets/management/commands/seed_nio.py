@@ -162,18 +162,23 @@ class Command(BaseCommand):
         parser.add_argument("--email", default="admin@example.com")
 
     def handle(self, *args, **options):
-        for codigo, nome in PARCEIROS:
-            parceiro, _ = Parceiro.objects.update_or_create(
-                codigo_pdv=codigo,
-                defaults={"nome": nome, "ativo": True},
+        if Parceiro.objects.exists():
+            self.stdout.write(
+                "parceiros: já existem — seed não recria PDVs excluídos nem reativa inativos"
             )
-            if not parceiro.contatos.exists():
-                ContatoParceiro.objects.create(
-                    parceiro=parceiro,
-                    nome=f"Contato {nome}",
-                    ativo=True,
+        else:
+            for codigo, nome in PARCEIROS:
+                parceiro, _ = Parceiro.objects.get_or_create(
+                    codigo_pdv=codigo,
+                    defaults={"nome": nome, "ativo": True},
                 )
-        self.stdout.write(self.style.SUCCESS(f"{len(PARCEIROS)} parceiros ok"))
+                if not parceiro.contatos.exists():
+                    ContatoParceiro.objects.create(
+                        parceiro=parceiro,
+                        nome=f"Contato {nome}",
+                        ativo=True,
+                    )
+            self.stdout.write(self.style.SUCCESS(f"{len(PARCEIROS)} parceiros ok"))
 
         # Migra contato legado do PDV → ContatoParceiro, se ainda não existir
         for p in Parceiro.objects.all():

@@ -667,3 +667,34 @@ class FilaOsabTests(TestCase):
         ticket = r.context["tickets"][0]
         self.assertEqual(ticket.osab_situacao, "")
         self.assertIsNone(ticket.osab_atualizacao)
+
+
+class SeedNioParceirosTests(TestCase):
+    def test_primeira_carga_cria_parceiros_iniciais(self):
+        from django.core.management import call_command
+
+        from tickets.management.commands.seed_nio import PARCEIROS
+
+        call_command("seed_nio")
+        self.assertEqual(Parceiro.objects.count(), len(PARCEIROS))
+        self.assertTrue(Parceiro.objects.filter(codigo_pdv="1068279", nome="APOLO").exists())
+
+    def test_seed_nao_recria_parceiro_excluido(self):
+        from django.core.management import call_command
+
+        call_command("seed_nio")
+        Parceiro.objects.filter(codigo_pdv="1068279").delete()
+        call_command("seed_nio")
+        self.assertFalse(Parceiro.objects.filter(codigo_pdv="1068279").exists())
+        self.assertTrue(Parceiro.objects.filter(codigo_pdv="1068432").exists())
+
+    def test_seed_nao_reativa_parceiro_inativo(self):
+        from django.core.management import call_command
+
+        call_command("seed_nio")
+        p = Parceiro.objects.get(codigo_pdv="1068279")
+        p.ativo = False
+        p.save(update_fields=["ativo"])
+        call_command("seed_nio")
+        p.refresh_from_db()
+        self.assertFalse(p.ativo)
