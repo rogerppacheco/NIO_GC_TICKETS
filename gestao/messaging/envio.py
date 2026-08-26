@@ -128,7 +128,7 @@ def _enviar_para_lista(
 
 def enviar_teste(user: AbstractBaseUser | None = None) -> ResumoEnvio:
     texto = (
-        "*NIO GC Tickets — teste WhatsApp*\n\n"
+        "✅ *NIO GC Tickets — teste WhatsApp*\n\n"
         "Se você recebeu esta mensagem, a integração está ok."
     )
     from django.conf import settings
@@ -274,7 +274,7 @@ def enviar_fpd_pdv(parceiro: Parceiro, user: AbstractBaseUser | None = None) -> 
         criticos = list(destinatarios_para("envio_fpd_critico"))
         if criticos:
             alerta = (
-                f"*Alerta FPD crítico — {rel.pdv_nome}*\n"
+                f"🚨 *Alerta FPD crítico — {rel.pdv_nome}*\n"
                 f"Percentual FPD: *{rel.percentual:.2f}%* (limite {limite:.2f}%)\n\n"
                 f"{rel.mensagem}"
             )

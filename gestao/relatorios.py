@@ -91,7 +91,7 @@ def montar_mascara_pdv(parceiro: Parceiro, ano: int | None = None, mes: int | No
     pct = (ativos / meta * 100) if meta else 0
     partes = [
         f"*Capilaridade {parceiro.nome}* · {hoje().strftime('%d/%m')}",
-        f"Meta: {meta} | Ativos: {ativos} ({pct:.1f}%)",
+        f"🎯 Meta: {meta} | 🟢 Ativos: {ativos} ({pct:.1f}%)",
     ]
     inativos, avencer, recentes = [], [], []
     for linha in linhas:
@@ -107,22 +107,24 @@ def montar_mascara_pdv(parceiro: Parceiro, ano: int | None = None, mes: int | No
         else:
             recentes.append(txt)
     if inativos:
-        partes.append(f"*Inativos a recuperar: {len(inativos)}*\n" + "\n".join(inativos))
+        partes.append(f"🆘 *Inativos a recuperar: {len(inativos)}*\n" + "\n".join(inativos))
     if avencer:
-        partes.append(f"*A vencer: {len(avencer)}*\n" + "\n".join(avencer))
+        partes.append(f"⚠️ *A vencer: {len(avencer)}*\n" + "\n".join(avencer))
     if recentes:
-        partes.append(f"*Recentes: {len(recentes)}*\n" + "\n".join(recentes))
+        partes.append(
+            f"🎉 *Capilaridade com vendas - Recentes: {len(recentes)}*\n" + "\n".join(recentes)
+        )
 
     auditoria = resumir_auditoria(parceiro, ano, mes)
     titulos = (
-        ("Vendas Operador Back-office indicador", auditoria["operador_backoffice_indicador"]),
-        ("Vendas Operador de Vendas interna", auditoria["operador_venda_interna"]),
-        ("TTs que não podem ter vendas", auditoria["nao_vendedor"]),
+        ("🏢", "Vendas Operador Back-office indicador", auditoria["operador_backoffice_indicador"]),
+        ("📞", "Vendas Operador de Vendas interna", auditoria["operador_venda_interna"]),
+        ("⛔", "TTs que não podem ter vendas, e teve input incorreto", auditoria["nao_vendedor"]),
     )
-    for titulo, itens in titulos:
+    for icone, titulo, itens in titulos:
         if not itens:
             continue
-        linhas_txt = [f"*{titulo}: {len(itens)}*"]
+        linhas_txt = [f"{icone} *{titulo}: {len(itens)}*"]
         for item in itens:
             dias = item["dias"]
             dias_n = dias if isinstance(dias, int) else None
@@ -148,7 +150,9 @@ def resumo_geral(parceiros: list[Parceiro], ano: int, mes: int) -> str:
         inativos += sum(1 for l in linhas if l["status"] == "Inativo")
     pct = (ativos / meta_total * 100) if meta_total else 0
     return (
-        f"*Resumo Capilaridade* · {hoje().strftime('%d/%m')}\n\n"
-        f"Meta: {meta_total} | Ativos: {ativos} | Inativos: {inativos}\n"
-        f"Atingimento: {pct:.1f}%"
+        f"📊 *Resumo Capilaridade* · {hoje().strftime('%d/%m')}\n\n"
+        f"🎯 *Meta de vendedores ativos:* {meta_total}\n"
+        f"🟢 *Ativos (≤ 7 dias):* {ativos}\n"
+        f"🔴 *Inativos:* {inativos}\n"
+        f"📈 *Atingimento:* {pct:.1f}%"
     )

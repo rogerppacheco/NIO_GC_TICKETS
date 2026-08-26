@@ -127,7 +127,7 @@ def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
             sem_parceiro.append(str(apelido))
             continue
         df_pdv = df[df[col_pdv] == apelido].copy()
-        mensagem = f"*Relatório FPD - {apelido}*\n_(Faturas Por Dia)_\n\n"
+        mensagem = f"📊 *Relatório FPD - {apelido}*\n_(Faturas Por Dia)_\n\n"
         meses_ref = sorted(df_pdv[col_ref].dropna().unique(), key=lambda x: str(x))
         total_fat = total_ab = 0
         detalhe_meses = []
@@ -153,7 +153,7 @@ def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
                 contagem = abertos[col_faixa].apply(_normalizar_faixa).dropna().value_counts().to_dict()
                 for chave in faixas:
                     faixas[chave] = int(contagem.get(chave, 0))
-            mensagem += f"*Mês fatura: {_fmt_mes(mes_ref)}*\n"
+            mensagem += f"🗓️ *Mês fatura: {_fmt_mes(mes_ref)}*\n"
             mensagem += f"   - Total: *{total}*\n"
             mensagem += f"   - Pagas: *{pagas}*\n"
             mensagem += f"   - Em aberto: *{abertas}*\n"
@@ -172,7 +172,7 @@ def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
             )
         perc_pdv = (total_ab / total_fat * 100) if total_fat else 0
         mensagem += (
-            f"*FPD consolidado:* {perc_pdv:.2f}% (Abertas: {total_ab} / Total: {total_fat})"
+            f"📌 *FPD consolidado:* {perc_pdv:.2f}% (Abertas: {total_ab} / Total: {total_fat})"
         )
         RelatorioFPD.objects.create(
             lote=lote,

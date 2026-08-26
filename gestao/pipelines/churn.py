@@ -70,7 +70,10 @@ def processar_churn(arquivo, nome_arquivo: str) -> dict:
             continue
         parceiro = Parceiro.objects.get(pk=parceiro_id)
         churn_pdv = contagem[contagem[col_pdv] == apelido]
-        mensagem = f"*Relatório de Churn - {parceiro.nome}*\n\nAnálise de cancelamentos por safra:\n\n"
+        mensagem = (
+            f"📉 *Relatório de Churn - {parceiro.nome}*\n\n"
+            "Análise de cancelamentos por safra de instalação:\n\n"
+        )
         bonus_total = 0
         teve = False
         linhas_hist = []
@@ -89,7 +92,7 @@ def processar_churn(arquivo, nome_arquivo: str) -> dict:
             rem = max(0, gross - churn)
             bonus = rem * 150
             bonus_total += bonus
-            mensagem += f"*Safra:* {label_anomes(anomes)}\n"
+            mensagem += f"🗓️ *Safra:* {label_anomes(anomes)}\n"
             mensagem += f"   - Instalados (Gross): *{gross}*\n"
             mensagem += f"   - Cancelados (Churn): *{churn}*\n"
             mensagem += f"   - Taxa: *{taxa:.2f}%*\n"
@@ -123,7 +126,7 @@ def processar_churn(arquivo, nome_arquivo: str) -> dict:
                     mensagem += "   - Top motivos:\n"
                     for motivo, qtd in top.items():
                         mensagem += f"      · {motivo}: {(qtd / churn * 100):.2f}% ({qtd})\n"
-            mensagem += f"   - Bônus potencial [{rem}] x [R$ 150,00]: {formatar_moeda(bonus)}\n\n"
+            mensagem += f"   - *Bônus potencial [{rem}] x [R$ 150,00]:* {formatar_moeda(bonus)}\n\n"
             linhas_hist.append(
                 HistoricoChurn(
                     data_analise=data_analise,
@@ -140,8 +143,8 @@ def processar_churn(arquivo, nome_arquivo: str) -> dict:
             )
 
         if teve:
-            mensagem += f"*Bônus potencial total:* {formatar_moeda(bonus_total)}\n"
-            mensagem += "_Valores simulados. Elegibilidade exige adimplência e sem downgrade._"
+            mensagem += f"💰 *Bônus potencial total:* {formatar_moeda(bonus_total)}\n"
+            mensagem += "⚠️ _Valores simulados. Elegibilidade exige adimplência e sem downgrade._"
             if linhas_hist:
                 linhas_hist[0].mensagem = mensagem
             HistoricoChurn.objects.bulk_create(linhas_hist)

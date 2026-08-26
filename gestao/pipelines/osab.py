@@ -344,8 +344,8 @@ def calcular_osab(ano: int, mes: int) -> dict:
             "total_gross": realizado_gross,
         }
         mensagem_partes = [
-            f"*OSAB {pdv_nome}* · {hoje_ref.strftime('%d/%m/%Y')}",
-            f"VL: {realizado_vl} | Gross: {realizado_gross}",
+            f"🤖 *OSAB {pdv_nome}* · {hoje_ref.strftime('%d/%m/%Y')}",
+            f"📊 VL: {realizado_vl} | Gross: {realizado_gross}",
         ]
         status = "Ok"
         atingimento_vl = atingimento_gross = comissao_proj = None
@@ -425,10 +425,13 @@ def calcular_osab(ano: int, mes: int) -> dict:
             if bonus_m10:
                 detalhes["bonus_m10"] = bonus_m10
             mensagem_partes.append(
-                f"Meta VL: {config.meta_vl} ({atingimento_vl:.1f}%) | "
+                f"🎯 Meta VL: {config.meta_vl} ({atingimento_vl:.1f}%) | "
                 f"Meta Gross: {config.meta_gross} ({atingimento_gross:.1f}%)"
             )
-            mensagem_partes.append(f"Comissão projetada: R$ {comissao_proj:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+            mensagem_partes.append(
+                "💰 Comissão projetada: R$ "
+                + f"{comissao_proj:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            )
 
         meta_cap = MetaCapilaridade.objects.filter(parceiro=parceiro, ano=ano, mes=mes).first()
         if meta_cap and meta_cap.meta_vendedores:
@@ -443,7 +446,7 @@ def calcular_osab(ano: int, mes: int) -> dict:
                 "atingimento": pct,
             }
             mensagem_partes.append(
-                f"Capilaridade: {ativos}/{meta_cap.meta_vendedores} ativos ({pct:.1f}%) · inativos {inativos}"
+                f"📈 Capilaridade: {ativos}/{meta_cap.meta_vendedores} ativos ({pct:.1f}%) · inativos {inativos}"
             )
 
         HistoricoOSAB.objects.create(

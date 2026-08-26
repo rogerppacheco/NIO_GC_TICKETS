@@ -172,6 +172,8 @@ class FpdChurnTests(TestCase):
         rel = RelatorioFPD.objects.get(parceiro=self.pdv)
         self.assertEqual(rel.total_abertas, 1)
         self.assertIn("Relatório FPD", rel.mensagem)
+        self.assertIn("📊", rel.mensagem)
+        self.assertIn("🗓️", rel.mensagem)
 
     def test_churn(self):
         anomes = int(timezone.localdate().strftime("%Y%m"))
@@ -184,6 +186,18 @@ class FpdChurnTests(TestCase):
         h = HistoricoChurn.objects.get(parceiro=self.pdv, anomes_gross=anomes)
         self.assertEqual(h.churn, 1)
         self.assertEqual(h.gross, 10)
+        self.assertIn("📉", h.mensagem)
+        self.assertIn("💰", h.mensagem)
+
+    def test_resumo_capilaridade_tem_icones(self):
+        from gestao.periodo import periodo_ativo
+        from gestao.relatorios import resumo_geral
+
+        ano, mes = periodo_ativo()
+        txt = resumo_geral([self.pdv], ano, mes)
+        self.assertIn("📊", txt)
+        self.assertIn("🎯", txt)
+        self.assertIn("🟢", txt)
 
 
 @override_settings(
