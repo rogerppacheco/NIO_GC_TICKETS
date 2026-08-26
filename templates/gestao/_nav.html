@@ -1,6 +1,7 @@
 <nav class="gestao-nav" aria-label="Gestão">
   {% with esc=gestao_escopo|default:"meus" %}
   <a href="{% url 'gestao_hub' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_hub' %}class="is-on"{% endif %}>Início</a>
+  <a href="{% url 'gestao_sysmap' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_sysmap' %}class="is-on"{% endif %}>Sysmap</a>
   <a href="{% url 'gestao_osab' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_osab' %}class="is-on"{% endif %}>OSAB</a>
   <a href="{% url 'gestao_capilaridade' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_capilaridade' %}class="is-on"{% endif %}>Capilaridade</a>
   <a href="{% url 'gestao_fpd' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_fpd' %}class="is-on"{% endif %}>FPD</a>

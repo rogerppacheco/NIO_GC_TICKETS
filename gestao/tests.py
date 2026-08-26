@@ -472,6 +472,11 @@ class GestaoViewsTests(TestCase):
         self.assertContains(cap, "VENDEDOR EXTERNO")
         self.assertContains(cap, "Meus parceiros")
         self.assertContains(cap, "Outros especialistas")
+        sysmap = self.client.get(reverse("gestao_sysmap"))
+        self.assertContains(sysmap, "Sysmap / Supply")
+        self.assertContains(sysmap, "Importar Sysmap")
+        cap = self.client.get(reverse("gestao_capilaridade"))
+        self.assertContains(cap, "Sysmap")
 
     @override_settings(
         EVOLUTION_API_URL="https://evo.test",
