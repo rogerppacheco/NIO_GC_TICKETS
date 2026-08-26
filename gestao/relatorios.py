@@ -24,11 +24,12 @@ def formatar_data_curta(valor) -> str:
     return "??"
 
 
-def _linha_tt(matricula, dias, ultima) -> str:
+def _linha_tt(matricula, dias, ultima, nome: str = "") -> str:
     chave = normalizar_chave_tt(matricula) or str(matricula)
+    prefixo = f"{chave} · {nome}" if (nome or "").strip() else chave
     if dias is None:
-        return f"{chave} · sem vendas"
-    return f"{chave} · {int(dias)}d · {formatar_data_curta(ultima)}"
+        return f"{prefixo} · sem vendas"
+    return f"{prefixo} · {int(dias)}d · {formatar_data_curta(ultima)}"
 
 
 def resumir_auditoria(parceiro: Parceiro, ano: int, mes: int) -> dict:
@@ -77,7 +78,12 @@ def resumir_auditoria(parceiro: Parceiro, ano: int, mes: int) -> dict:
     return buckets
 
 
-def montar_mascara_pdv(parceiro: Parceiro, ano: int | None = None, mes: int | None = None) -> str:
+def montar_mascara_pdv(
+    parceiro: Parceiro,
+    ano: int | None = None,
+    mes: int | None = None,
+    filtros: dict | None = None,
+) -> str:
     if ano is None or mes is None:
         ano, mes = periodo_ativo()
     meta = (
@@ -86,8 +92,8 @@ def montar_mascara_pdv(parceiro: Parceiro, ano: int | None = None, mes: int | No
         .first()
         or 0
     )
-    linhas = linhas_capilaridade_pdv(parceiro)
-    ativos = contar_ativos_pdv(parceiro, linhas)
+    linhas = linhas_capilaridade_pdv(parceiro, filtros)
+    ativos = contar_ativos_pdv(parceiro, linhas, filtros)
     pct = (ativos / meta * 100) if meta else 0
     partes = [
         f"*Capilaridade {parceiro.nome}* · {hoje().strftime('%d/%m')}",
@@ -96,10 +102,17 @@ def montar_mascara_pdv(parceiro: Parceiro, ano: int | None = None, mes: int | No
     inativos, avencer, recentes = [], [], []
     for linha in linhas:
         if linha.get("sem_venda_osab"):
-            inativos.append(_linha_tt(linha["matricula_vendedor"], None, None))
+            inativos.append(
+                _linha_tt(linha["matricula_vendedor"], None, None, linha.get("nome_vendedor") or "")
+            )
             continue
         dias = int(linha["dias_sem_vender"] or 0)
-        txt = _linha_tt(linha["matricula_vendedor"], dias, linha["ultima_venda"])
+        txt = _linha_tt(
+            linha["matricula_vendedor"],
+            dias,
+            linha["ultima_venda"],
+            linha.get("nome_vendedor") or "",
+        )
         if dias >= 7:
             inativos.append(txt)
         elif dias >= 5:
@@ -133,7 +146,12 @@ def montar_mascara_pdv(parceiro: Parceiro, ano: int | None = None, mes: int | No
     return "\n\n".join(partes)
 
 
-def resumo_geral(parceiros: list[Parceiro], ano: int, mes: int) -> str:
+def resumo_geral(
+    parceiros: list[Parceiro],
+    ano: int,
+    mes: int,
+    filtros: dict | None = None,
+) -> str:
     meta_total = 0
     ativos = 0
     inativos = 0
@@ -145,8 +163,8 @@ def resumo_geral(parceiros: list[Parceiro], ano: int, mes: int) -> str:
             or 0
         )
         meta_total += meta
-        linhas = linhas_capilaridade_pdv(p)
-        ativos += contar_ativos_pdv(p, linhas)
+        linhas = linhas_capilaridade_pdv(p, filtros)
+        ativos += contar_ativos_pdv(p, linhas, filtros)
         inativos += sum(1 for l in linhas if l["status"] == "Inativo")
     pct = (ativos / meta_total * 100) if meta_total else 0
     return (

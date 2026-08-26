@@ -1,12 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Churn · Gestão{% endblock %}
 {% block content %}
-{% include "gestao/_nav.html" %}
 <div class="hero">
   <div>
     <h1>Churn</h1>
     <p>Cancelamentos por safra de instalação. Cadastre o Gross mensal para a taxa fechar.</p>
   </div>
+  {% if pode_enviar %}
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="enviar_todos">
+    <button class="btn btn-primary" type="submit">Enviar todos (WhatsApp)</button>
+  </form>
+  {% endif %}
 </div>
 {% if form %}
 <div class="grid-2" style="margin-bottom:1rem">
@@ -43,9 +49,21 @@
 {% for m in mensagens %}
   <div class="mask-card">
     <div class="mask-card-h">
-      <strong>{{ m.pdv_nome }}</strong>
-      <textarea id="churn-{{ m.id }}" hidden>{{ m.mensagem }}</textarea>
-      <button class="btn btn-primary" type="button" data-copy-target="churn-{{ m.id }}">Copiar</button>
+      <div>
+        <strong>{{ m.pdv_nome }}</strong>
+      </div>
+      <div style="display:flex;gap:0.4rem">
+        <textarea id="churn-{{ m.id }}" hidden>{{ m.mensagem }}</textarea>
+        <button class="btn btn-primary" type="button" data-copy-target="churn-{{ m.id }}">Copiar</button>
+        {% if pode_enviar and m.parceiro_id %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="enviar_pdv">
+          <input type="hidden" name="parceiro" value="{{ m.parceiro_id }}">
+          <button class="btn btn-secondary" type="submit">Enviar</button>
+        </form>
+        {% endif %}
+      </div>
     </div>
     <div class="long-text">{{ m.mensagem|linebreaksbr }}</div>
   </div>

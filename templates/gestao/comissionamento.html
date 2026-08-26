@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Comissionamento · Gestão{% endblock %}
 {% block content %}
-{% include "gestao/_nav.html" %}
 <div class="hero">
   <div>
     <h1>Comissionamento</h1>
@@ -45,7 +44,7 @@
   <p class="help" style="margin-bottom:1rem">Nenhum destinatário com Comissionamento + razões sociais ainda.</p>
 {% endif %}
 
-{% if pode_importar and lotes %}
+{% if pode_enviar and lotes %}
 <div class="panel" style="margin-bottom:1rem">
   <div class="panel-h"><h2>Reenviar lote</h2></div>
   <div class="panel-b">
@@ -77,7 +76,7 @@
       <div class="fila-actions">
         <textarea id="com-{{ r.id }}" hidden>{{ r.mensagem }}</textarea>
         <button class="btn btn-primary" type="button" data-copy-target="com-{{ r.id }}">Copiar</button>
-        {% if pode_importar %}
+        {% if pode_enviar %}
         <form method="post">
           {% csrf_token %}
           <input type="hidden" name="action" value="enviar_pdv">

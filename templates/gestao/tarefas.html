@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Tarefas · Gestão{% endblock %}
 {% block content %}
-{% include "gestao/_nav.html" %}
 <div class="hero">
   <div>
     <h1>Tarefas</h1>
@@ -30,7 +29,7 @@
 </div>
 {% endif %}
 
-{% if pode_importar and lotes %}
+{% if pode_enviar and lotes %}
 <div class="panel" style="margin-bottom:1rem">
   <div class="panel-h"><h2>Reenviar lote</h2></div>
   <div class="panel-b">
@@ -61,7 +60,7 @@
       <div class="fila-actions">
         <textarea id="tar-{{ r.id }}" hidden>{{ r.mensagem }}</textarea>
         <button class="btn btn-primary" type="button" data-copy-target="tar-{{ r.id }}">Copiar</button>
-        {% if pode_importar %}
+        {% if pode_enviar %}
         <form method="post">
           {% csrf_token %}
           <input type="hidden" name="action" value="enviar">

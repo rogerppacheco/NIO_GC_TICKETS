@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Gestão · NIO{% endblock %}
 {% block content %}
-{% include "gestao/_nav.html" %}
 <div class="hero">
   <div>
     <h1>Gestão de bases</h1>
@@ -45,10 +44,11 @@
       <p><a href="{% url 'gestao_tarefas' %}">7. Tarefas</a> — abertas / fechadas / futuros</p>
       <p><a href="{% url 'gestao_venda_indevida' %}">8. Venda indevida</a> — BASE_VI</p>
       <p><a href="{% url 'gestao_recompra' %}">9. Recompra</a> — safra × resultado</p>
+      <p><a href="{% url 'gestao_configs' %}">10. Metas</a> — capilaridade e OSAB</p>
+      <p><a href="{% url 'gestao_envios' %}">11. Envios</a> — disparar máscaras e histórico</p>
       {% if eh_gestor %}
-      <p><a href="{% url 'gestao_whatsapp' %}">10. WhatsApp</a> — parear QR e status da Evolution</p>
-      <p><a href="{% url 'gestao_destinatarios' %}">11. Destinatários</a> — JID WhatsApp</p>
-      <p><a href="{% url 'gestao_envios' %}">12. Envios</a> — histórico WhatsApp</p>
+      <p><a href="{% url 'gestao_whatsapp' %}">12. WhatsApp</a> — parear QR e status da Evolution</p>
+      <p><a href="{% url 'gestao_destinatarios' %}">13. Destinatários</a> — JID WhatsApp dos PDVs</p>
       {% endif %}
     </div>
   </div>

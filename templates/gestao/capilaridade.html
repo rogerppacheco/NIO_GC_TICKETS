@@ -1,11 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Capilaridade · Gestão{% endblock %}
 {% block content %}
-{% include "gestao/_nav.html" %}
 <div class="hero">
   <div>
     <h1>Capilaridade</h1>
-    <p>Máscaras do período {{ mes|stringformat:"02d" }}/{{ ano }}{% if modo_teste %} · modo teste WhatsApp{% endif %}.</p>
+    <p>Máscaras do período {{ mes|stringformat:"02d" }}/{{ ano }}{% if modo_teste %} · modo teste WhatsApp{% endif %}. Sem filtro de cargo: VENDEDOR e VENDEDOR EXTERNO.</p>
   </div>
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
     {% if pode_recalcular %}
@@ -18,12 +17,54 @@
     {% if pode_enviar %}
     <form method="post">
       {% csrf_token %}
+      {% include "gestao/_filtros_hidden.html" %}
       <input type="hidden" name="action" value="enviar_todos">
       <button class="btn btn-primary" type="submit">Enviar todos (WhatsApp)</button>
     </form>
     {% endif %}
   </div>
 </div>
+
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-h"><h2>Filtros</h2></div>
+  <div class="panel-b">
+    <form method="get" class="filtros-cap">
+      <label>TT
+        <input type="text" name="tt" value="{{ filtros.tt }}" placeholder="Chave de acesso">
+      </label>
+      <label>Nome
+        <input type="text" name="nome" value="{{ filtros.nome }}" placeholder="Nome do terceiro">
+      </label>
+      <label>PDV
+        <select name="pdv">
+          <option value="">Todos</option>
+          {% for p in parceiros_filtro %}
+            <option value="{{ p.id }}" {% if filtros.pdv == p.id|stringformat:"s" %}selected{% endif %}>{{ p.nome }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Cargo
+        <select name="cargo">
+          <option value="">Vendedor*</option>
+          {% for c in cargos %}
+            <option value="{{ c }}" {% if filtros.cargo == c %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Situação
+        <select name="situacao">
+          <option value="">Ativo / alocado</option>
+          {% for s in situacoes %}
+            <option value="{{ s }}" {% if filtros.situacao == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button class="btn btn-primary" type="submit">Filtrar</button>
+      <a class="btn btn-secondary" href="{% url 'gestao_capilaridade' %}">Limpar</a>
+    </form>
+  </div>
+</div>
+
 <div class="panel" style="margin-bottom:1rem">
   <div class="panel-h">
     <h2>Resumo geral</h2>
@@ -45,6 +86,7 @@
         {% if pode_enviar %}
         <form method="post">
           {% csrf_token %}
+          {% include "gestao/_filtros_hidden.html" %}
           <input type="hidden" name="action" value="enviar_pdv">
           <input type="hidden" name="parceiro" value="{{ card.parceiro.id }}">
           <button class="btn btn-secondary" type="submit">Enviar</button>

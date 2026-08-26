@@ -1,19 +1,27 @@
 {% extends "base.html" %}
 {% block title %}OSAB · Gestão{% endblock %}
 {% block content %}
-{% include "gestao/_nav.html" %}
 <div class="hero">
   <div>
     <h1>OSAB</h1>
     <p>Base de vendas do período {{ mes|stringformat:"02d" }}/{{ ano }}. {{ total_vendas }} pedido(s) no banco.</p>
   </div>
-  {% if pode_importar %}
-  <form method="post">
-    {% csrf_token %}
-    <input type="hidden" name="action" value="recalcular">
-    <button class="btn btn-secondary" type="submit">Recalcular relatórios</button>
-  </form>
-  {% endif %}
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    {% if pode_importar %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="recalcular">
+      <button class="btn btn-secondary" type="submit">Recalcular relatórios</button>
+    </form>
+    {% endif %}
+    {% if pode_enviar %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="enviar_todos">
+      <button class="btn btn-primary" type="submit">Enviar todos (WhatsApp)</button>
+    </form>
+    {% endif %}
+  </div>
 </div>
 {% if form %}
 <div class="panel" style="margin-bottom:1rem">
@@ -37,10 +45,20 @@
           <strong>{{ h.descricao_pdv }}</strong>
           <div class="help">{{ h.status }} · VL {{ h.realizado_vl|default:"—" }} · Gross {{ h.realizado_gross|default:"—" }} · {{ h.data_processamento|date:"d/m H:i" }}</div>
         </div>
-        {% if h.mensagem %}
-          <textarea id="osab-{{ h.id }}" hidden>{{ h.mensagem }}</textarea>
-          <button class="btn btn-primary" type="button" data-copy-target="osab-{{ h.id }}">Copiar</button>
-        {% endif %}
+        <div style="display:flex;gap:0.4rem">
+          {% if h.mensagem %}
+            <textarea id="osab-{{ h.id }}" hidden>{{ h.mensagem }}</textarea>
+            <button class="btn btn-primary" type="button" data-copy-target="osab-{{ h.id }}">Copiar</button>
+          {% endif %}
+          {% if pode_enviar and h.parceiro_id and h.mensagem %}
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="enviar_pdv">
+            <input type="hidden" name="parceiro" value="{{ h.parceiro_id }}">
+            <button class="btn btn-secondary" type="submit">Enviar</button>
+          </form>
+          {% endif %}
+        </div>
       </div>
       {% if h.mensagem %}<div class="long-text">{{ h.mensagem|linebreaksbr }}</div>{% endif %}
     </div>

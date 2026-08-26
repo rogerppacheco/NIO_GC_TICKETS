@@ -135,6 +135,12 @@ class EspecialistaForm(forms.Form):
             "Se desmarcado, vê só os PDVs em que é o especialista."
         ),
     )
+    whatsapp = forms.CharField(
+        label="WhatsApp",
+        max_length=40,
+        required=False,
+        help_text="Número com DDI. Especialista recebe as máscaras neste número, não nos grupos dos PDVs.",
+    )
 
     def __init__(self, *args, instance=None, **kwargs):
         self.instance = instance
@@ -149,6 +155,7 @@ class EspecialistaForm(forms.Form):
                     perfil and perfil.papel == PerfilStaff.Papel.GESTOR
                 ),
                 "fte": perfil.fte if perfil else Decimal("1.00"),
+                "whatsapp": perfil.whatsapp if perfil else "",
             }
         super().__init__(*args, **kwargs)
         if instance is None:
@@ -229,6 +236,7 @@ class EspecialistaForm(forms.Form):
             defaults={
                 "papel": papel,
                 "fte": dados.get("fte") or Decimal("1.00"),
+                "whatsapp": (dados.get("whatsapp") or "").strip(),
             },
         )
         user.perfil_staff = perfil
@@ -249,6 +257,12 @@ class StaffPerfilForm(forms.Form):
         required=False,
         help_text="Deixe em branco para manter a senha atual.",
     )
+    whatsapp = forms.CharField(
+        label="WhatsApp",
+        max_length=40,
+        required=False,
+        help_text="Se você não for admin, as máscaras de Gestão chegam neste número.",
+    )
 
     def __init__(self, *args, instance=None, **kwargs):
         self.instance = instance
@@ -257,6 +271,7 @@ class StaffPerfilForm(forms.Form):
                 "first_name": instance.first_name,
                 "username": instance.username,
                 "email": instance.email,
+                "whatsapp": getattr(getattr(instance, "perfil_staff", None), "whatsapp", "") or "",
             }
         super().__init__(*args, **kwargs)
 
@@ -283,6 +298,10 @@ class StaffPerfilForm(forms.Form):
         if dados.get("password"):
             user.set_password(dados["password"])
         user.save()
+        perfil = getattr(user, "perfil_staff", None)
+        if perfil is not None:
+            perfil.whatsapp = (dados.get("whatsapp") or "").strip()
+            perfil.save(update_fields=["whatsapp"])
         return user
 
 

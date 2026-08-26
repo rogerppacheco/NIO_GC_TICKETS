@@ -53,7 +53,9 @@ def cargo_eh_supervisor(cargo) -> bool:
 
 
 def cargo_elegivel_capilaridade(cargo) -> bool:
-    return normalizar_cargo_ctps(cargo) == CARGO_VENDEDOR_CTPS
+    """Volume de capilaridade: VENDEDOR e variações (ex. VENDEDOR EXTERNO)."""
+    cargo_norm = normalizar_cargo_ctps(cargo)
+    return cargo_norm == CARGO_VENDEDOR_CTPS or cargo_norm.startswith(f"{CARGO_VENDEDOR_CTPS} ")
 
 
 def _funcional_elegivel(situacao_funcional) -> bool:

@@ -6,6 +6,7 @@ from pathlib import Path
 from django.contrib.auth.models import AbstractBaseUser
 from django.db.models import QuerySet
 
+from tickets.acesso import eh_gestor
 from tickets.models import Parceiro
 
 from ..models import (
@@ -36,6 +37,45 @@ class ResumoEnvio:
             self.detalhes = []
 
 
+@dataclass
+class DestinoEnvio:
+    jid: str
+    nome: str
+    parceiro: Parceiro | None = None
+    destinatario: Destinatario | None = None
+
+
+def whatsapp_do_usuario(user) -> str:
+    perfil = getattr(user, "perfil_staff", None) if user else None
+    return (getattr(perfil, "whatsapp", "") or "").strip()
+
+
+def destinos_para_envio(
+    user: AbstractBaseUser | None,
+    flag: str,
+    parceiro: Parceiro | None = None,
+    *,
+    somente_grupos: bool = False,
+) -> list[DestinoEnvio]:
+    """Gestor → cadastro Destinatários. Especialista → o próprio WhatsApp."""
+    if user is not None and not eh_gestor(user):
+        jid = whatsapp_do_usuario(user)
+        if not jid:
+            return []
+        nome = (user.get_full_name() or user.get_username() or "Especialista").strip()
+        return [DestinoEnvio(jid=jid, nome=nome, parceiro=parceiro)]
+    return [
+        DestinoEnvio(jid=d.jid, nome=d.nome, parceiro=d.parceiro, destinatario=d)
+        for d in destinatarios_para(flag, parceiro, somente_grupos=somente_grupos)
+    ]
+
+
+def _msg_sem_destino(user: AbstractBaseUser | None) -> str:
+    if user is not None and not eh_gestor(user):
+        return "Cadastre seu WhatsApp em Meu perfil para receber as máscaras."
+    return "Nenhum destinatário ativo para este envio."
+
+
 def destinatarios_para(
     flag: str,
     parceiro: Parceiro | None = None,
@@ -60,6 +100,7 @@ def _registrar(
     user: AbstractBaseUser | None,
     result: SyncWAResult,
     modo_teste: bool,
+    destino_nome: str = "",
 ) -> EnvioWhatsApp:
     if result.ok:
         status = EnvioWhatsApp.Status.ENVIADO
@@ -67,13 +108,14 @@ def _registrar(
     else:
         status = EnvioWhatsApp.Status.ERRO
         erro = result.error
+    nome = destino_nome or (destinatario.nome if destinatario else "") or ""
     return EnvioWhatsApp.objects.create(
         tipo=tipo,
         status=status,
         parceiro=parceiro,
         destinatario=destinatario,
         destino_jid=result.destino or (destinatario.jid if destinatario else ""),
-        destino_nome=(destinatario.nome if destinatario else "") or "",
+        destino_nome=nome,
         mensagem=mensagem,
         modo_teste=modo_teste,
         syncwa_message_id=result.message_log_id,
@@ -87,7 +129,7 @@ def _enviar_para_lista(
     *,
     tipo: str,
     mensagem: str,
-    destinos: list[Destinatario],
+    destinos: list[DestinoEnvio] | list[Destinatario],
     parceiro: Parceiro | None,
     user: AbstractBaseUser | None,
 ) -> ResumoEnvio:
@@ -100,22 +142,29 @@ def _enviar_para_lista(
         resumo.erros += 1
         resumo.detalhes.append("WhatsApp (Evolution) não configurado.")
         return resumo
-    if not destinos:
+    lista = [
+        dest
+        if isinstance(dest, DestinoEnvio)
+        else DestinoEnvio(jid=dest.jid, nome=dest.nome, parceiro=dest.parceiro, destinatario=dest)
+        for dest in destinos
+    ]
+    if not lista:
         resumo.ignorados += 1
-        resumo.detalhes.append("Nenhum destinatário ativo para este envio.")
+        resumo.detalhes.append(_msg_sem_destino(user))
         return resumo
 
     teste = modo_teste_ativo()
-    for dest in destinos:
+    for dest in lista:
         result = enviar_texto(dest.jid, mensagem)
         _registrar(
             tipo=tipo,
             mensagem=mensagem,
-            destinatario=dest,
+            destinatario=dest.destinatario,
             parceiro=parceiro or dest.parceiro,
             user=user,
             result=result,
             modo_teste=teste,
+            destino_nome=dest.nome,
         )
         if result.ok:
             resumo.enviados += 1
@@ -134,6 +183,14 @@ def enviar_teste(user: AbstractBaseUser | None = None) -> ResumoEnvio:
     from django.conf import settings
 
     jid = (getattr(settings, "SYNCWA_TEST_JID", "") or "").strip()
+    if user is not None and not eh_gestor(user):
+        return _enviar_para_lista(
+            tipo=EnvioWhatsApp.Tipo.TESTE,
+            mensagem=texto,
+            destinos=destinos_para_envio(user, "envio_capilaridade"),
+            parceiro=None,
+            user=user,
+        )
     if not jid and not modo_teste_ativo():
         # Sem JID de teste e sem modo teste: tenta o primeiro destinatário ativo
         dest = Destinatario.objects.filter(ativo=True).order_by("prioridade").first()
@@ -172,10 +229,11 @@ def enviar_teste(user: AbstractBaseUser | None = None) -> ResumoEnvio:
 def enviar_capilaridade_pdv(
     parceiro: Parceiro,
     user: AbstractBaseUser | None = None,
+    filtros: dict | None = None,
 ) -> ResumoEnvio:
     ano, mes = periodo_ativo()
-    mensagem = montar_mascara_pdv(parceiro, ano, mes)
-    destinos = list(destinatarios_para("envio_capilaridade", parceiro))
+    mensagem = montar_mascara_pdv(parceiro, ano, mes, filtros)
+    destinos = destinos_para_envio(user, "envio_capilaridade", parceiro)
     return _enviar_para_lista(
         tipo=EnvioWhatsApp.Tipo.CAPILARIDADE,
         mensagem=mensagem,
@@ -188,15 +246,16 @@ def enviar_capilaridade_pdv(
 def enviar_resumo_capilaridade(
     parceiros: list[Parceiro],
     user: AbstractBaseUser | None = None,
+    filtros: dict | None = None,
 ) -> ResumoEnvio:
     """Envia o resumo geral para grupos com flag capilaridade (JID único)."""
     ano, mes = periodo_ativo()
-    msg = resumo_geral(parceiros, ano, mes)
-    destinos = list(
-        destinatarios_para("envio_capilaridade", somente_grupos=True)
+    msg = resumo_geral(parceiros, ano, mes, filtros)
+    destinos = destinos_para_envio(
+        user, "envio_capilaridade", somente_grupos=True
     )
     vistos: set[str] = set()
-    unicos: list[Destinatario] = []
+    unicos: list[DestinoEnvio] = []
     for d in destinos:
         chave = d.jid.strip().lower()
         if chave in vistos:
@@ -217,17 +276,18 @@ def enviar_capilaridade_todos(
     user: AbstractBaseUser | None = None,
     *,
     incluir_resumo: bool = False,
+    filtros: dict | None = None,
 ) -> ResumoEnvio:
     total = ResumoEnvio()
     if incluir_resumo:
-        parte = enviar_resumo_capilaridade(parceiros, user)
+        parte = enviar_resumo_capilaridade(parceiros, user, filtros)
         total.enviados += parte.enviados
         total.erros += parte.erros
         total.ignorados += parte.ignorados
         total.detalhes.extend(parte.detalhes)
 
     for p in parceiros:
-        parte = enviar_capilaridade_pdv(p, user)
+        parte = enviar_capilaridade_pdv(p, user, filtros)
         total.enviados += parte.enviados
         total.erros += parte.erros
         total.ignorados += parte.ignorados
@@ -244,7 +304,7 @@ def enviar_osab_pdv(parceiro: Parceiro, user: AbstractBaseUser | None = None) ->
     )
     if not hist or not hist.mensagem.strip():
         return ResumoEnvio(ignorados=1, detalhes=[f"{parceiro.nome}: sem relatório OSAB."])
-    destinos = list(destinatarios_para("envio_osab", parceiro))
+    destinos = destinos_para_envio(user, "envio_osab", parceiro)
     return _enviar_para_lista(
         tipo=EnvioWhatsApp.Tipo.OSAB,
         mensagem=hist.mensagem,
@@ -258,7 +318,7 @@ def enviar_fpd_pdv(parceiro: Parceiro, user: AbstractBaseUser | None = None) -> 
     rel = RelatorioFPD.objects.filter(parceiro=parceiro).order_by("-criado_em").first()
     if not rel or not rel.mensagem.strip():
         return ResumoEnvio(ignorados=1, detalhes=[f"{parceiro.nome}: sem relatório FPD."])
-    destinos = list(destinatarios_para("envio_fpd", parceiro))
+    destinos = destinos_para_envio(user, "envio_fpd", parceiro)
     resumo = _enviar_para_lista(
         tipo=EnvioWhatsApp.Tipo.FPD,
         mensagem=rel.mensagem,
@@ -270,8 +330,8 @@ def enviar_fpd_pdv(parceiro: Parceiro, user: AbstractBaseUser | None = None) -> 
     from django.conf import settings
 
     limite = float(getattr(settings, "FPD_PERCENTUAL_CRITICO", 30))
-    if rel.percentual >= limite:
-        criticos = list(destinatarios_para("envio_fpd_critico"))
+    if eh_gestor(user) and rel.percentual >= limite:
+        criticos = destinos_para_envio(user, "envio_fpd_critico")
         if criticos:
             alerta = (
                 f"🚨 *Alerta FPD crítico — {rel.pdv_nome}*\n"
@@ -300,7 +360,7 @@ def enviar_churn_pdv(parceiro: Parceiro, user: AbstractBaseUser | None = None) -
     )
     if not row or not row.mensagem.strip():
         return ResumoEnvio(ignorados=1, detalhes=[f"{parceiro.nome}: sem relatório Churn."])
-    destinos = list(destinatarios_para("envio_churn", parceiro))
+    destinos = destinos_para_envio(user, "envio_churn", parceiro)
     return _enviar_para_lista(
         tipo=EnvioWhatsApp.Tipo.CHURN,
         mensagem=row.mensagem,
@@ -310,12 +370,24 @@ def enviar_churn_pdv(parceiro: Parceiro, user: AbstractBaseUser | None = None) -
     )
 
 
+def _unicos_jid(destinos: list[DestinoEnvio]) -> list[DestinoEnvio]:
+    vistos: set[str] = set()
+    unicos: list[DestinoEnvio] = []
+    for d in destinos:
+        chave = d.jid.strip().lower()
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        unicos.append(d)
+    return unicos
+
+
 def _enviar_com_anexo(
     *,
     tipo: str,
     mensagem: str,
     caption: str,
-    destinos: list[Destinatario],
+    destinos: list[DestinoEnvio] | list[Destinatario],
     parceiro: Parceiro | None,
     user: AbstractBaseUser | None,
     arquivo_bytes: bytes,
@@ -325,14 +397,20 @@ def _enviar_com_anexo(
     resumo = ResumoEnvio()
     if not syncwa_configurado():
         return ResumoEnvio(erros=1, detalhes=["WhatsApp (Evolution) não configurado."])
-    if not destinos:
-        return ResumoEnvio(ignorados=1, detalhes=["Nenhum destinatário ativo para este envio."])
+    lista = [
+        dest
+        if isinstance(dest, DestinoEnvio)
+        else DestinoEnvio(jid=dest.jid, nome=dest.nome, parceiro=dest.parceiro, destinatario=dest)
+        for dest in destinos
+    ]
+    if not lista:
+        return ResumoEnvio(ignorados=1, detalhes=[_msg_sem_destino(user)])
 
     teste = modo_teste_ativo()
     msg = (mensagem or "").strip() or caption
     texto_extra = bool(msg) and (not arquivo_bytes or len(msg) > 900)
 
-    for dest in destinos:
+    for dest in lista:
         if arquivo_bytes:
             result_doc = enviar_documento(
                 dest.jid,
@@ -343,11 +421,12 @@ def _enviar_com_anexo(
             _registrar(
                 tipo=tipo,
                 mensagem=f"[anexo] {nome_arquivo}\n{caption}",
-                destinatario=dest,
+                destinatario=dest.destinatario,
                 parceiro=parceiro or dest.parceiro,
                 user=user,
                 result=result_doc,
                 modo_teste=teste,
+                destino_nome=dest.nome,
             )
             if result_doc.ok:
                 resumo.enviados += 1
@@ -362,11 +441,12 @@ def _enviar_com_anexo(
             _registrar(
                 tipo=tipo,
                 mensagem=msg,
-                destinatario=dest,
+                destinatario=dest.destinatario,
                 parceiro=parceiro or dest.parceiro,
                 user=user,
                 result=result_txt,
                 modo_teste=teste,
+                destino_nome=dest.nome,
             )
             if result_txt.ok:
                 resumo.enviados += 1
@@ -407,7 +487,7 @@ def enviar_comissionamento_pdv(
     )
     if not rel:
         return ResumoEnvio(ignorados=1, detalhes=[f"{parceiro.nome}: sem relatório de comissionamento."])
-    destinos = list(destinatarios_para("envio_comissionamento", parceiro))
+    destinos = destinos_para_envio(user, "envio_comissionamento", parceiro)
     try:
         arquivo_bytes, nome_arquivo = _ler_arquivo_relatorio(
             rel.arquivo, f"comissionamento_{parceiro.nome}.xlsx"
@@ -446,20 +526,11 @@ def enviar_comissionamento_lote(
 
 
 def enviar_tarefa(rel: RelatorioTarefa, user: AbstractBaseUser | None = None) -> ResumoEnvio:
-    if rel.parceiro_id:
-        destinos = list(destinatarios_para("envio_tarefas", rel.parceiro))
-    else:
-        # Fechadas / futuros → grupos com flag tarefas
-        destinos = list(destinatarios_para("envio_tarefas", somente_grupos=True))
-        vistos: set[str] = set()
-        unicos: list[Destinatario] = []
-        for d in destinos:
-            chave = d.jid.strip().lower()
-            if chave in vistos:
-                continue
-            vistos.add(chave)
-            unicos.append(d)
-        destinos = unicos
+    destinos = destinos_para_envio(
+        user, "envio_tarefas", rel.parceiro, somente_grupos=not rel.parceiro_id
+    )
+    if not rel.parceiro_id:
+        destinos = _unicos_jid(destinos)
 
     try:
         arquivo_bytes, nome_arquivo = _ler_arquivo_relatorio(
@@ -500,19 +571,14 @@ def enviar_tarefas_lote(lote_id: int, user: AbstractBaseUser | None = None) -> R
 
 
 def enviar_venda_indevida(rel: RelatorioVendaIndevida, user: AbstractBaseUser | None = None) -> ResumoEnvio:
+    destinos = destinos_para_envio(
+        user,
+        "envio_venda_indevida",
+        None if rel.consolidado or not rel.parceiro_id else rel.parceiro,
+        somente_grupos=bool(rel.consolidado or not rel.parceiro_id),
+    )
     if rel.consolidado or not rel.parceiro_id:
-        destinos = list(destinatarios_para("envio_venda_indevida", somente_grupos=True))
-        vistos: set[str] = set()
-        unicos: list[Destinatario] = []
-        for d in destinos:
-            chave = d.jid.strip().lower()
-            if chave in vistos:
-                continue
-            vistos.add(chave)
-            unicos.append(d)
-        destinos = unicos
-    else:
-        destinos = list(destinatarios_para("envio_venda_indevida", rel.parceiro))
+        destinos = _unicos_jid(destinos)
 
     try:
         arquivo_bytes, nome_arquivo = _ler_arquivo_relatorio(rel.arquivo, "vi.xlsx")
@@ -558,19 +624,14 @@ def enviar_venda_indevida_lote(
 
 
 def enviar_recompra(rel: RelatorioRecompra, user: AbstractBaseUser | None = None) -> ResumoEnvio:
+    destinos = destinos_para_envio(
+        user,
+        "envio_recompra",
+        None if rel.consolidado or not rel.parceiro_id else rel.parceiro,
+        somente_grupos=bool(rel.consolidado or not rel.parceiro_id),
+    )
     if rel.consolidado or not rel.parceiro_id:
-        destinos = list(destinatarios_para("envio_recompra", somente_grupos=True))
-        vistos: set[str] = set()
-        unicos: list[Destinatario] = []
-        for d in destinos:
-            chave = d.jid.strip().lower()
-            if chave in vistos:
-                continue
-            vistos.add(chave)
-            unicos.append(d)
-        destinos = unicos
-    else:
-        destinos = list(destinatarios_para("envio_recompra", rel.parceiro))
+        destinos = _unicos_jid(destinos)
 
     try:
         arquivo_bytes, nome_arquivo = _ler_arquivo_relatorio(rel.arquivo, "recompra.xlsx")

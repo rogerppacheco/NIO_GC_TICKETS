@@ -25,6 +25,7 @@ body.page-fila {
   flex-direction: column;
 }
 body.page-fila .topbar { flex-shrink: 0; }
+body.page-fila .topbar-gestao { flex-shrink: 0; }
 body {
   font-family: var(--font);
   color: var(--ink);
@@ -56,6 +57,12 @@ a:hover { text-decoration: underline; }
 .nav { display: flex; gap: 0.85rem; flex-wrap: wrap; align-items: center; }
 .nav a { color: var(--muted); font-weight: 600; font-size: 0.95rem; }
 .nav a:hover, .nav a.active { color: var(--ink); text-decoration: none; }
+.topbar-gestao {
+  padding: 0.4rem 1.1rem 0.55rem;
+  border-top: 1px solid var(--line);
+  background: #f7faf9;
+}
+.topbar-gestao .gestao-nav { margin: 0; }
 .gestao-nav {
   display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0 0 1.1rem;
 }
@@ -316,6 +323,11 @@ a:hover { text-decoration: underline; }
 a.break-link {
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+.filtros-cap { display:flex; flex-wrap:wrap; gap:0.55rem; align-items:flex-end; }
+.filtros-cap label { display:flex; flex-direction:column; gap:0.2rem; font-size:0.78rem; font-weight:700; color:var(--muted); }
+.filtros-cap input, .filtros-cap select {
+  min-width: 9rem; padding: 0.4rem 0.55rem; border: 1px solid var(--line); border-radius: 8px; font: inherit;
 }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.85rem; }
 .form-grid .full { grid-column: 1 / -1; }

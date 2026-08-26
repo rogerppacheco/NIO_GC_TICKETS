@@ -150,6 +150,48 @@ class OsabCapilaridadeTests(TestCase):
         self.assertGreaterEqual(resumo["capilaridade"]["linhas"], 1)
         self.assertTrue(HistoricoOSAB.objects.filter(parceiro=self.pdv).exists())
 
+    def test_vendedor_externo_entra_na_mascara(self):
+        from gestao.pipelines.osab import linhas_capilaridade_pdv
+
+        CadastroTerceiro.objects.create(
+            chave_acesso="TT100",
+            nome_terceiro="MARIA EXTERNA",
+            razao_social="RECORD",
+            parceiro=self.pdv,
+            cargo_funcao="VENDEDOR EXTERNO",
+            situacao_empresa="Ativo",
+            situacao_funcional="Ativo",
+            situacao_contrato="Alocado",
+            ativo=True,
+        )
+        linhas = linhas_capilaridade_pdv(self.pdv)
+        chaves = {l["matricula_vendedor"] for l in linhas}
+        self.assertIn("TT99", chaves)
+        self.assertIn("TT100", chaves)
+
+    def test_filtro_tt_nome_cargo(self):
+        from gestao.pipelines.osab import linhas_capilaridade_pdv
+
+        CadastroTerceiro.objects.create(
+            chave_acesso="TT200",
+            nome_terceiro="CARLOS SUPER",
+            razao_social="RECORD",
+            parceiro=self.pdv,
+            cargo_funcao="SUPERVISOR",
+            situacao_empresa="Ativo",
+            situacao_funcional="Ativo",
+            situacao_contrato="Alocado",
+            ativo=True,
+        )
+        so_tt = linhas_capilaridade_pdv(self.pdv, {"tt": "TT99"})
+        self.assertEqual([l["matricula_vendedor"] for l in so_tt], ["TT99"])
+        so_nome = linhas_capilaridade_pdv(self.pdv, {"nome": "JOAO"})
+        self.assertEqual([l["matricula_vendedor"] for l in so_nome], ["TT99"])
+        so_cargo = linhas_capilaridade_pdv(self.pdv, {"cargo": "SUPERVISOR"})
+        self.assertEqual([l["matricula_vendedor"] for l in so_cargo], ["TT200"])
+        padrao = linhas_capilaridade_pdv(self.pdv)
+        self.assertEqual([l["matricula_vendedor"] for l in padrao], ["TT99"])
+
 
 class FpdChurnTests(TestCase):
     def setUp(self):
@@ -245,6 +287,34 @@ class GestaoViewsTests(TestCase):
         ):
             r = self.client.get(reverse(nome))
             self.assertEqual(r.status_code, 200, nome)
+        cap = self.client.get(reverse("gestao_capilaridade"))
+        self.assertContains(cap, "Filtros")
+        self.assertContains(cap, 'name="tt"')
+        self.assertContains(cap, "VENDEDOR EXTERNO")
+
+    def test_paginas_especialista_sem_whatsapp_qr(self):
+        User = get_user_model()
+        spec = User.objects.create_user("specg", "sg@x.com", "x", is_staff=True)
+        PerfilStaff.objects.create(user=spec, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self.client.force_login(spec)
+        for nome in (
+            "gestao_hub",
+            "gestao_osab",
+            "gestao_capilaridade",
+            "gestao_fpd",
+            "gestao_churn",
+            "gestao_comissionamento",
+            "gestao_tarefas",
+            "gestao_venda_indevida",
+            "gestao_recompra",
+            "gestao_configs",
+            "gestao_envios",
+        ):
+            r = self.client.get(reverse(nome))
+            self.assertEqual(r.status_code, 200, nome)
+            self.assertContains(r, "Capilaridade")
+        self.assertEqual(self.client.get(reverse("gestao_whatsapp")).status_code, 404)
+        self.assertEqual(self.client.get(reverse("gestao_destinatarios")).status_code, 404)
 
 
 class SyncWAClientTests(TestCase):
@@ -459,6 +529,68 @@ class DestinatarioEnvioTests(TestCase):
         self.assertEqual(log.status, EnvioWhatsApp.Status.ENVIADO)
         self.assertEqual(log.tipo, EnvioWhatsApp.Tipo.CAPILARIDADE)
         self.assertEqual(log.syncwa_message_id, "ml-9")
+
+    def test_destinos_especialista_usa_whatsapp_do_perfil(self):
+        from gestao.messaging.envio import destinos_para_envio
+        from gestao.models import Destinatario
+
+        Destinatario.objects.create(
+            parceiro=self.pdv,
+            nome="Grupo PDV",
+            jid="120363grupo@g.us",
+            envio_capilaridade=True,
+        )
+        User = get_user_model()
+        spec = User.objects.create_user("specenvio", "se@x.com", "x", is_staff=True, first_name="Ana")
+        perfil = PerfilStaff.objects.create(
+            user=spec, papel=PerfilStaff.Papel.ESPECIALISTA, whatsapp="5531988887777"
+        )
+        destinos = destinos_para_envio(spec, "envio_capilaridade", self.pdv)
+        self.assertEqual(len(destinos), 1)
+        self.assertEqual(destinos[0].jid, "5531988887777")
+        self.assertIsNone(destinos[0].destinatario)
+
+        gestor_dest = destinos_para_envio(self.gestor, "envio_capilaridade", self.pdv)
+        self.assertEqual(len(gestor_dest), 1)
+        self.assertEqual(gestor_dest[0].jid, "120363grupo@g.us")
+
+        perfil.whatsapp = ""
+        perfil.save(update_fields=["whatsapp"])
+        self.assertEqual(destinos_para_envio(spec, "envio_capilaridade", self.pdv), [])
+
+    def test_especialista_envia_capilaridade_para_si(self):
+        from unittest.mock import MagicMock, patch
+
+        from gestao.models import Destinatario, EnvioWhatsApp
+
+        Destinatario.objects.create(
+            parceiro=self.pdv,
+            nome="Grupo PDV",
+            jid="120363grupo@g.us",
+            envio_capilaridade=True,
+        )
+        User = get_user_model()
+        spec = User.objects.create_user("specmask", "sm@x.com", "x", is_staff=True)
+        PerfilStaff.objects.create(
+            user=spec, papel=PerfilStaff.Papel.ESPECIALISTA, whatsapp="5531911112222"
+        )
+        self.pdv.especialista = spec
+        self.pdv.save(update_fields=["especialista"])
+        self.client.force_login(spec)
+        fake = MagicMock()
+        fake.status_code = 200
+        fake.json.return_value = {"key": {"id": "ml-esp"}}
+        with patch("gestao.messaging.syncwa.requests.post", return_value=fake) as post:
+            r = self.client.post(
+                reverse("gestao_capilaridade"),
+                {"action": "enviar_pdv", "parceiro": self.pdv.id},
+            )
+        self.assertEqual(r.status_code, 302)
+        log = EnvioWhatsApp.objects.get()
+        self.assertEqual(log.criado_por, spec)
+        self.assertIn("5531911112222", log.destino_jid)
+        self.assertNotIn("120363grupo", log.destino_jid)
+        self.assertNotIn("120363grupo", post.call_args.kwargs["json"]["number"])
 
     def test_enviar_teste_via_envios(self):
         from unittest.mock import MagicMock, patch

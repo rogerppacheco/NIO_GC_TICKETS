@@ -1,13 +1,14 @@
-from .acesso import eh_gestor, tickets_visiveis
+from .acesso import eh_gestor, tem_acesso_interno, tickets_visiveis
 from .models import ContatoParceiro, Parceiro, StatusTicket
 
 
 def nav_counts(request):
-    ctx = {"eh_gestor": False}
+    ctx = {"eh_gestor": False, "tem_acesso_interno": False}
     user = getattr(request, "user", None)
     if user and user.is_authenticated:
         visiveis = tickets_visiveis(user)
         ctx["eh_gestor"] = eh_gestor(user)
+        ctx["tem_acesso_interno"] = tem_acesso_interno(user)
         ctx["nav_novos"] = visiveis.filter(status=StatusTicket.NOVO).count()
         ctx["nav_abertos"] = visiveis.exclude(
             status__in=[

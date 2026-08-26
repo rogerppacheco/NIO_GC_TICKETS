@@ -1,12 +1,18 @@
 {% extends "base.html" %}
 {% block title %}FPD · Gestão{% endblock %}
 {% block content %}
-{% include "gestao/_nav.html" %}
 <div class="hero">
   <div>
     <h1>FPD</h1>
     <p>Faturas da primeira fatura (INDICADOR=FPD) na janela de 3 meses.</p>
   </div>
+  {% if pode_enviar %}
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="enviar_todos">
+    <button class="btn btn-primary" type="submit">Enviar todos (WhatsApp)</button>
+  </form>
+  {% endif %}
 </div>
 {% if form %}
 <div class="panel" style="margin-bottom:1rem">
@@ -27,8 +33,18 @@
         <strong>{{ r.pdv_nome }}</strong>
         <div class="help">{{ r.percentual|floatformat:2 }}% · abertas {{ r.total_abertas }}/{{ r.total_faturas }} · {{ r.criado_em|date:"d/m H:i" }}</div>
       </div>
-      <textarea id="fpd-{{ r.id }}" hidden>{{ r.mensagem }}</textarea>
-      <button class="btn btn-primary" type="button" data-copy-target="fpd-{{ r.id }}">Copiar</button>
+      <div style="display:flex;gap:0.4rem">
+        <textarea id="fpd-{{ r.id }}" hidden>{{ r.mensagem }}</textarea>
+        <button class="btn btn-primary" type="button" data-copy-target="fpd-{{ r.id }}">Copiar</button>
+        {% if pode_enviar %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="enviar_pdv">
+          <input type="hidden" name="parceiro" value="{{ r.parceiro_id }}">
+          <button class="btn btn-secondary" type="submit">Enviar</button>
+        </form>
+        {% endif %}
+      </div>
     </div>
     <div class="long-text">{{ r.mensagem|linebreaksbr }}</div>
   </div>

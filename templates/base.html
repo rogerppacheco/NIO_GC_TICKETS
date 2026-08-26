@@ -17,7 +17,6 @@
       <nav class="nav">
         {% if user.is_authenticated %}
           <a href="{% url 'dashboard' %}">Dashboard</a>
-          <a href="{% url 'gestao_hub' %}">Gestão</a>
           <a href="{% url 'fila' %}">Fila {% if nav_novos %}<span class="badge">{{ nav_novos }}</span>{% endif %}</a>
           <a href="{% url 'ticket_criar' %}">Nova demanda</a>
           <a href="{% url 'parceiros' %}">Parceiros</a>
@@ -46,6 +45,11 @@
         {% endif %}
       </nav>
     </div>
+    {% if tem_acesso_interno %}
+    <div class="topbar-gestao">
+      {% include "gestao/_nav.html" %}
+    </div>
+    {% endif %}
   </header>
 
   <main class="{% block main_class %}wrap{% endblock %}">

@@ -137,19 +137,52 @@ def ultimas_vendas_pdv(pdv_nome: str) -> dict[str, datetime]:
     return mapa
 
 
-def linhas_capilaridade_pdv(parceiro: Parceiro) -> list[dict]:
+def _terceiro_passa_filtro(terceiro, filtros: dict | None) -> bool:
+    filtros = filtros or {}
+    tt = (filtros.get("tt") or "").strip().upper()
+    nome = (filtros.get("nome") or "").strip().lower()
+    cargo = (filtros.get("cargo") or "").strip()
+    situacao = (filtros.get("situacao") or "").strip().lower()
+    chave = normalizar_chave_tt(terceiro.chave_acesso) or ""
+    if tt and tt not in chave:
+        return False
+    if nome and nome not in (terceiro.nome_terceiro or "").lower():
+        return False
+    if cargo and normalizar_cargo_ctps(terceiro.cargo_funcao) != normalizar_cargo_ctps(cargo):
+        return False
+    if situacao:
+        campos = {
+            (terceiro.situacao_funcional or "").strip().lower(),
+            (terceiro.situacao_empresa or "").strip().lower(),
+            (terceiro.situacao_contrato or "").strip().lower(),
+        }
+        if situacao not in campos:
+            return False
+    return True
+
+
+def _filtros_ativos(filtros: dict | None) -> bool:
+    filtros = filtros or {}
+    return any((filtros.get(k) or "").strip() for k in ("tt", "nome", "cargo", "situacao", "pdv"))
+
+
+def linhas_capilaridade_pdv(parceiro: Parceiro, filtros: dict | None = None) -> list[dict]:
     data_ref = data_ref_capilaridade()
     ultimas = ultimas_vendas_pdv(parceiro.nome)
     linhas: list[dict] = []
     vistos: set[str] = set()
+    cargo_filtro = (filtros or {}).get("cargo") or ""
+    situacao_filtro = (filtros or {}).get("situacao") or ""
     for terceiro in listar_terceiros_do_parceiro(parceiro.id):
-        if not terceiro_elegivel_capilaridade(
+        if not _terceiro_passa_filtro(terceiro, filtros):
+            continue
+        if not situacao_filtro and not terceiro_elegivel_capilaridade(
             terceiro.situacao_empresa,
             terceiro.situacao_funcional,
             terceiro.situacao_contrato,
         ):
             continue
-        if not cargo_elegivel_capilaridade(terceiro.cargo_funcao):
+        if not cargo_filtro and not cargo_elegivel_capilaridade(terceiro.cargo_funcao):
             continue
         chave = normalizar_chave_tt(terceiro.chave_acesso)
         if not chave or chave in vistos:
@@ -161,6 +194,8 @@ def linhas_capilaridade_pdv(parceiro: Parceiro) -> list[dict]:
                 {
                     "matricula_vendedor": chave,
                     "nome_vendedor": terceiro.nome_terceiro,
+                    "cargo_funcao": terceiro.cargo_funcao,
+                    "situacao_funcional": terceiro.situacao_funcional,
                     "pdv_nome": parceiro.nome,
                     "parceiro_id": parceiro.id,
                     "ultima_venda": None,
@@ -175,6 +210,8 @@ def linhas_capilaridade_pdv(parceiro: Parceiro) -> list[dict]:
             {
                 "matricula_vendedor": chave,
                 "nome_vendedor": terceiro.nome_terceiro,
+                "cargo_funcao": terceiro.cargo_funcao,
+                "situacao_funcional": terceiro.situacao_funcional,
                 "pdv_nome": parceiro.nome,
                 "parceiro_id": parceiro.id,
                 "ultima_venda": ultima,
@@ -204,10 +241,18 @@ def contar_operadores_ativos(parceiro: Parceiro) -> int:
     return total
 
 
-def contar_ativos_pdv(parceiro: Parceiro, linhas: list[dict] | None = None) -> int:
+def contar_ativos_pdv(
+    parceiro: Parceiro,
+    linhas: list[dict] | None = None,
+    filtros: dict | None = None,
+) -> int:
     if linhas is None:
-        linhas = linhas_capilaridade_pdv(parceiro)
+        linhas = linhas_capilaridade_pdv(parceiro, filtros)
     base = sum(1 for l in linhas if l["status"] == "Ativo")
+    if _filtros_ativos(filtros) and any(
+        (filtros or {}).get(k) for k in ("tt", "nome", "cargo", "situacao")
+    ):
+        return base
     return base + contar_operadores_ativos(parceiro)
 
 

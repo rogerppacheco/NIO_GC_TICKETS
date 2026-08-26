@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.db.models import Count, Max, Q
 from django.urls import reverse
 
-from tickets.acesso import eh_gestor, gestor_required, parceiros_visiveis
+from tickets.acesso import eh_gestor, gestor_required, parceiros_visiveis, tem_acesso_interno
 from tickets.models import Parceiro
 
 from .forms import DestinatarioForm, GrossForm, PeriodoForm, UploadBaseForm
@@ -69,8 +69,50 @@ def _lote(request, tipo: str, arquivo_nome: str, ok: bool, resumo: dict, erro: s
     )
 
 
+def _pode_enviar(request) -> bool:
+    return tem_acesso_interno(request.user) and syncwa_configurado()
+
+
+def _filtros_capilaridade(request) -> dict:
+    src = request.POST if request.method == "POST" else request.GET
+    return {
+        "tt": (src.get("tt") or "").strip(),
+        "nome": (src.get("nome") or "").strip(),
+        "pdv": (src.get("pdv") or "").strip(),
+        "cargo": (src.get("cargo") or "").strip(),
+        "situacao": (src.get("situacao") or "").strip(),
+    }
+
+
+def _opcoes_filtro_terceiros(parceiros):
+    qs = CadastroTerceiro.objects.filter(parceiro__in=parceiros)
+    cargos = sorted(
+        {c.strip() for c in qs.exclude(cargo_funcao="").values_list("cargo_funcao", flat=True) if c}
+    )
+    situacoes = set()
+    for emp, fun, con in qs.values_list("situacao_empresa", "situacao_funcional", "situacao_contrato"):
+        for valor in (emp, fun, con):
+            txt = (valor or "").strip()
+            if txt:
+                situacoes.add(txt)
+    return cargos, sorted(situacoes)
+
+
 def _parceiros(request):
     return parceiros_visiveis(request.user).filter(ativo=True).order_by("nome")
+
+
+def _enviar_todos_pdv(request, enviar_fn, parceiros, titulo: str) -> None:
+    from gestao.messaging.envio import ResumoEnvio
+
+    acc = ResumoEnvio()
+    for p in parceiros:
+        parte = enviar_fn(p, request.user)
+        acc.enviados += parte.enviados
+        acc.erros += parte.erros
+        acc.ignorados += parte.ignorados
+        acc.detalhes.extend(parte.detalhes[:1])
+    _flash_resumo(request, titulo, acc)
 
 
 @login_required
@@ -146,31 +188,43 @@ def importar_sysmap_view(request: HttpRequest) -> HttpResponse:
 @login_required
 def capilaridade_view(request: HttpRequest) -> HttpResponse:
     ano, mes = periodo_ativo()
-    if request.method == "POST" and eh_gestor(request.user):
+    filtros = _filtros_capilaridade(request)
+    if request.method == "POST":
         action = request.POST.get("action")
-        if action == "recalcular":
+        if action == "recalcular" and eh_gestor(request.user):
             resumo = persistir_capilaridade(ano, mes)
             messages.success(
                 request,
                 f"Capilaridade recalculada: {resumo['linhas']} TTs, {resumo['ativos']} ativos.",
             )
             return redirect("gestao_capilaridade")
-        if action == "enviar_pdv":
-            parceiro = get_object_or_404(_parceiros(request), pk=request.POST.get("parceiro"))
-            _flash_resumo(request, "Capilaridade", enviar_capilaridade_pdv(parceiro, request.user))
-            return redirect("gestao_capilaridade")
-        if action == "enviar_todos":
-            _flash_resumo(
-                request,
-                "Capilaridade (todos)",
-                enviar_capilaridade_todos(list(_parceiros(request)), request.user),
-            )
-            return redirect("gestao_capilaridade")
+        if action in {"enviar_pdv", "enviar_todos"} and _pode_enviar(request):
+            parceiros = list(_parceiros(request))
+            if filtros.get("pdv"):
+                parceiros = [p for p in parceiros if str(p.id) == filtros["pdv"]]
+            if action == "enviar_pdv":
+                parceiro = get_object_or_404(_parceiros(request), pk=request.POST.get("parceiro"))
+                _flash_resumo(
+                    request,
+                    "Capilaridade",
+                    enviar_capilaridade_pdv(parceiro, request.user, filtros),
+                )
+            else:
+                _flash_resumo(
+                    request,
+                    "Capilaridade (todos)",
+                    enviar_capilaridade_todos(parceiros, request.user, filtros=filtros),
+                )
+            qs = request.GET.urlencode()
+            dest = reverse("gestao_capilaridade")
+            return redirect(f"{dest}?{qs}" if qs else dest)
 
     parceiros = list(_parceiros(request))
+    if filtros.get("pdv"):
+        parceiros = [p for p in parceiros if str(p.id) == filtros["pdv"]]
     cards = []
     for p in parceiros:
-        mascara = montar_mascara_pdv(p, ano, mes)
+        mascara = montar_mascara_pdv(p, ano, mes, filtros)
         meta = (
             MetaCapilaridade.objects.filter(parceiro=p, ano=ano, mes=mes)
             .values_list("meta_vendedores", flat=True)
@@ -178,16 +232,21 @@ def capilaridade_view(request: HttpRequest) -> HttpResponse:
             or 0
         )
         cards.append({"parceiro": p, "mascara": mascara, "meta": meta})
+    cargos, situacoes = _opcoes_filtro_terceiros(_parceiros(request))
     return render(
         request,
         "gestao/capilaridade.html",
         {
             "ano": ano,
             "mes": mes,
-            "resumo": resumo_geral(parceiros, ano, mes),
+            "resumo": resumo_geral(parceiros, ano, mes, filtros),
             "cards": cards,
+            "filtros": filtros,
+            "cargos": cargos,
+            "situacoes": situacoes,
+            "parceiros_filtro": _parceiros(request),
             "pode_recalcular": eh_gestor(request.user),
-            "pode_enviar": eh_gestor(request.user) and syncwa_configurado(),
+            "pode_enviar": _pode_enviar(request),
             "modo_teste": modo_teste_ativo(),
         },
     )
@@ -196,35 +255,44 @@ def capilaridade_view(request: HttpRequest) -> HttpResponse:
 @login_required
 def osab_view(request: HttpRequest) -> HttpResponse:
     ano, mes = periodo_ativo()
-    if request.method == "POST" and eh_gestor(request.user):
-        if request.POST.get("action") == "recalcular":
-            resumo = calcular_osab(ano, mes)
-            messages.success(request, f"OSAB recalculada: {resumo['pdvs']} PDV(s).")
-            return redirect("gestao_osab")
-        form = UploadBaseForm(request.POST, request.FILES)
-        if form.is_valid():
-            arquivo = form.cleaned_data["arquivo"]
-            try:
-                resumo = processar_osab(arquivo, arquivo.name, ano, mes)
-                _lote(request, LoteImportacao.Tipo.OSAB, arquivo.name, True, resumo)
-                vendas = resumo["vendas"]
-                messages.success(
-                    request,
-                    f"OSAB atualizada ({mes:02d}/{ano}): {vendas['inseridos']} inseridos, "
-                    f"{vendas['atualizados']} atualizados. Capilaridade: {resumo['capilaridade']['linhas']} TTs.",
-                )
-                return redirect("gestao_osab")
-            except Exception as exc:
-                _lote(request, LoteImportacao.Tipo.OSAB, arquivo.name, False, {}, str(exc))
-                messages.error(request, f"Falha ao importar OSAB: {exc}")
-        else:
-            messages.error(request, "Selecione um arquivo OSAB válido (.xlsb ou .xlsx).")
     visiveis = _parceiros(request)
     historico = (
         HistoricoOSAB.objects.select_related("parceiro")
         .filter(Q(parceiro__in=visiveis) | Q(parceiro__isnull=True))
         .order_by("-data_processamento")[:80]
     )
+    if request.method == "POST":
+        action = request.POST.get("action") or ""
+        if action == "recalcular" and eh_gestor(request.user):
+            resumo = calcular_osab(ano, mes)
+            messages.success(request, f"OSAB recalculada: {resumo['pdvs']} PDV(s).")
+            return redirect("gestao_osab")
+        if action == "enviar_pdv" and _pode_enviar(request):
+            parceiro = get_object_or_404(_parceiros(request), pk=request.POST.get("parceiro"))
+            _flash_resumo(request, "OSAB", enviar_osab_pdv(parceiro, request.user))
+            return redirect("gestao_osab")
+        if action == "enviar_todos" and _pode_enviar(request):
+            _enviar_todos_pdv(request, enviar_osab_pdv, visiveis, "OSAB (todos)")
+            return redirect("gestao_osab")
+        if eh_gestor(request.user) and request.FILES:
+            form = UploadBaseForm(request.POST, request.FILES)
+            if form.is_valid():
+                arquivo = form.cleaned_data["arquivo"]
+                try:
+                    resumo = processar_osab(arquivo, arquivo.name, ano, mes)
+                    _lote(request, LoteImportacao.Tipo.OSAB, arquivo.name, True, resumo)
+                    vendas = resumo["vendas"]
+                    messages.success(
+                        request,
+                        f"OSAB atualizada ({mes:02d}/{ano}): {vendas['inseridos']} inseridos, "
+                        f"{vendas['atualizados']} atualizados. Capilaridade: {resumo['capilaridade']['linhas']} TTs.",
+                    )
+                    return redirect("gestao_osab")
+                except Exception as exc:
+                    _lote(request, LoteImportacao.Tipo.OSAB, arquivo.name, False, {}, str(exc))
+                    messages.error(request, f"Falha ao importar OSAB: {exc}")
+            else:
+                messages.error(request, "Selecione um arquivo OSAB válido (.xlsb ou .xlsx).")
     return render(
         request,
         "gestao/osab.html",
@@ -235,6 +303,7 @@ def osab_view(request: HttpRequest) -> HttpResponse:
             "total_vendas": VendaOSAB.objects.count(),
             "historico": historico,
             "pode_importar": eh_gestor(request.user),
+            "pode_enviar": _pode_enviar(request),
         },
     )
 
@@ -262,7 +331,26 @@ def importar_fpd_view(request: HttpRequest) -> HttpResponse:
 @login_required
 def fpd_view(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
-        return importar_fpd_view(request)
+        action = request.POST.get("action") or ""
+        if action == "enviar_pdv" and _pode_enviar(request):
+            parceiro = get_object_or_404(_parceiros(request), pk=request.POST.get("parceiro"))
+            _flash_resumo(request, "FPD", enviar_fpd_pdv(parceiro, request.user))
+            return redirect("gestao_fpd")
+        if action == "enviar_todos" and _pode_enviar(request):
+            ids = (
+                RelatorioFPD.objects.filter(parceiro__in=_parceiros(request))
+                .values_list("parceiro_id", flat=True)
+                .distinct()
+            )
+            _enviar_todos_pdv(
+                request,
+                enviar_fpd_pdv,
+                _parceiros(request).filter(id__in=ids),
+                "FPD (todos)",
+            )
+            return redirect("gestao_fpd")
+        if eh_gestor(request.user) and request.FILES:
+            return importar_fpd_view(request)
     return _render_fpd(request, UploadBaseForm() if eh_gestor(request.user) else None)
 
 
@@ -272,7 +360,7 @@ def _render_fpd(request, form):
     return render(
         request,
         "gestao/fpd.html",
-        {"form": form, "relatorios": relatorios, "pode_importar": eh_gestor(request.user)},
+        {"form": form, "relatorios": relatorios, "pode_importar": eh_gestor(request.user), "pode_enviar": _pode_enviar(request)},
     )
 
 
@@ -296,7 +384,25 @@ def importar_churn_view(request: HttpRequest) -> HttpResponse:
 def churn_view(request: HttpRequest) -> HttpResponse:
     if request.method == "POST" and request.POST.get("action") == "gross":
         return gross_salvar(request)
-    if request.method == "POST" and request.FILES:
+    if request.method == "POST" and request.POST.get("action") == "enviar_pdv" and _pode_enviar(request):
+        parceiro = get_object_or_404(_parceiros(request), pk=request.POST.get("parceiro"))
+        _flash_resumo(request, "Churn", enviar_churn_pdv(parceiro, request.user))
+        return redirect("gestao_churn")
+    if request.method == "POST" and request.POST.get("action") == "enviar_todos" and _pode_enviar(request):
+        ids = (
+            HistoricoChurn.objects.filter(parceiro__in=_parceiros(request))
+            .exclude(mensagem="")
+            .values_list("parceiro_id", flat=True)
+            .distinct()
+        )
+        _enviar_todos_pdv(
+            request,
+            enviar_churn_pdv,
+            _parceiros(request).filter(id__in=ids),
+            "Churn (todos)",
+        )
+        return redirect("gestao_churn")
+    if request.method == "POST" and eh_gestor(request.user) and request.FILES:
         return importar_churn_view(request)
     return _render_churn(request, UploadBaseForm() if eh_gestor(request.user) else None)
 
@@ -342,6 +448,7 @@ def _render_churn(request, form):
             "mensagens": mensagens,
             "gross": GrossMensal.objects.select_related("parceiro").filter(parceiro__in=visiveis).order_by("-anomes")[:40],
             "pode_importar": eh_gestor(request.user),
+            "pode_enviar": _pode_enviar(request),
         },
     )
 
@@ -379,13 +486,13 @@ def importar_comissionamento_view(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def comissionamento_view(request: HttpRequest) -> HttpResponse:
-    if request.method == "POST" and eh_gestor(request.user):
+    if request.method == "POST":
         action = request.POST.get("action") or ""
-        if action == "enviar_pdv":
+        if action == "enviar_pdv" and _pode_enviar(request):
             parceiro = get_object_or_404(_parceiros(request), pk=request.POST.get("parceiro"))
             _flash_resumo(request, "Comissionamento", enviar_comissionamento_pdv(parceiro, request.user))
             return redirect("gestao_comissionamento")
-        if action == "enviar_lote":
+        if action == "enviar_lote" and _pode_enviar(request):
             lote_id = request.POST.get("lote")
             if not lote_id:
                 messages.error(request, "Informe o lote.")
@@ -396,7 +503,7 @@ def comissionamento_view(request: HttpRequest) -> HttpResponse:
                     enviar_comissionamento_lote(int(lote_id), request.user),
                 )
             return redirect("gestao_comissionamento")
-        if request.FILES:
+        if eh_gestor(request.user) and request.FILES:
             return importar_comissionamento_view(request)
     return _render_comissionamento(
         request, UploadBaseForm() if eh_gestor(request.user) else None
@@ -421,6 +528,7 @@ def _render_comissionamento(request, form):
             "lotes": lotes,
             "mapa_razoes": mapa_pdv_razoes(),
             "pode_importar": eh_gestor(request.user),
+            "pode_enviar": _pode_enviar(request),
             "syncwa_ok": syncwa_configurado(),
         },
     )
@@ -454,20 +562,20 @@ def importar_tarefas_view(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def tarefas_view(request: HttpRequest) -> HttpResponse:
-    if request.method == "POST" and eh_gestor(request.user):
+    if request.method == "POST":
         action = request.POST.get("action") or ""
-        if action == "enviar" and request.POST.get("relatorio"):
+        if action == "enviar" and request.POST.get("relatorio") and _pode_enviar(request):
             rel = get_object_or_404(RelatorioTarefa, pk=request.POST.get("relatorio"))
             _flash_resumo(request, "Tarefas", enviar_tarefa(rel, request.user))
             return redirect("gestao_tarefas")
-        if action == "enviar_lote" and request.POST.get("lote"):
+        if action == "enviar_lote" and request.POST.get("lote") and _pode_enviar(request):
             _flash_resumo(
                 request,
                 "Tarefas (lote)",
                 enviar_tarefas_lote(int(request.POST.get("lote")), request.user),
             )
             return redirect("gestao_tarefas")
-        if request.FILES:
+        if eh_gestor(request.user) and request.FILES:
             return importar_tarefas_view(request)
     return _render_tarefas(request, UploadBaseForm() if eh_gestor(request.user) else None)
 
@@ -486,6 +594,7 @@ def _render_tarefas(request, form):
             "relatorios": relatorios,
             "lotes": lotes,
             "pode_importar": eh_gestor(request.user),
+            "pode_enviar": _pode_enviar(request),
             "syncwa_ok": syncwa_configurado(),
         },
     )
@@ -523,20 +632,20 @@ def importar_venda_indevida_view(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def venda_indevida_view(request: HttpRequest) -> HttpResponse:
-    if request.method == "POST" and eh_gestor(request.user):
+    if request.method == "POST":
         action = request.POST.get("action") or ""
-        if action == "enviar" and request.POST.get("relatorio"):
+        if action == "enviar" and request.POST.get("relatorio") and _pode_enviar(request):
             rel = get_object_or_404(RelatorioVendaIndevida, pk=request.POST.get("relatorio"))
             _flash_resumo(request, "Venda indevida", enviar_venda_indevida(rel, request.user))
             return redirect("gestao_venda_indevida")
-        if action == "enviar_lote" and request.POST.get("lote"):
+        if action == "enviar_lote" and request.POST.get("lote") and _pode_enviar(request):
             _flash_resumo(
                 request,
                 "VI (lote)",
                 enviar_venda_indevida_lote(int(request.POST.get("lote")), request.user),
             )
             return redirect("gestao_venda_indevida")
-        if request.FILES:
+        if eh_gestor(request.user) and request.FILES:
             return importar_venda_indevida_view(request)
     return _render_venda_indevida(
         request, UploadBaseForm() if eh_gestor(request.user) else None
@@ -557,6 +666,7 @@ def _render_venda_indevida(request, form):
             "relatorios": relatorios,
             "lotes": lotes,
             "pode_importar": eh_gestor(request.user),
+            "pode_enviar": _pode_enviar(request),
             "syncwa_ok": syncwa_configurado(),
         },
     )
@@ -590,20 +700,20 @@ def importar_recompra_view(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def recompra_view(request: HttpRequest) -> HttpResponse:
-    if request.method == "POST" and eh_gestor(request.user):
+    if request.method == "POST":
         action = request.POST.get("action") or ""
-        if action == "enviar" and request.POST.get("relatorio"):
+        if action == "enviar" and request.POST.get("relatorio") and _pode_enviar(request):
             rel = get_object_or_404(RelatorioRecompra, pk=request.POST.get("relatorio"))
             _flash_resumo(request, "Recompra", enviar_recompra(rel, request.user))
             return redirect("gestao_recompra")
-        if action == "enviar_lote" and request.POST.get("lote"):
+        if action == "enviar_lote" and request.POST.get("lote") and _pode_enviar(request):
             _flash_resumo(
                 request,
                 "Recompra (lote)",
                 enviar_recompra_lote(int(request.POST.get("lote")), request.user),
             )
             return redirect("gestao_recompra")
-        if request.FILES:
+        if eh_gestor(request.user) and request.FILES:
             return importar_recompra_view(request)
     return _render_recompra(request, UploadBaseForm() if eh_gestor(request.user) else None)
 
@@ -622,16 +732,20 @@ def _render_recompra(request, form):
             "relatorios": relatorios,
             "lotes": lotes,
             "pode_importar": eh_gestor(request.user),
+            "pode_enviar": _pode_enviar(request),
             "syncwa_ok": syncwa_configurado(),
         },
     )
 
 
-@gestor_required
+@login_required
 def configs_view(request: HttpRequest) -> HttpResponse:
     ano, mes = periodo_ativo()
-    parceiros = list(Parceiro.objects.filter(ativo=True).order_by("nome"))
+    parceiros = list(_parceiros(request))
     if request.method == "POST":
+        if not eh_gestor(request.user):
+            messages.error(request, "Só o admin altera metas.")
+            return redirect("gestao_configs")
         for p in parceiros:
             prefix = f"p{p.id}_"
             meta_v = int(request.POST.get(prefix + "meta_vendedores") or 0)
@@ -663,7 +777,11 @@ def configs_view(request: HttpRequest) -> HttpResponse:
     linhas = []
     for p in parceiros:
         linhas.append({"parceiro": p, "meta": metas.get(p.id), "osab": configs.get(p.id)})
-    return render(request, "gestao/configs.html", {"ano": ano, "mes": mes, "linhas": linhas})
+    return render(
+        request,
+        "gestao/configs.html",
+        {"ano": ano, "mes": mes, "linhas": linhas, "pode_editar": eh_gestor(request.user)},
+    )
 
 
 def _flash_resumo(request, titulo: str, resumo) -> None:
@@ -775,7 +893,7 @@ def destinatario_toggle(request: HttpRequest, pk: int) -> HttpResponse:
 
 @login_required
 def envios_view(request: HttpRequest) -> HttpResponse:
-    if request.method == "POST" and eh_gestor(request.user):
+    if request.method == "POST" and _pode_enviar(request):
         action = request.POST.get("action") or ""
         parceiro_id = request.POST.get("parceiro") or ""
         parceiro = None
@@ -887,13 +1005,16 @@ def envios_view(request: HttpRequest) -> HttpResponse:
             return redirect("gestao_envios")
 
     health = healthcheck() if syncwa_configurado() else {"ok": False, "error": "não configurado"}
-    logs = EnvioWhatsApp.objects.select_related("parceiro", "destinatario")[:60]
+    logs = EnvioWhatsApp.objects.select_related("parceiro", "destinatario")
+    if not eh_gestor(request.user):
+        logs = logs.filter(criado_por=request.user)
+    logs = logs[:60]
     return render(
         request,
         "gestao/envios.html",
         {
             "parceiros": _parceiros(request),
-            "pode_enviar": eh_gestor(request.user),
+            "pode_enviar": _pode_enviar(request),
             "syncwa_ok": syncwa_configurado(),
             "modo_teste": modo_teste_ativo(),
             "health": health,

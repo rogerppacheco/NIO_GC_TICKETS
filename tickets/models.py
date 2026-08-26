@@ -474,6 +474,12 @@ class PerfilStaff(models.Model):
         default=Decimal("1.00"),
         help_text="1.00 representa tempo integral e 0.5 representa meio período.",
     )
+    whatsapp = models.CharField(
+        "WhatsApp",
+        max_length=40,
+        blank=True,
+        help_text="Número com DDI para receber as máscaras (especialista). Ex.: 5531999999999.",
+    )
 
     class Meta:
         verbose_name = "Perfil interno"
