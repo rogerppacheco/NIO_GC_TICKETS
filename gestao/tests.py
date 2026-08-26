@@ -473,6 +473,35 @@ class GestaoViewsTests(TestCase):
         self.assertContains(cap, "Meus parceiros")
         self.assertContains(cap, "Outros especialistas")
 
+    @override_settings(
+        EVOLUTION_API_URL="https://evo.test",
+        EVOLUTION_API_KEY="evo.key",
+        EVOLUTION_INSTANCE_NAME="nio_gc_tickets",
+    )
+    def test_tarefas_tem_enviar_todos(self):
+        self.client.force_login(self.gestor)
+        r = self.client.get(reverse("gestao_tarefas"))
+        self.assertContains(r, "Enviar todos (WhatsApp)")
+
+    @override_settings(
+        EVOLUTION_API_URL="https://evo.test",
+        EVOLUTION_API_KEY="evo.key",
+        EVOLUTION_INSTANCE_NAME="nio_gc_tickets",
+    )
+    def test_tarefas_enviar_todos_post(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.envio import ResumoEnvio
+
+        self.client.force_login(self.gestor)
+        with patch(
+            "gestao.views.enviar_tarefas_todos",
+            return_value=ResumoEnvio(enviados=1, detalhes=["ok"]),
+        ) as mock_env:
+            r = self.client.post(reverse("gestao_tarefas"), {"action": "enviar_todos"})
+        self.assertEqual(r.status_code, 302)
+        mock_env.assert_called_once()
+
     def test_cadastrar_parceiros_da_osab(self):
         self.client.force_login(self.gestor)
         VendaOSAB.objects.create(
@@ -522,6 +551,65 @@ class SyncWAClientTests(TestCase):
         self.assertEqual(normalizar_destino("120363@g.us"), "120363@g.us")
         self.assertEqual(numero_para_evolution("5531999999999@s.whatsapp.net"), "5531999999999")
         self.assertEqual(numero_para_evolution("120363418335765186@g.us"), "120363418335765186@g.us")
+
+    @override_settings(
+        EVOLUTION_API_URL="https://evo.test",
+        EVOLUTION_API_KEY="evo.key",
+        EVOLUTION_INSTANCE_NAME="nio_gc_tickets",
+        N8N_OUTBOUND_WEBHOOK_URL="",
+        SYNCWA_MODO_TESTE=False,
+    )
+    def test_enviar_documento_usa_base64_puro(self):
+        import base64
+        from unittest.mock import MagicMock, patch
+
+        from gestao.messaging.syncwa import enviar_documento
+
+        fake = MagicMock()
+        fake.status_code = 200
+        fake.json.return_value = {"key": {"id": "doc-1"}}
+        with patch("gestao.messaging.syncwa.requests.post", return_value=fake) as post:
+            result = enviar_documento(
+                "5531999999999", conteudo=b"abc", file_name="Tarefas VISION.xlsx"
+            )
+        self.assertTrue(result.ok)
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(payload["media"], base64.b64encode(b"abc").decode("ascii"))
+        self.assertFalse(payload["media"].startswith("data:"))
+        self.assertEqual(payload["fileName"], "Tarefas_VISION.xlsx")
+        self.assertEqual(
+            payload["mimetype"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        self.assertIn("/message/sendMedia/nio_gc_tickets", post.call_args.args[0])
+
+    @override_settings(
+        EVOLUTION_API_URL="https://evo.test",
+        EVOLUTION_API_KEY="evo.key",
+        EVOLUTION_INSTANCE_NAME="nio_gc_tickets",
+        N8N_OUTBOUND_WEBHOOK_URL="",
+        SYNCWA_MODO_TESTE=False,
+    )
+    def test_enviar_documento_tenta_data_uri_se_base64_rejeitado(self):
+        from unittest.mock import MagicMock, patch
+
+        from gestao.messaging.syncwa import enviar_documento
+
+        ruim = MagicMock()
+        ruim.status_code = 400
+        ruim.json.return_value = {
+            "status": 400,
+            "error": "Bad Request",
+            "response": {"message": ["Owned media must be a url or base64"]},
+        }
+        bom = MagicMock()
+        bom.status_code = 200
+        bom.json.return_value = {"key": {"id": "doc-2"}}
+        with patch("gestao.messaging.syncwa.requests.post", side_effect=[ruim, bom]) as post:
+            result = enviar_documento("5531999999999", conteudo=b"xyz", file_name="a.xlsx")
+        self.assertTrue(result.ok)
+        self.assertEqual(post.call_count, 2)
+        self.assertTrue(post.call_args_list[1].kwargs["json"]["media"].startswith("data:"))
 
     @override_settings(
         EVOLUTION_API_URL="https://evo.test",
@@ -993,6 +1081,33 @@ class TarefasTests(TestCase):
         rel = RelatorioTarefa.objects.get()
         self.assertIsNone(rel.parceiro_id)
         self.assertEqual(rel.total, 1)
+
+    def test_enviar_lote_acumula_resumo(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.envio import ResumoEnvio, enviar_tarefas_lote
+        from gestao.models import LoteImportacao, RelatorioTarefa
+        from gestao.periodo import hoje
+
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.TAREFAS, arquivo_nome="t.xlsx", ok=True
+        )
+        RelatorioTarefa.objects.create(
+            lote=lote,
+            tipo_relatorio=RelatorioTarefa.TipoRelatorio.ABERTAS,
+            parceiro=self.pdv,
+            pdv_nome="INOVA MG",
+            total=2,
+            data_referencia=hoje(),
+            mensagem="resumo",
+        )
+        with patch(
+            "gestao.messaging.envio.enviar_tarefa",
+            return_value=ResumoEnvio(enviados=1, detalhes=["ok"]),
+        ):
+            r = enviar_tarefas_lote(lote.id)
+        self.assertEqual(r.enviados, 1)
+        self.assertTrue(any("INOVA MG" in d for d in r.detalhes))
 
 
 class VendaIndevidaTests(TestCase):

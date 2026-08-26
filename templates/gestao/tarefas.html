@@ -7,6 +7,13 @@
     <h1>Tarefas</h1>
     <p>Abertas (hoje por PDV), fechadas e agendamentos futuros — coluna INDICADOR.</p>
   </div>
+  {% if pode_enviar %}
+  <form method="post">
+    {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+    <input type="hidden" name="action" value="enviar_todos">
+    <button class="btn btn-primary" type="submit">Enviar todos (WhatsApp)</button>
+  </form>
+  {% endif %}
 </div>
 
 {% if form %}

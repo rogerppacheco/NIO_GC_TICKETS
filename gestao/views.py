@@ -22,6 +22,7 @@ from .messaging.envio import (
     enviar_resumo_capilaridade,
     enviar_tarefa,
     enviar_tarefas_lote,
+    enviar_tarefas_todos,
     enviar_teste,
     enviar_recompra,
     enviar_recompra_lote,
@@ -636,6 +637,13 @@ def tarefas_view(request: HttpRequest) -> HttpResponse:
                 request,
                 "Tarefas (lote)",
                 enviar_tarefas_lote(int(request.POST.get("lote")), request.user),
+            )
+            return _voltar(request, "gestao_tarefas")
+        if action == "enviar_todos" and _pode_enviar(request):
+            _flash_resumo(
+                request,
+                "Tarefas (todos)",
+                enviar_tarefas_todos(_parceiros(request), request.user),
             )
             return _voltar(request, "gestao_tarefas")
         if eh_gestor(request.user) and request.FILES:

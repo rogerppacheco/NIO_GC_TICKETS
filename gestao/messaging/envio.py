@@ -684,10 +684,49 @@ def enviar_tarefa(rel: RelatorioTarefa, user: AbstractBaseUser | None = None) ->
     )
 
 
+def enviar_tarefas_todos(
+    parceiros,
+    user: AbstractBaseUser | None = None,
+) -> ResumoEnvio:
+    """Último relatório de cada PDV do escopo (+ fechadas/futuros, se gestor)."""
+    total = ResumoEnvio()
+    vistos: set[int] = set()
+    rels: list[RelatorioTarefa] = []
+    for p in parceiros:
+        rel = RelatorioTarefa.objects.filter(parceiro=p).order_by("-criado_em").first()
+        if rel and rel.id not in vistos:
+            vistos.add(rel.id)
+            rels.append(rel)
+    if user is None or eh_gestor(user):
+        for tipo in (
+            RelatorioTarefa.TipoRelatorio.FECHADAS,
+            RelatorioTarefa.TipoRelatorio.FUTUROS,
+        ):
+            rel = (
+                RelatorioTarefa.objects.filter(parceiro__isnull=True, tipo_relatorio=tipo)
+                .order_by("-criado_em")
+                .first()
+            )
+            if rel and rel.id not in vistos:
+                vistos.add(rel.id)
+                rels.append(rel)
+    if not rels:
+        return ResumoEnvio(ignorados=1, detalhes=["Nenhum relatório de tarefas no escopo."])
+    for rel in rels:
+        parte = enviar_tarefa(rel, user)
+        total.enviados += parte.enviados
+        total.erros += parte.erros
+        total.ignorados += parte.ignorados
+        rotulo = rel.pdv_nome or rel.get_tipo_relatorio_display()
+        total.detalhes.append(f"— {rotulo}: {parte.enviados} ok / {parte.erros} erro")
+    return total
+
+
 def enviar_tarefas_lote(
     lote_id: int,
     user: AbstractBaseUser | None = None,
 ) -> ResumoEnvio:
+    total = ResumoEnvio()
     qs = RelatorioTarefa.objects.filter(lote_id=lote_id).select_related("parceiro")
     if not qs.exists():
         return ResumoEnvio(ignorados=1, detalhes=["Lote sem relatórios de tarefas."])

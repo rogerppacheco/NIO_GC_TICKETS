@@ -309,6 +309,40 @@ def enviar_texto(to: str, text: str, timeout: float | None = None) -> SyncWAResu
     return last
 
 
+_MIME_POR_EXT = {
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsb": "application/vnd.ms-excel.sheet.binary.macroEnabled.12",
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
+
+
+def _mime_arquivo(nome: str, mime_type: str | None) -> str:
+    if mime_type:
+        return mime_type
+    ext = Path(nome).suffix.lower()
+    if ext in _MIME_POR_EXT:
+        return _MIME_POR_EXT[ext]
+    return mimetypes.guess_type(nome)[0] or "application/octet-stream"
+
+
+def _nome_envio(file_name: str) -> str:
+    base = Path(file_name or "anexo.xlsx").name
+    limpo = re.sub(r"[^\w.\-]+", "_", base, flags=re.ASCII).strip("._")
+    if not Path(limpo).suffix:
+        limpo = f"{limpo or 'anexo'}.xlsx"
+    return limpo[:80]
+
+
+def _media_formato_rejeitado(body: object) -> bool:
+    texto = str(body).lower()
+    return "url or base64" in texto or "owned media" in texto
+
+
 def enviar_documento(
     to: str,
     *,
@@ -328,31 +362,32 @@ def enviar_documento(
         return SyncWAResult(ok=False, error=str(exc), destino=to)
 
     timeout = timeout if timeout is not None else _timeout()
-    nome = Path(file_name or "anexo.xlsx").name
-    mime = mime_type or mimetypes.guess_type(nome)[0] or "application/octet-stream"
+    nome = _nome_envio(file_name)
+    mime = _mime_arquivo(nome, mime_type)
     b64 = base64.b64encode(conteudo).decode("ascii")
-    media = f"data:{mime};base64,{b64}"
+    # Evolution 2.2+ valida IsUrl/IsBase64 e rejeita o prefixo data:...;base64,
     number = numero_para_evolution(destino)
     mediatype = "image" if mime.startswith("image/") else "document"
-    payload = {
-        "number": number,
-        "mediatype": mediatype,
-        "mimetype": mime,
-        "media": media,
-        "fileName": nome,
-        "caption": (caption or "")[:1024],
-    }
-    try:
-        status, body = _post_json(
-            f"{_evo_url()}/message/sendMedia/{_evo_instance()}",
-            payload,
-            _evo_headers(),
-            max(timeout, 60.0),
-        )
-    except requests.RequestException as exc:
-        return SyncWAResult(ok=False, error=f"Falha de rede: {exc}", destino=destino)
-    if status >= 400:
-        return SyncWAResult(ok=False, error=f"HTTP {status}: {body}", destino=destino)
-    if isinstance(body, dict) and body.get("error"):
-        return SyncWAResult(ok=False, error=str(body.get("error")), destino=destino)
-    return SyncWAResult(ok=True, message_log_id=_message_id(body), status="SENT", destino=destino)
+    url = f"{_evo_url()}/message/sendMedia/{_evo_instance()}"
+    ultimo = SyncWAResult(ok=False, destino=destino)
+    for media in (b64, f"data:{mime};base64,{b64}"):
+        payload = {
+            "number": number,
+            "mediatype": mediatype,
+            "mimetype": mime,
+            "media": media,
+            "fileName": nome,
+            "caption": (caption or "")[:1024],
+        }
+        try:
+            status, body = _post_json(url, payload, _evo_headers(), max(timeout, 60.0))
+        except requests.RequestException as exc:
+            return SyncWAResult(ok=False, error=f"Falha de rede: {exc}", destino=destino)
+        if status < 400 and not (isinstance(body, dict) and body.get("error")):
+            return SyncWAResult(
+                ok=True, message_log_id=_message_id(body), status="SENT", destino=destino
+            )
+        ultimo = SyncWAResult(ok=False, error=f"HTTP {status}: {body}", destino=destino)
+        if not _media_formato_rejeitado(body):
+            return ultimo
+    return ultimo
