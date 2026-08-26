@@ -17,6 +17,7 @@ from .models import (
     RelatorioTarefa,
     RelatorioVendaIndevida,
     VendaOSAB,
+    PracaBTU,
 )
 
 
@@ -52,6 +53,7 @@ class DestinatarioAdmin(admin.ModelAdmin):
         "envio_tarefas",
         "envio_venda_indevida",
         "envio_recompra",
+        "envio_resultados",
     )
     search_fields = ("nome", "jid", "parceiro__nome", "razoes_sociais_comissionamento")
 
@@ -95,3 +97,4 @@ admin.site.register(HistoricoOSAB)
 admin.site.register(GrossMensal)
 admin.site.register(HistoricoChurn)
 admin.site.register(RelatorioFPD)
+admin.site.register(PracaBTU)

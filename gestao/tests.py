@@ -1,5 +1,7 @@
 from datetime import datetime
 from io import BytesIO
+from pathlib import Path
+from unittest import skipUnless
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -36,6 +38,20 @@ def _xlsx(linhas, colunas):
     wb.save(buf)
     buf.seek(0)
     buf.name = "base.xlsx"
+    return buf
+
+
+def _gdp_xlsx(linhas, aba="PAP (Local)", nome="gdp.xlsx"):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = aba
+    ws.append(["UF", "MUNICIPIO", "PORTFOLIO_GDP_20_08", "COD_IBGE"])
+    for linha in linhas:
+        ws.append(linha)
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    buf.name = nome
     return buf
 
 
@@ -514,6 +530,7 @@ class GestaoViewsTests(TestCase):
         for nome in (
             "gestao_sysmap",
             "gestao_osab",
+            "gestao_resultados",
             "gestao_capilaridade",
             "gestao_fpd",
             "gestao_churn",
@@ -587,6 +604,7 @@ class GestaoViewsTests(TestCase):
         for nome in (
             "gestao_hub",
             "gestao_osab",
+            "gestao_resultados",
             "gestao_capilaridade",
             "gestao_fpd",
             "gestao_churn",
@@ -1320,4 +1338,279 @@ class PlanilhaGestaoTests(TestCase):
         dados2, nome2 = planilha_osab(self.pdv)
         self.assertTrue(nome2.endswith(".xlsx"))
         self.assertTrue(dados2.startswith(b"PK"))
+
+
+@override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+        },
+    }
+)
+class ResultadosTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.gestor = User.objects.create_superuser("gres", "gr@x.com", "x")
+        PerfilStaff.objects.create(user=self.gestor, papel=PerfilStaff.Papel.GESTOR)
+        self.pdv = Parceiro.objects.create(codigo_pdv="r1", nome="INOVA MG")
+        self.client.force_login(self.gestor)
+
+    def _dt(self, y, m, d, h=12):
+        return timezone.make_aware(datetime(y, m, d, h, 0, 0))
+
+    def test_pagina_resultados(self):
+        r = self.client.get(reverse("gestao_resultados"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Parcial de vendas")
+        self.assertContains(r, "Acumulado do mês")
+        self.assertContains(r, "Ranking de VB")
+
+    def test_import_osab_persiste_municipio(self):
+        hoje = timezone.localdate()
+        abertura = datetime(hoje.year, hoje.month, 1, 10, 0)
+        arquivo = _xlsx(
+            [
+                [
+                    "PMUN",
+                    abertura,
+                    "TT1",
+                    "JOAO",
+                    "INOVA MG",
+                    abertura,
+                    abertura,
+                    "Concluído",
+                    "500 MEGA",
+                    "Betim",
+                ]
+            ],
+            [
+                "PEDIDO",
+                "DT_REF",
+                "MATRICULA_VENDEDOR",
+                "NOME_VENDEDOR",
+                "DESCRICAO",
+                "DATA_ABERTURA",
+                "DATA_FECHAMENTO",
+                "SITUACAO",
+                "VELOCIDADE",
+                "MUNICIPIO",
+            ],
+        )
+        processar_osab(arquivo, "OSAB.xlsx", hoje.year, hoje.month)
+        self.assertEqual(VendaOSAB.objects.get(pedido="PMUN").municipio, "Betim")
+
+    def test_acumulado_d0_d1(self):
+        from gestao.models import ConfiguracaoOSAB
+        from gestao.pipelines.resultados import linhas_acumulado
+
+        ConfiguracaoOSAB.objects.create(
+            parceiro=self.pdv, ano=2026, mes=8, meta_vl=10, meta_gross=8
+        )
+        VendaOSAB.objects.create(
+            pedido="A1",
+            pdv_nome="INOVA MG",
+            parceiro=self.pdv,
+            matricula_vendedor="TT1",
+            situacao="Concluído",
+            data_abertura=self._dt(2026, 8, 20),
+            data_fechamento=self._dt(2026, 8, 20),
+        )
+        VendaOSAB.objects.create(
+            pedido="A2",
+            pdv_nome="INOVA MG",
+            parceiro=self.pdv,
+            matricula_vendedor="TT1",
+            situacao="Concluído",
+            data_abertura=self._dt(2026, 8, 21),
+            data_fechamento=self._dt(2026, 8, 21),
+        )
+        resumo = linhas_acumulado(
+            [self.pdv], 2026, 8, data_ref=timezone.localdate().replace(year=2026, month=8, day=26)
+        )
+        self.assertEqual(resumo["d0"].isoformat(), "2026-08-21")
+        self.assertEqual(resumo["d1"].isoformat(), "2026-08-20")
+        linha = resumo["linhas"][0]
+        self.assertEqual(linha["realizado_vb"], 2)
+        self.assertEqual(linha["d0_vb"], 1)
+        self.assertEqual(linha["d1_vb"], 1)
+        self.assertEqual(linha["pct_vb"], 20.0)
+
+    def test_janela_segunda_feira(self):
+        from datetime import date as d
+
+        from gestao.pipelines.resultados import janela_dia_anterior
+
+        self.assertEqual(janela_dia_anterior(d(2026, 9, 7)), (d(2026, 9, 4), d(2026, 9, 6)))
+        self.assertEqual(janela_dia_anterior(d(2026, 9, 8)), (d(2026, 9, 7), d(2026, 9, 7)))
+
+    def test_ranking_pontos_e_grupos(self):
+        from datetime import date as d
+
+        from gestao.pipelines.resultados import cadastrar_praca_btu, montar_ranking
+
+        cadastrar_praca_btu("Betim")
+        CadastroTerceiro.objects.create(
+            chave_acesso="TTREG",
+            nome_terceiro="ANA REGULAR",
+            parceiro=self.pdv,
+            data_alocacao=d(2025, 1, 1),
+            situacao_empresa="Ativo",
+            situacao_funcional="Ativo",
+            situacao_contrato="Alocado",
+            cargo_funcao="VENDEDOR",
+        )
+        CadastroTerceiro.objects.create(
+            chave_acesso="TTINI",
+            nome_terceiro="BIA INICIANTE",
+            parceiro=self.pdv,
+            data_alocacao=d(2026, 4, 1),
+            situacao_empresa="Ativo",
+            situacao_funcional="Ativo",
+            situacao_contrato="Alocado",
+            cargo_funcao="VENDEDOR",
+        )
+        VendaOSAB.objects.create(
+            pedido="R1",
+            pdv_nome="INOVA MG",
+            parceiro=self.pdv,
+            matricula_vendedor="TTREG",
+            nome_vendedor="ANA",
+            situacao="Concluído",
+            municipio="Belo Horizonte",
+            data_abertura=self._dt(2026, 9, 3),
+        )
+        VendaOSAB.objects.create(
+            pedido="R2",
+            pdv_nome="INOVA MG",
+            parceiro=self.pdv,
+            matricula_vendedor="TTREG",
+            nome_vendedor="ANA",
+            situacao="Concluído",
+            municipio="Betim",
+            data_abertura=self._dt(2026, 9, 5),
+        )
+        VendaOSAB.objects.create(
+            pedido="I1",
+            pdv_nome="INOVA MG",
+            parceiro=self.pdv,
+            matricula_vendedor="TTINI",
+            nome_vendedor="BIA",
+            situacao="Concluído",
+            municipio="Contagem",
+            data_abertura=self._dt(2026, 9, 6),
+        )
+        ranking = montar_ranking([self.pdv], data_ref=d(2026, 9, 7))
+        self.assertTrue(ranking["periodo"]["oficial"])
+        self.assertEqual(ranking["periodo"]["janela_ini"], d(2026, 9, 4))
+        regular = ranking["grupos"]["regular"]
+        iniciante = ranking["grupos"]["iniciante"]
+        self.assertEqual(len(regular), 1)
+        self.assertEqual(regular[0]["pontos"], 1.5)
+        self.assertEqual(regular[0]["pontos_dia"], 0.5)
+        self.assertEqual(len(iniciante), 1)
+        self.assertEqual(iniciante[0]["pontos"], 1.0)
+        self.assertEqual(iniciante[0]["pontos_dia"], 1.0)
+
+    def test_cadastra_praca_btu(self):
+        from gestao.models import PracaBTU
+
+        r = self.client.post(
+            reverse("gestao_resultados"),
+            {"action": "add_praca_btu", "nome": "Betim"},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(PracaBTU.objects.filter(nome_norm="BETIM").exists())
+
+    def test_gdp_importa_so_especial(self):
+        from gestao.models import PracaBTU
+        from gestao.pipelines.gdp import processar_gdp
+
+        arquivo = _gdp_xlsx(
+            [
+                ["MG", "IPATINGA", "NOVO ESPECIAL", "3131307"],
+                ["MG", "BETIM", "NOVO REGULAR", "3106705"],
+                ["MG", "SABARA", "NOVO ESPECIAL", "3156700"],
+                ["PR", "CURITIBA", "PILOTO MVNO", "4106902"],
+            ]
+        )
+        resumo = processar_gdp([(arquivo, "b2c.xlsx")])
+        self.assertEqual(resumo["especial_uniao"], 2)
+        self.assertEqual(resumo["mg"], 2)
+        self.assertTrue(PracaBTU.objects.filter(nome_norm="IPATINGA", ativo=True).exists())
+        self.assertTrue(PracaBTU.objects.filter(nome_norm="SABARA", ativo=True).exists())
+        self.assertFalse(PracaBTU.objects.filter(nome_norm="BETIM").exists())
+        self.assertFalse(PracaBTU.objects.filter(nome_norm="CURITIBA").exists())
+
+    def test_gdp_desativa_quem_saiu_da_oferta(self):
+        from gestao.models import PracaBTU
+        from gestao.pipelines.gdp import processar_gdp
+
+        processar_gdp(
+            [
+                (
+                    _gdp_xlsx(
+                        [
+                            ["MG", "IPATINGA", "NOVO ESPECIAL", "1"],
+                            ["MG", "LAVRAS", "NOVO ESPECIAL", "2"],
+                        ]
+                    ),
+                    "a.xlsx",
+                )
+            ]
+        )
+        processar_gdp(
+            [(_gdp_xlsx([["MG", "IPATINGA", "NOVO ESPECIAL", "1"]]), "b.xlsx")]
+        )
+        self.assertTrue(PracaBTU.objects.get(nome_norm="IPATINGA").ativo)
+        self.assertFalse(PracaBTU.objects.get(nome_norm="LAVRAS").ativo)
+
+    def test_gdp_uniao_b2c_b2b(self):
+        from gestao.models import PracaBTU
+        from gestao.pipelines.gdp import processar_gdp
+
+        b2c = _gdp_xlsx([["MG", "IPATINGA", "NOVO ESPECIAL", "1"]], nome="b2c.xlsx")
+        b2b = _gdp_xlsx([["MG", "MURIAE", "NOVO ESPECIAL", "2"]], nome="b2b.xlsx")
+        resumo = processar_gdp([(b2c, "b2c.xlsx"), (b2b, "b2b.xlsx")])
+        self.assertEqual(resumo["especial_uniao"], 2)
+        self.assertEqual(
+            set(PracaBTU.objects.filter(ativo=True).values_list("nome_norm", flat=True)),
+            {"IPATINGA", "MURIAE"},
+        )
+
+    def test_importar_gdp_pela_tela(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from gestao.models import PracaBTU
+
+        buf = _gdp_xlsx([["MG", "ITABIRA", "NOVO ESPECIAL", "3131703"]])
+        upload = SimpleUploadedFile(
+            "20260820_B2C_GDP.xlsx",
+            buf.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        r = self.client.post(
+            reverse("gestao_resultados"),
+            {"action": "importar_gdp", "arquivo_b2c": upload},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(PracaBTU.objects.filter(nome_norm="ITABIRA", fonte="gdp").exists())
+
+    @skipUnless(
+        Path(r"c:\Users\rogge\Downloads\20260820_B2C_GDP.xlsx").exists(),
+        "GDP B2C local não encontrado",
+    )
+    def test_gdp_arquivo_real_b2c(self):
+        from gestao.models import PracaBTU
+        from gestao.pipelines.gdp import processar_gdp
+
+        caminho = Path(r"c:\Users\rogge\Downloads\20260820_B2C_GDP.xlsx")
+        with caminho.open("rb") as fh:
+            resumo = processar_gdp([(fh, caminho.name)])
+        self.assertEqual(resumo["especial_uniao"], 158)
+        self.assertEqual(resumo["mg"], 17)
+        self.assertTrue(PracaBTU.objects.filter(nome_norm="IPATINGA", uf="MG", ativo=True).exists())
+        self.assertFalse(PracaBTU.objects.filter(nome_norm="BETIM", ativo=True).exists())
+
+
 

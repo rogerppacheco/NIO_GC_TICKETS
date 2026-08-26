@@ -8,13 +8,25 @@ import pandas as pd
 from django.utils.timezone import get_current_timezone, is_naive, make_aware
 
 
-def ler_planilha(arquivo, nome: str = "") -> pd.DataFrame:
-    """Lê .xlsx, .xlsb, .xls e HTML exportado como .xls."""
+def _bytes_planilha(arquivo, nome: str = "") -> tuple[bytes, str]:
     nome = nome or getattr(arquivo, "name", "") or ""
     conteudo = arquivo.read() if hasattr(arquivo, "read") else Path(arquivo).read_bytes()
     if hasattr(arquivo, "seek"):
         arquivo.seek(0)
+    return conteudo, nome
 
+
+def _engine_excel(sufixo: str) -> str | None:
+    if sufixo == ".xlsb":
+        return "pyxlsb"
+    if sufixo == ".xls":
+        return "xlrd"
+    return None
+
+
+def ler_planilha(arquivo, nome: str = "", sheet_name=0) -> pd.DataFrame:
+    """Lê .xlsx, .xlsb, .xls e HTML exportado como .xls."""
+    conteudo, nome = _bytes_planilha(arquivo, nome)
     sufixo = Path(nome).suffix.lower()
     inicio = conteudo[:200].lstrip()
     if inicio.startswith(b"<!DOCTYPE") or inicio.startswith(b"<html"):
@@ -27,11 +39,28 @@ def ler_planilha(arquivo, nome: str = "") -> pd.DataFrame:
         tmp.write(conteudo)
         caminho = tmp.name
     try:
-        if sufixo == ".xlsb":
-            return pd.read_excel(caminho, engine="pyxlsb")
-        if sufixo == ".xls":
-            return pd.read_excel(caminho, engine="xlrd")
-        return pd.read_excel(caminho)
+        kwargs = {"sheet_name": sheet_name}
+        engine = _engine_excel(sufixo)
+        if engine:
+            kwargs["engine"] = engine
+        return pd.read_excel(caminho, **kwargs)
+    finally:
+        Path(caminho).unlink(missing_ok=True)
+
+
+def listar_abas(arquivo, nome: str = "") -> list[str]:
+    conteudo, nome = _bytes_planilha(arquivo, nome)
+    sufixo = Path(nome).suffix.lower()
+    with tempfile.NamedTemporaryFile(suffix=sufixo or ".xlsx", delete=False) as tmp:
+        tmp.write(conteudo)
+        caminho = tmp.name
+    try:
+        kwargs = {}
+        engine = _engine_excel(sufixo)
+        if engine:
+            kwargs["engine"] = engine
+        with pd.ExcelFile(caminho, **kwargs) as xl:
+            return list(xl.sheet_names)
     finally:
         Path(caminho).unlink(missing_ok=True)
 

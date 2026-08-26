@@ -10,7 +10,15 @@ from django.urls import reverse
 from tickets.acesso import eh_gestor, escopo_gestao, gestor_required, parceiros_gestao, parceiros_visiveis, tem_acesso_interno
 from tickets.models import Parceiro
 
-from .forms import DestinatarioForm, GrossForm, PeriodoForm, UploadBaseForm
+from .forms import (
+    DestinatarioForm,
+    GdpImportForm,
+    GrossForm,
+    ParcialResultadoForm,
+    PeriodoForm,
+    PracaBTUForm,
+    UploadBaseForm,
+)
 from .messaging.envio import (
     enviar_capilaridade_pdv,
     enviar_capilaridade_todos,
@@ -28,6 +36,11 @@ from .messaging.envio import (
     enviar_recompra_lote,
     enviar_venda_indevida,
     enviar_venda_indevida_lote,
+    enviar_parcial,
+    enviar_parcial_todos,
+    enviar_acumulado_pdv,
+    enviar_acumulado_todos,
+    enviar_ranking,
 )
 from .messaging.syncwa import healthcheck, listar_grupos, modo_teste_ativo, syncwa_configurado
 from .models import (
@@ -40,6 +53,7 @@ from .models import (
     HistoricoOSAB,
     LoteImportacao,
     MetaCapilaridade,
+    PracaBTU,
     RelatorioComissionamento,
     RelatorioFPD,
     RelatorioRecompra,
@@ -52,8 +66,17 @@ from .periodo import periodo_ativo, salvar_periodo
 from .pipelines.churn import processar_churn
 from .pipelines.comissionamento import mapa_pdv_razoes, processar_comissionamento
 from .pipelines.fpd import processar_fpd
+from .pipelines.gdp import processar_gdp
 from .pipelines.osab import calcular_osab, persistir_capilaridade, processar_osab
 from .pipelines.recompra import processar_recompra
+from .pipelines.resultados import (
+    cadastrar_praca_btu,
+    gaps_ranking,
+    linhas_acumulado,
+    mensagem_acumulado_consolidada,
+    mensagem_ranking,
+    montar_ranking,
+)
 from .pipelines.tarefas import processar_tarefas
 from .pipelines.venda_indevida import processar_venda_indevida
 from .relatorios import montar_mascara_pdv, resumo_geral
@@ -379,6 +402,157 @@ def osab_view(request: HttpRequest) -> HttpResponse:
             "cadastro_osab": classificar_parceiros_osab() if eh_gestor(request.user) else None,
             "pode_importar": eh_gestor(request.user),
             "pode_enviar": _pode_enviar(request),
+        },
+    )
+
+
+@login_required
+def resultados_view(request: HttpRequest) -> HttpResponse:
+    ano, mes = periodo_ativo()
+    visiveis = list(_parceiros(request))
+    form = ParcialResultadoForm(
+        request.POST or None,
+        request.FILES or None,
+        parceiros=Parceiro.objects.filter(pk__in=[p.pk for p in visiveis]),
+    )
+    form_btu = PracaBTUForm(request.POST or None)
+    form_gdp = GdpImportForm()
+
+    if request.method == "POST":
+        action = request.POST.get("action") or ""
+        if action == "importar_gdp" and eh_gestor(request.user):
+            form_gdp = GdpImportForm(request.POST, request.FILES)
+            if form_gdp.is_valid():
+                arquivos = []
+                for chave in ("arquivo_b2c", "arquivo_b2b"):
+                    arq = form_gdp.cleaned_data.get(chave)
+                    if arq:
+                        arquivos.append((arq, arq.name))
+                try:
+                    nomes = " + ".join(n for _, n in arquivos)
+                    resumo = processar_gdp(arquivos)
+                    _lote(request, LoteImportacao.Tipo.GDP, nomes, True, resumo)
+                    mg = resumo.get("mg") or 0
+                    messages.success(
+                        request,
+                        f"GDP importado: {resumo['especial_uniao']} praça(s) ESPECIAL "
+                        f"({mg} em MG). {resumo['inseridos']} novas, "
+                        f"{resumo['atualizados']} atualizadas, "
+                        f"{resumo['desativados']} saíram da oferta.",
+                    )
+                except Exception as exc:
+                    _lote(
+                        request,
+                        LoteImportacao.Tipo.GDP,
+                        " + ".join(n for _, n in arquivos) or "gdp.xlsx",
+                        False,
+                        {},
+                        str(exc),
+                    )
+                    messages.error(request, f"Falha ao importar GDP: {exc}")
+            else:
+                messages.error(request, "Envie o GDP B2C e/ou B2B em .xlsx.")
+            return _voltar(request, "gestao_resultados")
+        if action == "add_praca_btu" and eh_gestor(request.user):
+            form_btu = PracaBTUForm(request.POST)
+            if form_btu.is_valid():
+                try:
+                    praca = cadastrar_praca_btu(form_btu.cleaned_data["nome"])
+                    messages.success(request, f"Praça BTU cadastrada: {praca.nome}.")
+                except ValueError as exc:
+                    messages.error(request, str(exc))
+            else:
+                messages.error(request, "Informe o município BTU.")
+            return _voltar(request, "gestao_resultados")
+        if action == "del_praca_btu" and eh_gestor(request.user):
+            pk = request.POST.get("praca")
+            apagada, _ = PracaBTU.objects.filter(pk=pk).delete()
+            if apagada:
+                messages.success(request, "Praça BTU removida.")
+            return _voltar(request, "gestao_resultados")
+        if action in {"enviar_parcial", "enviar_parcial_todos"} and _pode_enviar(request):
+            form = ParcialResultadoForm(
+                request.POST,
+                request.FILES,
+                parceiros=Parceiro.objects.filter(pk__in=[p.pk for p in visiveis]),
+            )
+            if not form.is_valid():
+                messages.error(request, "Anexe uma imagem PNG, JPG ou WEBP.")
+                return _voltar(request, "gestao_resultados")
+            arquivo = form.cleaned_data["arquivo"]
+            arquivo.seek(0)
+            conteudo = arquivo.read()
+            caption = form.cleaned_data.get("caption") or ""
+            if action == "enviar_parcial":
+                parceiro = form.cleaned_data.get("parceiro")
+                if not parceiro:
+                    messages.error(request, "Escolha o PDV para enviar o parcial.")
+                    return _voltar(request, "gestao_resultados")
+                _flash_resumo(
+                    request,
+                    "Parcial",
+                    enviar_parcial(
+                        parceiro,
+                        request.user,
+                        arquivo_bytes=conteudo,
+                        nome_arquivo=arquivo.name,
+                        caption=caption,
+                    ),
+                )
+            else:
+                _flash_resumo(
+                    request,
+                    "Parcial (todos)",
+                    enviar_parcial_todos(
+                        visiveis,
+                        request.user,
+                        arquivo_bytes=conteudo,
+                        nome_arquivo=arquivo.name,
+                        caption=caption,
+                    ),
+                )
+            return _voltar(request, "gestao_resultados")
+        if action == "enviar_acumulado_pdv" and _pode_enviar(request):
+            parceiro = get_object_or_404(_parceiros(request), pk=request.POST.get("parceiro"))
+            _flash_resumo(
+                request,
+                "Acumulado",
+                enviar_acumulado_pdv(parceiro, request.user, ano=ano, mes=mes),
+            )
+            return _voltar(request, "gestao_resultados")
+        if action == "enviar_acumulado_todos" and _pode_enviar(request):
+            _flash_resumo(
+                request,
+                "Acumulado (todos)",
+                enviar_acumulado_todos(visiveis, request.user, ano=ano, mes=mes),
+            )
+            return _voltar(request, "gestao_resultados")
+        if action == "enviar_ranking" and _pode_enviar(request):
+            _flash_resumo(request, "Ranking VB", enviar_ranking(visiveis, request.user))
+            return _voltar(request, "gestao_resultados")
+
+    acumulado = linhas_acumulado(visiveis, ano, mes)
+    ranking = montar_ranking(visiveis)
+    pracas_ativas = PracaBTU.objects.filter(ativo=True)
+    return render(
+        request,
+        "gestao/resultados.html",
+        {
+            "ano": ano,
+            "mes": mes,
+            "form": form,
+            "form_btu": form_btu if eh_gestor(request.user) else None,
+            "form_gdp": form_gdp if eh_gestor(request.user) else None,
+            "acumulado": acumulado,
+            "msg_acumulado": mensagem_acumulado_consolidada(acumulado),
+            "ranking": ranking,
+            "msg_ranking": mensagem_ranking(ranking),
+            "gaps_ranking": gaps_ranking(ranking),
+            "pracas_btu": pracas_ativas,
+            "pracas_btu_mg": pracas_ativas.filter(uf="MG").count(),
+            "ultimo_gdp": LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.GDP).first(),
+            "pode_enviar": _pode_enviar(request),
+            "pode_editar": eh_gestor(request.user),
         },
     )
 

@@ -80,6 +80,17 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
 
     col_gc = resolver_coluna(trabalho, ["nm_gc", "NM_GC", "NOME_GC", "nome_gc"])
     col_sap = resolver_coluna(trabalho, ["PDV_SAP", "pdv_sap"])
+    col_mun = resolver_coluna(trabalho, [
+        "MUNICIPIO",
+        "NM_MUNICIPIO",
+        "CIDADE",
+        "MUNICÍPIO",
+        "NM_MUNICIPIO_INSTALACAO",
+        "CIDADE_INSTALACAO",
+        "PRACA",
+        "PRAÇA",
+        "NM_PRACA",
+    ])
     existentes = {v.pedido: v for v in VendaOSAB.objects.filter(pedido__isnull=False)}
     inseridos = atualizados = ignorados = 0
     for _, row in trabalho.iterrows():
@@ -105,6 +116,8 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
             dados["nm_gc"] = texto(row.get(col_gc), 120)
         if col_sap:
             dados["pdv_sap"] = texto(row.get(col_sap), 32)
+        if col_mun:
+            dados["municipio"] = texto(row.get(col_mun), 120)
         if pedido in existentes:
             reg = existentes[pedido]
             mudou_meta = False
@@ -114,13 +127,16 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
             if dados.get("nm_gc") and dados["nm_gc"] != (reg.nm_gc or ""):
                 reg.nm_gc = dados["nm_gc"]
                 mudou_meta = True
+            if dados.get("municipio") and dados["municipio"] != (reg.municipio or ""):
+                reg.municipio = dados["municipio"]
+                mudou_meta = True
             if reg.dt_ref is None or dt_ref > reg.dt_ref:
                 for k, v in dados.items():
                     setattr(reg, k, v)
                 reg.save()
                 atualizados += 1
             elif mudou_meta:
-                campos = [c for c in ("pdv_sap", "nm_gc") if c in dados]
+                campos = [c for c in ("pdv_sap", "nm_gc", "municipio") if dados.get(c)]
                 reg.save(update_fields=campos)
                 ignorados += 1
             else:

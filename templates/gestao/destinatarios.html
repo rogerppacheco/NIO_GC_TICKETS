@@ -100,6 +100,7 @@
           <label>{{ form.envio_tarefas }} Tarefas</label>
           <label>{{ form.envio_venda_indevida }} Venda indevida</label>
           <label>{{ form.envio_recompra }} Recompra</label>
+          <label>{{ form.envio_resultados }} Resultados</label>
         </div>
         <div class="full help"><strong>Enviar a máscara também por e-mail</strong> (além do WhatsApp):</div>
         <div class="full" style="display:flex;flex-wrap:wrap;gap:1rem;align-items:center">
@@ -112,6 +113,7 @@
           <label>{{ form.email_tarefas }} Tarefas</label>
           <label>{{ form.email_venda_indevida }} Venda indevida</label>
           <label>{{ form.email_recompra }} Recompra</label>
+          <label>{{ form.email_resultados }} Resultados</label>
         </div>
         <div class="full">
           {{ form.razoes_sociais_comissionamento.label_tag }}
@@ -171,7 +173,8 @@
             {% if d.envio_comissionamento %}Comis {% endif %}
             {% if d.envio_tarefas %}Tar {% endif %}
             {% if d.envio_venda_indevida %}VI {% endif %}
-            {% if d.envio_recompra %}Rec{% endif %}
+            {% if d.envio_recompra %}Rec {% endif %}
+            {% if d.envio_resultados %}Res{% endif %}
           </td>
           <td>{% if d.ativo %}<span class="pill resolvido">Ativo</span>{% else %}<span class="pill cancelado">Inativo</span>{% endif %}</td>
           <td>

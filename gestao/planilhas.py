@@ -83,6 +83,7 @@ def planilha_osab(parceiro: Parceiro) -> tuple[bytes, str]:
             "Situação": v.situacao,
             "Velocidade": v.velocidade,
             "Pagamento": v.meio_pagamento,
+            "Município": v.municipio,
         }
         for v in qs
     ]
@@ -135,6 +136,69 @@ def planilha_churn(parceiro: Parceiro) -> tuple[bytes, str]:
     ]
     df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=["PDV", "Safra", "Gross", "Churn", "Taxa %"])
     return df_para_xlsx(df, f"Churn_{_tag(parceiro)}.xlsx")
+
+
+def planilha_acumulado(resumo: dict) -> tuple[bytes, str]:
+    d0 = resumo.get("d0")
+    d1 = resumo.get("d1")
+    rows = [
+        {
+            "PDV": l["pdv"],
+            "Meta VB": l["meta_vb"],
+            "Realizado VB": l["realizado_vb"],
+            "% meta VB": None if l["pct_vb"] is None else round(l["pct_vb"], 1),
+            "VB D-1": l["d1_vb"],
+            "VB D0": l["d0_vb"],
+            "Meta Gross": l["meta_gross"],
+            "Realizado Gross": l["realizado_gross"],
+            "% meta Gross": None if l["pct_gross"] is None else round(l["pct_gross"], 1),
+            "Gross D-1": l["d1_gross"],
+            "Gross D0": l["d0_gross"],
+            "D0": d0.isoformat() if d0 else "",
+            "D-1": d1.isoformat() if d1 else "",
+        }
+        for l in resumo.get("linhas") or []
+    ]
+    df = pd.DataFrame(rows) if rows else pd.DataFrame(
+        columns=["PDV", "Meta VB", "Realizado VB", "% meta VB", "VB D-1", "VB D0"]
+    )
+    mes, ano = resumo.get("mes"), resumo.get("ano")
+    nome = f"Acumulado_{mes:02d}-{ano}.xlsx" if mes and ano else "Acumulado.xlsx"
+    return df_para_xlsx(df, nome)
+
+
+def planilha_ranking(ranking: dict) -> tuple[bytes, str]:
+    rotulos = {
+        "regular": "Base Regular",
+        "iniciante": "Iniciante",
+        "sem_cadastro": "Sem cadastro",
+    }
+    rows = []
+    for chave, grupo in (ranking.get("grupos") or {}).items():
+        for item in grupo:
+            aloc = item.get("data_alocacao")
+            rows.append(
+                {
+                    "Grupo": rotulos.get(chave, chave),
+                    "Posição": item.get("posicao"),
+                    "TT": item.get("tt"),
+                    "Nome": item.get("nome"),
+                    "PDV": item.get("pdv"),
+                    "Pontos": item.get("pontos"),
+                    "Pontos dia anterior": item.get("pontos_dia"),
+                    "VB": item.get("vb"),
+                    "VB BTU": item.get("vb_btu"),
+                    "Sem município": item.get("sem_municipio"),
+                    "Data alocação": aloc.isoformat() if aloc else "",
+                }
+            )
+    df = pd.DataFrame(rows) if rows else pd.DataFrame(
+        columns=["Grupo", "Posição", "TT", "Nome", "Pontos"]
+    )
+    periodo = ranking.get("periodo") or {}
+    fim = periodo.get("fim")
+    nome = f"Ranking_VB_{fim.isoformat()}.xlsx" if fim else "Ranking_VB.xlsx"
+    return df_para_xlsx(df, nome)
 
 
 def bytes_arquivo_field(arquivo_field, nome_fallback: str) -> tuple[bytes, str]:

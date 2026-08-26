@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import mimetypes
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,10 +24,12 @@ from ..models import (
 from ..periodo import periodo_ativo
 from ..planilhas import (
     bytes_arquivo_field,
+    planilha_acumulado,
     planilha_capilaridade,
     planilha_churn,
     planilha_fpd,
     planilha_osab,
+    planilha_ranking,
 )
 from ..relatorios import montar_mascara_pdv, resumo_geral
 from .email_smtp import enviar_email_com_anexos, smtp_configurado
@@ -43,6 +46,7 @@ FLAG_EMAIL = {
     "envio_tarefas": "email_tarefas",
     "envio_venda_indevida": "email_venda_indevida",
     "envio_recompra": "email_recompra",
+    "envio_resultados": "email_resultados",
 }
 
 
@@ -132,7 +136,8 @@ def _talvez_email(
         return
     anexos = []
     if arquivo_bytes and nome_arquivo:
-        anexos.append((nome_arquivo, arquivo_bytes, XLSX_MIME))
+        mime = mimetypes.guess_type(nome_arquivo)[0] or XLSX_MIME
+        anexos.append((nome_arquivo, arquivo_bytes, mime))
     titulo = dict(EnvioWhatsApp.Tipo.choices).get(tipo, tipo)
     pdv = parceiro.nome if parceiro else "Gestão"
     ok, erro = enviar_email_com_anexos(
@@ -849,3 +854,139 @@ def enviar_recompra_lote(
         rotulo = "consolidado" if rel.consolidado else rel.pdv_nome
         total.detalhes.append(f"— {rotulo}: {parte.enviados} ok / {parte.erros} erro")
     return total
+
+
+def enviar_parcial(
+    parceiro: Parceiro,
+    user: AbstractBaseUser | None,
+    *,
+    arquivo_bytes: bytes,
+    nome_arquivo: str,
+    caption: str = "",
+) -> ResumoEnvio:
+    if not arquivo_bytes:
+        return ResumoEnvio(erros=1, detalhes=["Anexe uma imagem para o parcial."])
+    texto = (caption or "").strip() or f"📸 *Parcial de vendas* — {parceiro.nome}"
+    destinos = destinos_para_envio(user, "envio_resultados", parceiro)
+    return _enviar_com_anexo(
+        tipo=EnvioWhatsApp.Tipo.PARCIAL,
+        mensagem=texto,
+        caption=texto,
+        destinos=destinos,
+        parceiro=parceiro,
+        user=user,
+        arquivo_bytes=arquivo_bytes,
+        nome_arquivo=nome_arquivo,
+        flag="envio_resultados",
+    )
+
+
+def enviar_parcial_todos(
+    parceiros: list[Parceiro],
+    user: AbstractBaseUser | None,
+    *,
+    arquivo_bytes: bytes,
+    nome_arquivo: str,
+    caption: str = "",
+) -> ResumoEnvio:
+    total = ResumoEnvio()
+    if not arquivo_bytes:
+        return ResumoEnvio(erros=1, detalhes=["Anexe uma imagem para o parcial."])
+    for p in parceiros:
+        parte = enviar_parcial(
+            p,
+            user,
+            arquivo_bytes=arquivo_bytes,
+            nome_arquivo=nome_arquivo,
+            caption=caption,
+        )
+        total.enviados += parte.enviados
+        total.erros += parte.erros
+        total.ignorados += parte.ignorados
+        total.detalhes.append(f"— {p.nome}: {parte.enviados} ok / {parte.erros} erro")
+    if not parceiros:
+        total.ignorados += 1
+        total.detalhes.append("Nenhum PDV no escopo.")
+    return total
+
+
+def enviar_acumulado_pdv(
+    parceiro: Parceiro,
+    user: AbstractBaseUser | None = None,
+    *,
+    ano: int | None = None,
+    mes: int | None = None,
+) -> ResumoEnvio:
+    from ..pipelines.resultados import linhas_acumulado, mensagem_acumulado_pdv
+
+    if ano is None or mes is None:
+        ano, mes = periodo_ativo()
+    resumo = linhas_acumulado([parceiro], ano, mes)
+    linhas = resumo.get("linhas") or []
+    if not linhas:
+        return ResumoEnvio(ignorados=1, detalhes=[f"{parceiro.nome}: sem dados de acumulado."])
+    mensagem = mensagem_acumulado_pdv(
+        linhas[0], d0=resumo.get("d0"), d1=resumo.get("d1"), ano=ano, mes=mes
+    )
+    destinos = destinos_para_envio(user, "envio_resultados", parceiro)
+    arquivo_bytes, nome_arquivo = planilha_acumulado(resumo)
+    return _enviar_com_anexo(
+        tipo=EnvioWhatsApp.Tipo.ACUMULADO,
+        mensagem=mensagem,
+        caption=f"📊 *Acumulado {mes:02d}/{ano}* — {parceiro.nome}",
+        destinos=destinos,
+        parceiro=parceiro,
+        user=user,
+        arquivo_bytes=arquivo_bytes,
+        nome_arquivo=nome_arquivo,
+        flag="envio_resultados",
+    )
+
+
+def enviar_acumulado_todos(
+    parceiros: list[Parceiro],
+    user: AbstractBaseUser | None = None,
+    *,
+    ano: int | None = None,
+    mes: int | None = None,
+) -> ResumoEnvio:
+    total = ResumoEnvio()
+    for p in parceiros:
+        parte = enviar_acumulado_pdv(p, user, ano=ano, mes=mes)
+        total.enviados += parte.enviados
+        total.erros += parte.erros
+        total.ignorados += parte.ignorados
+        total.detalhes.append(f"— {p.nome}: {parte.enviados} ok / {parte.erros} erro")
+    if not parceiros:
+        total.ignorados += 1
+        total.detalhes.append("Nenhum PDV no escopo.")
+    return total
+
+
+def enviar_ranking(
+    parceiros: list[Parceiro],
+    user: AbstractBaseUser | None = None,
+) -> ResumoEnvio:
+    from ..pipelines.resultados import mensagem_ranking, montar_ranking
+
+    ranking = montar_ranking(parceiros)
+    mensagem = mensagem_ranking(ranking)
+    destinos: list[DestinoEnvio] = []
+    if user is not None and not eh_gestor(user):
+        destinos = destinos_para_envio(user, "envio_resultados")
+    else:
+        for p in parceiros:
+            destinos.extend(destinos_para_envio(user, "envio_resultados", p))
+        destinos = _unicos_jid(destinos)
+    arquivo_bytes, nome_arquivo = planilha_ranking(ranking)
+    return _enviar_com_anexo(
+        tipo=EnvioWhatsApp.Tipo.RANKING,
+        mensagem=mensagem,
+        caption="🏆 *Ranking VB*",
+        destinos=destinos,
+        parceiro=None,
+        user=user,
+        arquivo_bytes=arquivo_bytes,
+        nome_arquivo=nome_arquivo,
+        flag="envio_resultados",
+    )

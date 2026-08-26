@@ -28,6 +28,7 @@ class DestinatarioForm(forms.ModelForm):
             "envio_tarefas",
             "envio_venda_indevida",
             "envio_recompra",
+            "envio_resultados",
             "email",
             "email_osab",
             "email_capilaridade",
@@ -38,6 +39,7 @@ class DestinatarioForm(forms.ModelForm):
             "email_tarefas",
             "email_venda_indevida",
             "email_recompra",
+            "email_resultados",
             "razoes_sociais_comissionamento",
         )
         widgets = {
@@ -99,3 +101,78 @@ class GrossForm(forms.Form):
         help_text="Ex.: 202507",
     )
     gross = forms.IntegerField(min_value=0, label="Gross")
+
+
+class ParcialResultadoForm(forms.Form):
+    arquivo = forms.FileField(
+        label="Imagem",
+        help_text="PNG, JPG ou WEBP. Envio para um PDV ou para todos do escopo.",
+    )
+    caption = forms.CharField(
+        label="Texto / legenda",
+        required=False,
+        max_length=900,
+        widget=forms.Textarea(
+            attrs={"rows": 3, "placeholder": "Texto curto que vai junto da imagem."}
+        ),
+    )
+    parceiro = forms.ModelChoiceField(
+        queryset=Parceiro.objects.none(),
+        required=False,
+        label="PDV",
+    )
+
+    def __init__(self, *args, parceiros=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        qs = parceiros if parceiros is not None else Parceiro.objects.filter(ativo=True)
+        self.fields["parceiro"].queryset = qs
+
+    def clean_arquivo(self):
+        arquivo = self.cleaned_data["arquivo"]
+        nome = (arquivo.name or "").lower()
+        if not any(nome.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp")):
+            raise forms.ValidationError("Use uma imagem PNG, JPG ou WEBP.")
+        if arquivo.size and arquivo.size > 8 * 1024 * 1024:
+            raise forms.ValidationError("A imagem deve ter no máximo 8 MB.")
+        return arquivo
+
+
+class PracaBTUForm(forms.Form):
+    nome = forms.CharField(
+        label="Município / praça BTU",
+        max_length=120,
+        widget=forms.TextInput(attrs={"placeholder": "Ex.: Ipatinga"}),
+    )
+
+
+class GdpImportForm(forms.Form):
+    arquivo_b2c = forms.FileField(
+        label="GDP B2C",
+        required=False,
+        help_text="Planilha 20xx_B2C_GDP.xlsx. Aba PAP (Local), portfólio vigente NOVO ESPECIAL.",
+    )
+    arquivo_b2b = forms.FileField(
+        label="GDP B2B",
+        required=False,
+        help_text="Opcional. Se B2C e B2B divergirem, a união das praças ESPECIAL entra no ranking.",
+    )
+
+    def _validar_xlsx(self, arquivo):
+        if not arquivo:
+            return arquivo
+        nome = (arquivo.name or "").lower()
+        if not nome.endswith((".xlsx", ".xls", ".xlsb")):
+            raise forms.ValidationError("Use o GDP em .xlsx.")
+        return arquivo
+
+    def clean_arquivo_b2c(self):
+        return self._validar_xlsx(self.cleaned_data.get("arquivo_b2c"))
+
+    def clean_arquivo_b2b(self):
+        return self._validar_xlsx(self.cleaned_data.get("arquivo_b2b"))
+
+    def clean(self):
+        dados = super().clean()
+        if not dados.get("arquivo_b2c") and not dados.get("arquivo_b2b"):
+            raise forms.ValidationError("Envie o GDP B2C e/ou o GDP B2B.")
+        return dados

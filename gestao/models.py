@@ -26,6 +26,7 @@ class LoteImportacao(models.Model):
         TAREFAS = "tarefas", "Tarefas"
         VENDA_INDEVIDA = "venda_indevida", "Venda indevida"
         RECOMPRA = "recompra", "Recompra"
+        GDP = "gdp", "GDP / praças BTU"
 
     tipo = models.CharField(max_length=20, choices=Tipo.choices, db_index=True)
     arquivo_nome = models.CharField(max_length=255)
@@ -105,6 +106,7 @@ class VendaOSAB(models.Model):
     situacao = models.CharField(max_length=200, blank=True)
     velocidade = models.CharField(max_length=100, blank=True)
     meio_pagamento = models.CharField(max_length=100, blank=True)
+    municipio = models.CharField("Município / praça", max_length=120, blank=True, db_index=True)
     data_importacao = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -114,6 +116,34 @@ class VendaOSAB(models.Model):
 
     def __str__(self) -> str:
         return self.pedido
+
+
+class PracaBTU(models.Model):
+    class Fonte(models.TextChoices):
+        GDP = "gdp", "GDP"
+        MANUAL = "manual", "Manual"
+
+    nome = models.CharField("Município / praça", max_length=120)
+    nome_norm = models.CharField(max_length=120, unique=True, db_index=True)
+    uf = models.CharField(max_length=2, blank=True, db_index=True)
+    cod_ibge = models.CharField(max_length=16, blank=True)
+    portfolio = models.CharField(max_length=40, blank=True)
+    fonte = models.CharField(
+        max_length=12, choices=Fonte.choices, default=Fonte.MANUAL, db_index=True
+    )
+    ativo = models.BooleanField(default=True, db_index=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["uf", "nome"]
+        verbose_name = "Praça BTU"
+        verbose_name_plural = "Praças BTU"
+
+    def __str__(self) -> str:
+        if self.uf:
+            return f"{self.uf} · {self.nome}"
+        return self.nome
 
 
 class AnaliseCapilaridade(models.Model):
@@ -456,6 +486,7 @@ class Destinatario(models.Model):
     envio_tarefas = models.BooleanField("Tarefas", default=False)
     envio_venda_indevida = models.BooleanField("Venda indevida", default=False)
     envio_recompra = models.BooleanField("Recompra", default=False)
+    envio_resultados = models.BooleanField("Resultados", default=False)
     razoes_sociais_comissionamento = models.TextField(
         "Razões sociais (comissionamento)",
         blank=True,
@@ -475,6 +506,7 @@ class Destinatario(models.Model):
     email_tarefas = models.BooleanField("E-mail Tarefas", default=False)
     email_venda_indevida = models.BooleanField("E-mail Venda indevida", default=False)
     email_recompra = models.BooleanField("E-mail Recompra", default=False)
+    email_resultados = models.BooleanField("E-mail Resultados", default=False)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -498,6 +530,9 @@ class EnvioWhatsApp(models.Model):
         TAREFAS = "tarefas", "Tarefas"
         VENDA_INDEVIDA = "venda_indevida", "Venda indevida"
         RECOMPRA = "recompra", "Recompra"
+        PARCIAL = "parcial", "Parcial de vendas"
+        ACUMULADO = "acumulado", "Acumulado do mês"
+        RANKING = "ranking", "Ranking VB"
         RESUMO = "resumo", "Resumo geral"
         TESTE = "teste", "Teste WhatsApp"
 
