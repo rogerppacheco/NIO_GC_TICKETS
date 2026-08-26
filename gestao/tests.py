@@ -257,6 +257,120 @@ class CadastroParceirosOsabTests(TestCase):
         self.existente.refresh_from_db()
         self.assertFalse(self.existente.ativo)
 
+    def test_cria_com_codigo_pdv_sap(self):
+        from gestao.parceiros import sincronizar_parceiros_osab
+
+        agora = timezone.now()
+        VendaOSAB.objects.create(
+            pedido="SAP1",
+            pdv_nome="AMAZONTECH",
+            pdv_sap="1071234",
+            data_abertura=agora,
+        )
+        cad = sincronizar_parceiros_osab()
+        self.assertEqual(cad["criados"], ["AMAZONTECH"])
+        self.assertEqual(Parceiro.objects.get(nome="AMAZONTECH").codigo_pdv, "1071234")
+
+    def test_placeholder_osab_vira_pdv_sap(self):
+        from gestao.parceiros import sincronizar_parceiros_osab
+
+        agora = timezone.now()
+        Parceiro.objects.create(codigo_pdv="OSAB-AMAZONTECH", nome="AMAZONTECH")
+        VendaOSAB.objects.create(
+            pedido="SAP2",
+            pdv_nome="AMAZONTECH",
+            pdv_sap="1071234",
+            data_abertura=agora,
+        )
+        cad = sincronizar_parceiros_osab()
+        self.assertEqual(cad["criados"], [])
+        self.assertIn("AMAZONTECH", cad["codigos_sap"])
+        self.assertEqual(Parceiro.objects.get(nome="AMAZONTECH").codigo_pdv, "1071234")
+
+    def test_codigo_real_nao_muda_mesmo_com_sap(self):
+        from gestao.parceiros import sincronizar_parceiros_osab
+
+        agora = timezone.now()
+        VendaOSAB.objects.create(
+            pedido="SAP3",
+            pdv_nome="INOVA MG",
+            pdv_sap="9999999",
+            data_abertura=agora,
+        )
+        sincronizar_parceiros_osab()
+        self.existente.refresh_from_db()
+        self.assertEqual(self.existente.codigo_pdv, "1068281")
+
+    def test_colisao_sap_mantem_placeholder(self):
+        from gestao.parceiros import sincronizar_parceiros_osab
+
+        agora = timezone.now()
+        Parceiro.objects.create(codigo_pdv="OSAB-AMAZONTECH", nome="AMAZONTECH")
+        VendaOSAB.objects.create(
+            pedido="SAP4",
+            pdv_nome="AMAZONTECH",
+            pdv_sap="1068281",
+            data_abertura=agora,
+        )
+        cad = sincronizar_parceiros_osab()
+        self.assertIn("AMAZONTECH", cad["sap_colisoes"])
+        self.assertEqual(
+            Parceiro.objects.get(nome="AMAZONTECH").codigo_pdv, "OSAB-AMAZONTECH"
+        )
+
+    def test_preenche_especialista_e_codigo_no_existente(self):
+        from gestao.parceiros import sincronizar_parceiros_osab
+
+        agora = timezone.now()
+        p = Parceiro.objects.create(codigo_pdv="OSAB-AMAZONTECH", nome="AMAZONTECH")
+        VendaOSAB.objects.create(
+            pedido="SAP5",
+            pdv_nome="AMAZONTECH",
+            pdv_sap="1071234",
+            nm_gc="JESSICA TIARA",
+            data_abertura=agora,
+        )
+        sincronizar_parceiros_osab()
+        p.refresh_from_db()
+        self.assertEqual(p.codigo_pdv, "1071234")
+        self.assertEqual(p.especialista.first_name, "Jessica Tiara")
+
+    def test_import_osab_grava_pdv_sap_e_atualiza_codigo(self):
+        Parceiro.objects.create(codigo_pdv="OSAB-AMAZONTECH", nome="AMAZONTECH")
+        hoje = timezone.localdate()
+        abertura = datetime(hoje.year, hoje.month, 1, 10, 0)
+        arquivo = _xlsx(
+            [
+                [
+                    "P-SAP",
+                    abertura,
+                    "TT1",
+                    "JOAO",
+                    "AMAZONTECH",
+                    abertura,
+                    abertura,
+                    "Concluído",
+                    "500",
+                    1071234.0,
+                ]
+            ],
+            [
+                "PEDIDO",
+                "DT_REF",
+                "MATRICULA_VENDEDOR",
+                "NOME_VENDEDOR",
+                "DESCRICAO",
+                "DATA_ABERTURA",
+                "DATA_FECHAMENTO",
+                "SITUACAO",
+                "VELOCIDADE",
+                "PDV_SAP",
+            ],
+        )
+        processar_osab(arquivo, "OSAB.xlsx", hoje.year, hoje.month)
+        self.assertEqual(VendaOSAB.objects.get(pedido="P-SAP").pdv_sap, "1071234")
+        self.assertEqual(Parceiro.objects.get(nome="AMAZONTECH").codigo_pdv, "1071234")
+
 
 class FpdChurnTests(TestCase):
     def setUp(self):

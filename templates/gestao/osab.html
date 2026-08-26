@@ -31,7 +31,7 @@
     <form method="post" enctype="multipart/form-data">
       {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       {{ form.arquivo }}
-      <p class="help">Arquivo .xlsb ou .xlsx. Merge por PEDIDO + DT_REF. Recalcula capilaridade e VL/Gross. Cadastra PDVs novos da coluna DESCRICAO (especialista via nm_gc) sem apagar os atuais.</p>
+      <p class="help">Arquivo .xlsb ou .xlsx. Merge por PEDIDO + DT_REF. Recalcula capilaridade e VL/Gross. Cadastra PDVs novos da coluna DESCRICAO com o código da coluna <code>PDV_SAP</code> (especialista via <code>nm_gc</code>), sem apagar os atuais. Códigos temporários <code>OSAB-…</code> passam a ser o PDV_SAP neste import.</p>
       <button class="btn btn-primary" type="submit" style="margin-top:0.7rem">Atualizar base OSAB</button>
     </form>
   </div>
@@ -41,7 +41,7 @@
 <div class="panel" style="margin-bottom:1rem">
   <div class="panel-h"><h2>Parceiros da OSAB</h2></div>
   <div class="panel-b">
-    <p class="help" style="margin-top:0">Compara o DESCRICAO da base importada com o cadastro. Nome igual = já está. Quem falta é criado com o especialista da coluna <code>nm_gc</code> (primeira letra maiúscula). Cadastros atuais cujo nome não bate <strong>não são excluídos</strong>.</p>
+    <p class="help" style="margin-top:0">Compara o DESCRICAO da base importada com o cadastro. Nome igual = já está. Quem falta é criado com o código da coluna <code>PDV_SAP</code> e o especialista de <code>nm_gc</code> (primeira letra maiúscula). Cadastros atuais cujo nome não bate <strong>não são excluídos</strong>. Parceiros com código <code>OSAB-…</code> são atualizados para o PDV_SAP no import da base.</p>
     <div class="cards" style="margin:0.8rem 0">
       <div class="card"><div class="label">Nome certo</div><div class="value">{{ cadastro_osab.ja_ok|length }}</div></div>
       <div class="card"><div class="label">Ainda sem cadastro</div><div class="value">{{ cadastro_osab.faltando|length }}</div></div>
@@ -54,7 +54,7 @@
       <button class="btn btn-primary" type="submit"{% if not cadastro_osab.faltando %} disabled{% endif %}>Cadastrar PDVs que faltam</button>
     </form>
     {% if cadastro_osab.faltando_info %}
-      <p class="help" style="margin-top:0.7rem">A criar: {% for item in cadastro_osab.faltando_info %}{{ item.nome }}{% if item.gc %} ({{ item.gc }}){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+      <p class="help" style="margin-top:0.7rem">A criar: {% for item in cadastro_osab.faltando_info %}{{ item.nome }}{% if item.sap %} [{{ item.sap }}]{% endif %}{% if item.gc %} ({{ item.gc }}){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
     {% endif %}
     {% if cadastro_osab.grafia %}
       <p class="help">Grafia diferente (mantido o cadastro): {% for g in cadastro_osab.grafia %}{{ g.osab }} → {{ g.cadastro }}{% if not forloop.last %}; {% endif %}{% endfor %}</p>

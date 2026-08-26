@@ -79,6 +79,7 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
         return {"inseridos": 0, "atualizados": 0, "ignorados": 0}
 
     col_gc = resolver_coluna(trabalho, ["nm_gc", "NM_GC", "NOME_GC", "nome_gc"])
+    col_sap = resolver_coluna(trabalho, ["PDV_SAP", "pdv_sap"])
     existentes = {v.pedido: v for v in VendaOSAB.objects.filter(pedido__isnull=False)}
     inseridos = atualizados = ignorados = 0
     for _, row in trabalho.iterrows():
@@ -93,7 +94,6 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
             "matricula_vendedor": texto(row.get("MATRICULA_VENDEDOR"), 100),
             "nome_vendedor": texto(row.get("NOME_VENDEDOR"), 200),
             "pdv_nome": pdv_nome,
-            "nm_gc": texto(row.get(col_gc), 120) if col_gc else "",
             "parceiro_id": resolver_parceiro_id(pdv_nome, indice),
             "data_abertura": as_aware(row.get("DATA_ABERTURA")),
             "data_fechamento": as_aware(row.get("DATA_FECHAMENTO")),
@@ -101,13 +101,28 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
             "velocidade": texto(row.get("VELOCIDADE"), 100),
             "meio_pagamento": texto(row.get("meio_pagamento"), 100),
         }
+        if col_gc:
+            dados["nm_gc"] = texto(row.get(col_gc), 120)
+        if col_sap:
+            dados["pdv_sap"] = texto(row.get(col_sap), 32)
         if pedido in existentes:
             reg = existentes[pedido]
+            mudou_meta = False
+            if dados.get("pdv_sap") and dados["pdv_sap"] != (reg.pdv_sap or ""):
+                reg.pdv_sap = dados["pdv_sap"]
+                mudou_meta = True
+            if dados.get("nm_gc") and dados["nm_gc"] != (reg.nm_gc or ""):
+                reg.nm_gc = dados["nm_gc"]
+                mudou_meta = True
             if reg.dt_ref is None or dt_ref > reg.dt_ref:
                 for k, v in dados.items():
                     setattr(reg, k, v)
                 reg.save()
                 atualizados += 1
+            elif mudou_meta:
+                campos = [c for c in ("pdv_sap", "nm_gc") if c in dados]
+                reg.save(update_fields=campos)
+                ignorados += 1
             else:
                 ignorados += 1
         else:

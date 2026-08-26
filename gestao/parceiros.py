@@ -125,6 +125,28 @@ def mapa_gc_por_pdv() -> dict[str, str]:
     return mapa
 
 
+def mapa_sap_por_pdv() -> dict[str, str]:
+    """DESCRICAO da OSAB → PDV_SAP mais frequente."""
+    from django.db.models import Count
+
+    from .models import VendaOSAB
+
+    mapa: dict[str, str] = {}
+    rows = (
+        VendaOSAB.objects.exclude(pdv_sap="")
+        .values("pdv_nome", "pdv_sap")
+        .annotate(n=Count("id"))
+        .order_by("pdv_nome", "-n")
+    )
+    for row in rows:
+        pdv = _nome_osab_ok(row["pdv_nome"])
+        sap = _nome_osab_ok(row["pdv_sap"])[:32]
+        if not pdv or not sap:
+            continue
+        mapa.setdefault(pdv.casefold(), sap)
+    return mapa
+
+
 def _username_de_nome(nome: str, usados: set[str]) -> str:
     from django.contrib.auth import get_user_model
 
@@ -232,8 +254,14 @@ def classificar_parceiros_osab(nomes: list[str] | None = None) -> dict:
         if p.id not in usados_ids
     ]
     gcs = mapa_gc_por_pdv()
+    saps = mapa_sap_por_pdv()
     faltando_info = [
-        {"nome": n, "gc": gcs.get(n.casefold(), "")} for n in faltando
+        {
+            "nome": n,
+            "gc": gcs.get(n.casefold(), ""),
+            "sap": saps.get(n.casefold(), ""),
+        }
+        for n in faltando
     ]
     return {
         "ja_ok": ja_ok,
@@ -244,6 +272,10 @@ def classificar_parceiros_osab(nomes: list[str] | None = None) -> dict:
         "osab_nomes": nomes,
         "gcs": gcs,
     }
+
+
+def _eh_placeholder_osab(codigo: str) -> bool:
+    return (codigo or "").upper().startswith("OSAB-")
 
 
 def _codigo_osab(nome: str, usados: set[str]) -> str:
@@ -260,6 +292,51 @@ def _codigo_osab(nome: str, usados: set[str]) -> str:
     return codigo
 
 
+def _codigo_para_pdv(nome: str, usados: set[str], sap: str = "") -> str:
+    sap = (sap or "").strip()[:32]
+    if sap and sap not in usados:
+        usados.add(sap)
+        return sap
+    return _codigo_osab(nome, usados)
+
+
+def _atualizar_placeholders_sap(usados: set[str]) -> tuple[list[str], list[str]]:
+    """Troca OSAB-… pelo PDV_SAP quando o código SAP ainda não está em outro PDV."""
+    sap_map = mapa_sap_por_pdv()
+    atualizados: list[str] = []
+    colisoes: list[str] = []
+    for p in Parceiro.objects.all():
+        if not _eh_placeholder_osab(p.codigo_pdv):
+            continue
+        sap = sap_map.get(p.nome.casefold(), "")
+        if not sap:
+            continue
+        if sap in usados and sap != p.codigo_pdv:
+            colisoes.append(p.nome)
+            continue
+        usados.discard(p.codigo_pdv)
+        usados.add(sap)
+        p.codigo_pdv = sap
+        p.save(update_fields=["codigo_pdv"])
+        atualizados.append(p.nome)
+    return atualizados, colisoes
+
+
+def _preencher_especialista_vazio(gcs: dict[str, str], cache_esp: dict) -> tuple[list[str], list[str]]:
+    preenchidos: list[str] = []
+    especialistas_novos: list[str] = []
+    for p in Parceiro.objects.filter(especialista__isnull=True):
+        user, criado_esp = resolver_ou_criar_especialista(gcs.get(p.nome.casefold(), ""), cache_esp)
+        if not user:
+            continue
+        if criado_esp:
+            especialistas_novos.append(user.first_name)
+        p.especialista = user
+        p.save(update_fields=["especialista"])
+        preenchidos.append(p.nome)
+    return preenchidos, especialistas_novos
+
+
 def sincronizar_parceiros_osab(nomes: list[str] | None = None) -> dict:
     """Cadastra PDVs da OSAB que ainda não existem. Não exclui nem renomeia ninguém."""
     from .models import VendaOSAB
@@ -269,13 +346,14 @@ def sincronizar_parceiros_osab(nomes: list[str] | None = None) -> dict:
     criados: list[str] = []
     especialistas_novos: list[str] = []
     gcs = mapa_gc_por_pdv()
+    saps = mapa_sap_por_pdv()
     cache_esp: dict = {}
     for nome in classif["faltando"]:
         user, criado_esp = resolver_ou_criar_especialista(gcs.get(nome.casefold(), ""), cache_esp)
         if criado_esp and user:
             especialistas_novos.append(user.first_name)
         parceiro = Parceiro.objects.create(
-            codigo_pdv=_codigo_osab(nome, usados),
+            codigo_pdv=_codigo_para_pdv(nome, usados, saps.get(nome.casefold(), "")),
             nome=nome[:120],
             ativo=True,
             especialista=user,
@@ -284,7 +362,13 @@ def sincronizar_parceiros_osab(nomes: list[str] | None = None) -> dict:
         VendaOSAB.objects.filter(parceiro__isnull=True, pdv_nome__iexact=nome).update(
             parceiro_id=parceiro.id
         )
+    sap_atualizados, sap_colisoes = _atualizar_placeholders_sap(usados)
+    esp_preenchidos, esp_novos_existentes = _preencher_especialista_vazio(gcs, cache_esp)
+    especialistas_novos.extend(esp_novos_existentes)
     classif["criados"] = criados
     classif["especialistas_novos"] = especialistas_novos
+    classif["codigos_sap"] = sap_atualizados
+    classif["sap_colisoes"] = sap_colisoes
+    classif["especialistas_preenchidos"] = esp_preenchidos
     classif["gcs"] = gcs
     return classif

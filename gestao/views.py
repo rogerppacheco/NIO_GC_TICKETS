@@ -130,6 +130,15 @@ def _msg_cadastro_osab(cad: dict) -> str:
         if len(novos) > 8:
             amostra += f"… (+{len(novos) - 8})"
         extra = f" Novos: {amostra}."
+    sap_ok = cad.get("codigos_sap") or []
+    if sap_ok:
+        amostra = ", ".join(sap_ok[:8])
+        if len(sap_ok) > 8:
+            amostra += f"… (+{len(sap_ok) - 8})"
+        extra += f" Códigos PDV_SAP atualizados: {amostra}."
+    colisoes = cad.get("sap_colisoes") or []
+    if colisoes:
+        extra += f" PDV_SAP já usado (código OSAB- mantido): {', '.join(colisoes[:5])}."
     specs = cad.get("especialistas_novos") or []
     if specs:
         extra += f" Especialistas criados: {', '.join(specs)} (defina a senha em Equipe)."
