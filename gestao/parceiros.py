@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 from tickets.models import Parceiro
 
@@ -13,6 +14,8 @@ RAZAO_ALIASES_PDV = {
 
 def normalizar_razao(razao: str) -> str:
     texto = str(razao or "").upper().strip()
+    texto = unicodedata.normalize("NFKD", texto)
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
     texto = re.sub(r"[^A-Z0-9 ]+", " ", texto)
     texto = re.sub(r"\s+", " ", texto)
     for sufixo in (" LTDA", " LTDA ME", " ME", " EPP", " EIRELI", " SA"):
@@ -82,3 +85,206 @@ def resolver_parceiro_id(nome: str, indice: list[tuple[int, str, str]] | None = 
 
 def mapa_nome_parceiro() -> dict[str, int]:
     return {p.nome: p.id for p in Parceiro.objects.filter(ativo=True)}
+
+
+_NOMES_VAZIOS = {"", "NAN", "NONE", "NAT", "-"}
+
+
+def _nome_osab_ok(nome: str) -> str:
+    texto = (nome or "").strip()
+    if not texto or texto.upper() in _NOMES_VAZIOS:
+        return ""
+    return texto
+
+
+def formatar_nome_pessoa(nome: str) -> str:
+    """Primeira letra de cada palavra maiúscula, restante minúscula (JOAO → Joao)."""
+    partes = _nome_osab_ok(nome).split()
+    return " ".join(p[0].upper() + p[1:].lower() if p else "" for p in partes)
+
+
+def mapa_gc_por_pdv() -> dict[str, str]:
+    """DESCRICAO da OSAB → nm_gc mais frequente, já no padrão de nome."""
+    from django.db.models import Count
+
+    from .models import VendaOSAB
+
+    mapa: dict[str, str] = {}
+    rows = (
+        VendaOSAB.objects.exclude(nm_gc="")
+        .values("pdv_nome", "nm_gc")
+        .annotate(n=Count("id"))
+        .order_by("pdv_nome", "-n")
+    )
+    for row in rows:
+        pdv = _nome_osab_ok(row["pdv_nome"])
+        gc = formatar_nome_pessoa(row["nm_gc"])
+        if not pdv or not gc:
+            continue
+        mapa.setdefault(pdv.casefold(), gc)
+    return mapa
+
+
+def _username_de_nome(nome: str, usados: set[str]) -> str:
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+    slug = normalizar_pdv(nome).lower().replace(" ", ".")[:140] or "especialista"
+    base = slug
+    n = 2
+    while base in usados or User.objects.filter(username__iexact=base).exists():
+        suf = f".{n}"
+        base = f"{slug[: 150 - len(suf)]}{suf}"
+        n += 1
+    usados.add(base)
+    return base
+
+
+def resolver_ou_criar_especialista(nm_gc: str, cache: dict | None = None):
+    """Encontra o especialista da equipe pelo nome ou cria com senha bloqueada."""
+    from django.contrib.auth import get_user_model
+
+    from tickets.acesso import qs_equipe
+    from tickets.models import PerfilStaff
+
+    nome = formatar_nome_pessoa(nm_gc)
+    if not nome:
+        return None, False
+    cache = cache if cache is not None else {}
+    chave = normalizar_pdv(nome)
+    if chave in cache:
+        return cache[chave], False
+
+    for user in qs_equipe():
+        display = (user.get_full_name() or "").strip() or user.first_name
+        if normalizar_pdv(display) == chave or normalizar_pdv(user.first_name) == chave:
+            cache[chave] = user
+            return user, False
+
+    User = get_user_model()
+    usados = set(User.objects.values_list("username", flat=True))
+    user = User(
+        username=_username_de_nome(nome, usados),
+        first_name=nome[:150],
+        is_staff=True,
+        is_active=True,
+    )
+    user.set_unusable_password()
+    user.save()
+    PerfilStaff.objects.create(user=user, papel=PerfilStaff.Papel.ESPECIALISTA)
+    cache[chave] = user
+    return user, True
+
+
+def nomes_osab_distintos(extra: list[str] | None = None) -> list[str]:
+    """DESCRICAO únicos da base OSAB (e nomes extras, se houver)."""
+    from .models import VendaOSAB
+
+    vistos: dict[str, str] = {}
+    for bruto in VendaOSAB.objects.exclude(pdv_nome="").values_list("pdv_nome", flat=True):
+        nome = _nome_osab_ok(bruto)
+        if nome:
+            vistos.setdefault(nome.casefold(), nome)
+    for bruto in extra or ():
+        nome = _nome_osab_ok(bruto)
+        if nome:
+            vistos.setdefault(nome.casefold(), nome)
+    return sorted(vistos.values(), key=str.casefold)
+
+
+def _indice_cadastro() -> tuple[dict[str, Parceiro], dict[str, Parceiro]]:
+    """Chave normalizada → parceiro. Prefere nome exatamente igual (casefold)."""
+    por_norm: dict[str, Parceiro] = {}
+    por_exato: dict[str, Parceiro] = {}
+    for p in Parceiro.objects.all().order_by("id"):
+        por_exato.setdefault(p.nome.casefold().strip(), p)
+        chave = normalizar_pdv(p.nome)
+        if chave:
+            por_norm.setdefault(chave, p)
+    return por_exato, por_norm
+
+
+def classificar_parceiros_osab(nomes: list[str] | None = None) -> dict:
+    """Compara DESCRICAO da OSAB com o cadastro. Não cria nem apaga nada."""
+    nomes = nomes if nomes is not None else nomes_osab_distintos()
+    por_exato, por_norm = _indice_cadastro()
+    ja_ok: list[str] = []
+    grafia: list[dict[str, str]] = []
+    faltando: list[str] = []
+    usados_ids: set[int] = set()
+
+    for nome in nomes:
+        exato = por_exato.get(nome.casefold())
+        if exato:
+            ja_ok.append(exato.nome)
+            usados_ids.add(exato.id)
+            continue
+        proximo = por_norm.get(normalizar_pdv(nome))
+        if proximo:
+            grafia.append({"osab": nome, "cadastro": proximo.nome})
+            usados_ids.add(proximo.id)
+            continue
+        faltando.append(nome)
+
+    nio_sem_osab = [
+        p.nome
+        for p in Parceiro.objects.all().order_by("nome")
+        if p.id not in usados_ids
+    ]
+    gcs = mapa_gc_por_pdv()
+    faltando_info = [
+        {"nome": n, "gc": gcs.get(n.casefold(), "")} for n in faltando
+    ]
+    return {
+        "ja_ok": ja_ok,
+        "grafia": grafia,
+        "faltando": faltando,
+        "faltando_info": faltando_info,
+        "nio_sem_osab": nio_sem_osab,
+        "osab_nomes": nomes,
+        "gcs": gcs,
+    }
+
+
+def _codigo_osab(nome: str, usados: set[str]) -> str:
+    slug = re.sub(r"[^A-Z0-9]+", "-", normalizar_pdv(nome)).strip("-") or "PDV"
+    slug = slug[:24]
+    base = f"OSAB-{slug}"[:32]
+    codigo = base
+    n = 2
+    while codigo in usados:
+        suf = f"-{n}"
+        codigo = f"{base[: 32 - len(suf)]}{suf}"
+        n += 1
+    usados.add(codigo)
+    return codigo
+
+
+def sincronizar_parceiros_osab(nomes: list[str] | None = None) -> dict:
+    """Cadastra PDVs da OSAB que ainda não existem. Não exclui nem renomeia ninguém."""
+    from .models import VendaOSAB
+
+    classif = classificar_parceiros_osab(nomes)
+    usados = set(Parceiro.objects.values_list("codigo_pdv", flat=True))
+    criados: list[str] = []
+    especialistas_novos: list[str] = []
+    gcs = mapa_gc_por_pdv()
+    cache_esp: dict = {}
+    for nome in classif["faltando"]:
+        user, criado_esp = resolver_ou_criar_especialista(gcs.get(nome.casefold(), ""), cache_esp)
+        if criado_esp and user:
+            especialistas_novos.append(user.first_name)
+        parceiro = Parceiro.objects.create(
+            codigo_pdv=_codigo_osab(nome, usados),
+            nome=nome[:120],
+            ativo=True,
+            especialista=user,
+        )
+        criados.append(parceiro.nome)
+        VendaOSAB.objects.filter(parceiro__isnull=True, pdv_nome__iexact=nome).update(
+            parceiro_id=parceiro.id
+        )
+    classif["criados"] = criados
+    classif["especialistas_novos"] = especialistas_novos
+    classif["gcs"] = gcs
+    return classif

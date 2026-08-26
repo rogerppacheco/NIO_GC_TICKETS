@@ -91,6 +91,7 @@ class VendaOSAB(models.Model):
     matricula_vendedor = models.CharField(max_length=100, blank=True, db_index=True)
     nome_vendedor = models.CharField(max_length=200, blank=True)
     pdv_nome = models.CharField(max_length=150, db_index=True)
+    nm_gc = models.CharField("Nome do GC (OSAB)", max_length=120, blank=True, db_index=True)
     parceiro = models.ForeignKey(
         "tickets.Parceiro",
         null=True,

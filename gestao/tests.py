@@ -193,6 +193,71 @@ class OsabCapilaridadeTests(TestCase):
         self.assertEqual([l["matricula_vendedor"] for l in padrao], ["TT99"])
 
 
+class CadastroParceirosOsabTests(TestCase):
+    def setUp(self):
+        self.existente = Parceiro.objects.create(codigo_pdv="1068281", nome="INOVA MG")
+        self.orfao = Parceiro.objects.create(codigo_pdv="999", nome="PDV ANTIGO")
+
+    def test_cria_faltantes_e_nao_exclui(self):
+        from gestao.parceiros import sincronizar_parceiros_osab
+
+        agora = timezone.now()
+        VendaOSAB.objects.create(pedido="A", pdv_nome="INOVA MG", data_abertura=agora)
+        VendaOSAB.objects.create(pedido="B", pdv_nome="NOVO PDV", data_abertura=agora)
+        cad = sincronizar_parceiros_osab()
+        self.assertIn("INOVA MG", cad["ja_ok"])
+        self.assertEqual(cad["criados"], ["NOVO PDV"])
+        self.assertIn("PDV ANTIGO", cad["nio_sem_osab"])
+        self.assertTrue(Parceiro.objects.filter(pk=self.existente.pk).exists())
+        self.assertTrue(
+            Parceiro.objects.filter(pk=self.orfao.pk, nome="PDV ANTIGO").exists()
+        )
+        novo = Parceiro.objects.get(nome="NOVO PDV")
+        self.assertTrue(novo.codigo_pdv.startswith("OSAB-"))
+        self.assertEqual(VendaOSAB.objects.get(pedido="B").parceiro_id, novo.id)
+
+    def test_define_especialista_pelo_nm_gc(self):
+        from gestao.parceiros import formatar_nome_pessoa, sincronizar_parceiros_osab
+
+        self.assertEqual(formatar_nome_pessoa("JOAO"), "Joao")
+        self.assertEqual(formatar_nome_pessoa("ANA PAULA"), "Ana Paula")
+        agora = timezone.now()
+        VendaOSAB.objects.create(
+            pedido="C", pdv_nome="PDV GC", nm_gc="MARIA FERNANDA", data_abertura=agora
+        )
+        cad = sincronizar_parceiros_osab()
+        pdv = Parceiro.objects.get(nome="PDV GC")
+        self.assertEqual(pdv.especialista.first_name, "Maria Fernanda")
+        self.assertIn("Maria Fernanda", cad["especialistas_novos"])
+        cad2 = sincronizar_parceiros_osab()
+        self.assertEqual(cad2["criados"], [])
+        VendaOSAB.objects.create(
+            pedido="D", pdv_nome="PDV GC 2", nm_gc="maria fernanda", data_abertura=agora
+        )
+        sincronizar_parceiros_osab()
+        pdv2 = Parceiro.objects.get(nome="PDV GC 2")
+        self.assertEqual(pdv2.especialista_id, pdv.especialista_id)
+
+    def test_grafia_nao_cria_duplicata(self):
+        from gestao.parceiros import sincronizar_parceiros_osab
+
+        Parceiro.objects.create(codigo_pdv="1068432", nome="HF SERVIÇOS")
+        cad = sincronizar_parceiros_osab(["HF SERVICOS"])
+        self.assertEqual(cad["criados"], [])
+        self.assertEqual(cad["grafia"][0]["cadastro"], "HF SERVIÇOS")
+        self.assertEqual(Parceiro.objects.filter(nome__icontains="HF").count(), 1)
+
+    def test_inativo_nao_e_recriado_nem_apagado(self):
+        from gestao.parceiros import sincronizar_parceiros_osab
+
+        self.existente.ativo = False
+        self.existente.save(update_fields=["ativo"])
+        cad = sincronizar_parceiros_osab(["INOVA MG"])
+        self.assertEqual(cad["criados"], [])
+        self.existente.refresh_from_db()
+        self.assertFalse(self.existente.ativo)
+
+
 class FpdChurnTests(TestCase):
     def setUp(self):
         self.pdv = Parceiro.objects.create(codigo_pdv="1", nome="APOLO")
@@ -293,6 +358,20 @@ class GestaoViewsTests(TestCase):
         self.assertContains(cap, "VENDEDOR EXTERNO")
         self.assertContains(cap, "Meus parceiros")
         self.assertContains(cap, "Outros especialistas")
+
+    def test_cadastrar_parceiros_da_osab(self):
+        self.client.force_login(self.gestor)
+        VendaOSAB.objects.create(
+            pedido="Z1", pdv_nome="PDV NOVO OSAB", data_abertura=timezone.now()
+        )
+        osab = self.client.get(reverse("gestao_osab"))
+        self.assertContains(osab, "Cadastrar PDVs que faltam")
+        self.assertContains(osab, "PDV NOVO OSAB")
+        r = self.client.post(
+            reverse("gestao_osab"), {"action": "cadastrar_parceiros"}
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(Parceiro.objects.filter(nome="PDV NOVO OSAB").exists())
 
     def test_paginas_especialista_sem_whatsapp_qr(self):
         User = get_user_model()

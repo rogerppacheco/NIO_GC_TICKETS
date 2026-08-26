@@ -40,6 +40,11 @@ def resolver_coluna(df: pd.DataFrame, opcoes: list[str]) -> str | None:
     for nome in opcoes:
         if nome in df.columns:
             return nome
+    mapa = {str(c).casefold(): c for c in df.columns}
+    for nome in opcoes:
+        achou = mapa.get(str(nome).casefold())
+        if achou is not None:
+            return achou
     return None
 
 

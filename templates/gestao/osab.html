@@ -31,9 +31,37 @@
     <form method="post" enctype="multipart/form-data">
       {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       {{ form.arquivo }}
-      <p class="help">Arquivo .xlsb ou .xlsx. Merge por PEDIDO + DT_REF. Recalcula capilaridade e VL/Gross.</p>
+      <p class="help">Arquivo .xlsb ou .xlsx. Merge por PEDIDO + DT_REF. Recalcula capilaridade e VL/Gross. Cadastra PDVs novos da coluna DESCRICAO (especialista via nm_gc) sem apagar os atuais.</p>
       <button class="btn btn-primary" type="submit" style="margin-top:0.7rem">Atualizar base OSAB</button>
     </form>
+  </div>
+</div>
+{% endif %}
+{% if pode_importar and cadastro_osab %}
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-h"><h2>Parceiros da OSAB</h2></div>
+  <div class="panel-b">
+    <p class="help" style="margin-top:0">Compara o DESCRICAO da base importada com o cadastro. Nome igual = já está. Quem falta é criado com o especialista da coluna <code>nm_gc</code> (primeira letra maiúscula). Cadastros atuais cujo nome não bate <strong>não são excluídos</strong>.</p>
+    <div class="cards" style="margin:0.8rem 0">
+      <div class="card"><div class="label">Nome certo</div><div class="value">{{ cadastro_osab.ja_ok|length }}</div></div>
+      <div class="card"><div class="label">Ainda sem cadastro</div><div class="value">{{ cadastro_osab.faltando|length }}</div></div>
+      <div class="card"><div class="label">Grafia diferente</div><div class="value">{{ cadastro_osab.grafia|length }}</div></div>
+      <div class="card"><div class="label">NIO sem OSAB</div><div class="value">{{ cadastro_osab.nio_sem_osab|length }}</div></div>
+    </div>
+    <form method="post">
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+      <input type="hidden" name="action" value="cadastrar_parceiros">
+      <button class="btn btn-primary" type="submit"{% if not cadastro_osab.faltando %} disabled{% endif %}>Cadastrar PDVs que faltam</button>
+    </form>
+    {% if cadastro_osab.faltando_info %}
+      <p class="help" style="margin-top:0.7rem">A criar: {% for item in cadastro_osab.faltando_info %}{{ item.nome }}{% if item.gc %} ({{ item.gc }}){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+    {% endif %}
+    {% if cadastro_osab.grafia %}
+      <p class="help">Grafia diferente (mantido o cadastro): {% for g in cadastro_osab.grafia %}{{ g.osab }} → {{ g.cadastro }}{% if not forloop.last %}; {% endif %}{% endfor %}</p>
+    {% endif %}
+    {% if cadastro_osab.nio_sem_osab %}
+      <p class="help">No NIO, sem nome igual na OSAB (mantidos): {{ cadastro_osab.nio_sem_osab|join:", " }}</p>
+    {% endif %}
   </div>
 </div>
 {% endif %}

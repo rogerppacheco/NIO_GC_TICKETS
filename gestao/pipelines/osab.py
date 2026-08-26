@@ -19,7 +19,7 @@ from ..models import (
     MetaCapilaridade,
     VendaOSAB,
 )
-from ..parceiros import indice_parceiros, resolver_parceiro_id
+from ..parceiros import indice_parceiros, resolver_parceiro_id, sincronizar_parceiros_osab
 from ..periodo import anomes, hoje
 from ..terceiros import (
     CARGOS_AUDITORIA_DEDICADOS,
@@ -78,6 +78,7 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
     if trabalho.empty:
         return {"inseridos": 0, "atualizados": 0, "ignorados": 0}
 
+    col_gc = resolver_coluna(trabalho, ["nm_gc", "NM_GC", "NOME_GC", "nome_gc"])
     existentes = {v.pedido: v for v in VendaOSAB.objects.filter(pedido__isnull=False)}
     inseridos = atualizados = ignorados = 0
     for _, row in trabalho.iterrows():
@@ -92,6 +93,7 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
             "matricula_vendedor": texto(row.get("MATRICULA_VENDEDOR"), 100),
             "nome_vendedor": texto(row.get("NOME_VENDEDOR"), 200),
             "pdv_nome": pdv_nome,
+            "nm_gc": texto(row.get(col_gc), 120) if col_gc else "",
             "parceiro_id": resolver_parceiro_id(pdv_nome, indice),
             "data_abertura": as_aware(row.get("DATA_ABERTURA")),
             "data_fechamento": as_aware(row.get("DATA_FECHAMENTO")),
@@ -519,6 +521,7 @@ def processar_osab(arquivo, nome_arquivo: str, ano: int, mes: int) -> dict:
         if col in df.columns:
             df[col] = converter_data_robusto(df[col])
     vendas = persistir_vendas_osab(df)
+    parceiros = sincronizar_parceiros_osab()
     cap = persistir_capilaridade(ano, mes)
     osab = calcular_osab(ano, mes)
-    return {"vendas": vendas, "capilaridade": cap, "osab": osab}
+    return {"vendas": vendas, "capilaridade": cap, "osab": osab, "parceiros": parceiros}

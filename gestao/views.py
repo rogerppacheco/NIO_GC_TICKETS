@@ -46,6 +46,7 @@ from .models import (
     RelatorioVendaIndevida,
     VendaOSAB,
 )
+from .parceiros import classificar_parceiros_osab, sincronizar_parceiros_osab
 from .periodo import periodo_ativo, salvar_periodo
 from .pipelines.churn import processar_churn
 from .pipelines.comissionamento import mapa_pdv_razoes, processar_comissionamento
@@ -107,6 +108,32 @@ def _voltar(request, nome: str, extra: str = "") -> HttpResponse:
     if extra:
         qs = f"{qs}&{extra}"
     return redirect(f"{reverse(nome)}?{qs}")
+
+
+def _msg_cadastro_osab(cad: dict) -> str:
+    partes = [
+        f"{len(cad.get('ja_ok') or [])} já cadastrado(s) com o nome certo",
+        f"{len(cad.get('criados') or [])} novo(s)",
+    ]
+    if cad.get("grafia"):
+        partes.append(
+            f"{len(cad['grafia'])} com grafia diferente (mantido o cadastro atual)"
+        )
+    if cad.get("nio_sem_osab"):
+        partes.append(
+            f"{len(cad['nio_sem_osab'])} do NIO sem nome igual na OSAB (mantidos)"
+        )
+    novos = cad.get("criados") or []
+    extra = ""
+    if novos:
+        amostra = ", ".join(novos[:8])
+        if len(novos) > 8:
+            amostra += f"… (+{len(novos) - 8})"
+        extra = f" Novos: {amostra}."
+    specs = cad.get("especialistas_novos") or []
+    if specs:
+        extra += f" Especialistas criados: {', '.join(specs)} (defina a senha em Equipe)."
+    return "Parceiros da OSAB: " + "; ".join(partes) + "." + extra
 
 
 def _enviar_todos_pdv(request, enviar_fn, parceiros, titulo: str) -> None:
@@ -280,6 +307,16 @@ def osab_view(request: HttpRequest) -> HttpResponse:
             resumo = calcular_osab(ano, mes)
             messages.success(request, f"OSAB recalculada: {resumo['pdvs']} PDV(s).")
             return _voltar(request, "gestao_osab")
+        if action == "cadastrar_parceiros" and eh_gestor(request.user):
+            cad = sincronizar_parceiros_osab()
+            novos = cad["criados"]
+            if novos:
+                calcular_osab(ano, mes)
+            messages.success(
+                request,
+                _msg_cadastro_osab(cad),
+            )
+            return _voltar(request, "gestao_osab")
         if action == "enviar_pdv" and _pode_enviar(request):
             parceiro = get_object_or_404(_parceiros(request), pk=request.POST.get("parceiro"))
             _flash_resumo(request, "OSAB", enviar_osab_pdv(parceiro, request.user))
@@ -295,11 +332,14 @@ def osab_view(request: HttpRequest) -> HttpResponse:
                     resumo = processar_osab(arquivo, arquivo.name, ano, mes)
                     _lote(request, LoteImportacao.Tipo.OSAB, arquivo.name, True, resumo)
                     vendas = resumo["vendas"]
-                    messages.success(
-                        request,
+                    cad = resumo.get("parceiros") or {}
+                    msg = (
                         f"OSAB atualizada ({mes:02d}/{ano}): {vendas['inseridos']} inseridos, "
-                        f"{vendas['atualizados']} atualizados. Capilaridade: {resumo['capilaridade']['linhas']} TTs.",
+                        f"{vendas['atualizados']} atualizados. Capilaridade: {resumo['capilaridade']['linhas']} TTs."
                     )
+                    if cad:
+                        msg = f"{msg} {_msg_cadastro_osab(cad)}"
+                    messages.success(request, msg)
                     return _voltar(request, "gestao_osab")
                 except Exception as exc:
                     _lote(request, LoteImportacao.Tipo.OSAB, arquivo.name, False, {}, str(exc))
@@ -315,6 +355,7 @@ def osab_view(request: HttpRequest) -> HttpResponse:
             "mes": mes,
             "total_vendas": VendaOSAB.objects.count(),
             "historico": historico,
+            "cadastro_osab": classificar_parceiros_osab() if eh_gestor(request.user) else None,
             "pode_importar": eh_gestor(request.user),
             "pode_enviar": _pode_enviar(request),
         },
