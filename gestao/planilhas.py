@@ -15,11 +15,21 @@ from .pipelines.osab import linhas_capilaridade_pdv
 
 
 def _celula_excel(valor):
-    """OpenPyXL recusa datetime com tz; o 500 do Enviar todos vinha daqui."""
+    """OpenPyXL recusa datetime com tz; pd.NaT também quebra utcoffset."""
+    if valor is None:
+        return None
+    try:
+        if pd.isna(valor):
+            return None
+    except (TypeError, ValueError):
+        pass
     if isinstance(valor, datetime):
-        if timezone.is_aware(valor):
-            valor = timezone.localtime(valor)
-        return valor.replace(tzinfo=None)
+        try:
+            if timezone.is_aware(valor):
+                valor = timezone.localtime(valor)
+            return valor.replace(tzinfo=None)
+        except (TypeError, ValueError, OverflowError):
+            return None
     return valor
 
 

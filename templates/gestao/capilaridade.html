@@ -6,6 +6,13 @@
   <div>
     <h1>Capilaridade</h1>
     <p>Máscaras do período {{ mes|stringformat:"02d" }}/{{ ano }}{% if modo_teste %} · modo teste WhatsApp{% endif %}. Sem filtro de cargo: VENDEDOR e VENDEDOR EXTERNO.</p>
+    {% if not eh_gestor %}
+      {% if whatsapp_usuario %}
+      <p class="help">Seu envio vai para o seu WhatsApp ({{ whatsapp_usuario }}), não para os grupos dos PDVs.</p>
+      {% else %}
+      <p class="help" style="color:var(--danger)">Cadastre seu WhatsApp em <a href="{% url 'meu_perfil' %}">Meu perfil</a> (DDI, só números). Sem isso o Enviar todos não tem destino.</p>
+      {% endif %}
+    {% endif %}
   </div>
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
     {% if pode_recalcular %}

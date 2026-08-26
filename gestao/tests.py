@@ -218,6 +218,38 @@ class OsabCapilaridadeTests(TestCase):
         self.assertTrue(dados.startswith(b"PK"))
         self.assertIn("RECORD", nome)
 
+    def test_planilha_capilaridade_com_nat_e_venda(self):
+        import pandas as pd
+
+        from gestao.planilhas import _celula_excel, df_para_xlsx
+
+        self.assertIsNone(_celula_excel(pd.NaT))
+        CadastroTerceiro.objects.create(
+            chave_acesso="TT101",
+            nome_terceiro="SEM VENDA",
+            razao_social="RECORD",
+            parceiro=self.pdv,
+            cargo_funcao="VENDEDOR",
+            situacao_empresa="Ativo",
+            situacao_funcional="Ativo",
+            situacao_contrato="Alocado",
+            ativo=True,
+        )
+        VendaOSAB.objects.create(
+            pedido="P-MIX",
+            pdv_nome="RECORD",
+            matricula_vendedor="TT99",
+            data_abertura=timezone.now(),
+            parceiro=self.pdv,
+        )
+        from gestao.planilhas import planilha_capilaridade
+
+        dados, _ = planilha_capilaridade(self.pdv)
+        self.assertTrue(dados.startswith(b"PK"))
+        df = pd.DataFrame({"Última venda": [timezone.now(), pd.NaT, None]})
+        dados2, _ = df_para_xlsx(df, "mix.xlsx")
+        self.assertTrue(dados2.startswith(b"PK"))
+
 
 class CadastroParceirosOsabTests(TestCase):
     def setUp(self):

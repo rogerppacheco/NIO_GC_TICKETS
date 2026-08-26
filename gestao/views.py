@@ -306,6 +306,9 @@ def capilaridade_view(request: HttpRequest) -> HttpResponse:
             "pode_recalcular": eh_gestor(request.user),
             "pode_enviar": _pode_enviar(request),
             "modo_teste": modo_teste_ativo(),
+            "whatsapp_usuario": ""
+            if eh_gestor(request.user)
+            else (getattr(getattr(request.user, "perfil_staff", None), "whatsapp", "") or "").strip(),
         },
     )
 

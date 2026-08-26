@@ -136,10 +136,14 @@ class EspecialistaForm(forms.Form):
         ),
     )
     whatsapp = forms.CharField(
-        label="WhatsApp",
+        label="WhatsApp do especialista",
         max_length=40,
         required=False,
-        help_text="Número com DDI. Especialista recebe as máscaras neste número, não nos grupos dos PDVs.",
+        help_text=(
+            "Celular com DDI, só números. Ex.: 5531999999999. "
+            "Quem não é admin recebe as máscaras de Gestão neste número, não nos grupos dos PDVs."
+        ),
+        widget=forms.TextInput(attrs={"placeholder": "5531999999999"}),
     )
 
     def __init__(self, *args, instance=None, **kwargs):
@@ -261,7 +265,8 @@ class StaffPerfilForm(forms.Form):
         label="WhatsApp",
         max_length=40,
         required=False,
-        help_text="Se você não for admin, as máscaras de Gestão chegam neste número.",
+        help_text="Se você não for admin, as máscaras de Gestão chegam neste número (DDI, só dígitos). Ex.: 5531999999999.",
+        widget=forms.TextInput(attrs={"placeholder": "5531999999999"}),
     )
 
     def __init__(self, *args, instance=None, **kwargs):
