@@ -192,6 +192,20 @@ class OsabCapilaridadeTests(TestCase):
         padrao = linhas_capilaridade_pdv(self.pdv)
         self.assertEqual([l["matricula_vendedor"] for l in padrao], ["TT99"])
 
+    def test_planilha_capilaridade_aceita_datetime_com_fuso(self):
+        from gestao.planilhas import planilha_capilaridade
+
+        VendaOSAB.objects.create(
+            pedido="P-TZ",
+            pdv_nome="RECORD",
+            matricula_vendedor="TT99",
+            data_abertura=timezone.now(),
+            parceiro=self.pdv,
+        )
+        dados, nome = planilha_capilaridade(self.pdv)
+        self.assertTrue(dados.startswith(b"PK"))
+        self.assertIn("RECORD", nome)
+
 
 class CadastroParceirosOsabTests(TestCase):
     def setUp(self):

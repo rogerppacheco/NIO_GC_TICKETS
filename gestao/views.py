@@ -253,17 +253,25 @@ def capilaridade_view(request: HttpRequest) -> HttpResponse:
                 parceiros = [p for p in parceiros if str(p.id) == filtros["pdv"]]
             if action == "enviar_pdv":
                 parceiro = get_object_or_404(_parceiros(request), pk=request.POST.get("parceiro"))
-                _flash_resumo(
-                    request,
-                    "Capilaridade",
-                    enviar_capilaridade_pdv(parceiro, request.user, filtros),
-                )
+                try:
+                    _flash_resumo(
+                        request,
+                        "Capilaridade",
+                        enviar_capilaridade_pdv(parceiro, request.user, filtros),
+                    )
+                except Exception as exc:
+                    messages.error(request, f"Falha ao enviar capilaridade: {exc}")
             else:
-                _flash_resumo(
-                    request,
-                    "Capilaridade (todos)",
-                    enviar_capilaridade_todos(parceiros, request.user, filtros=filtros),
-                )
+                try:
+                    _flash_resumo(
+                        request,
+                        "Capilaridade (todos)",
+                        enviar_capilaridade_todos(
+                            parceiros, request.user, filtros=filtros
+                        ),
+                    )
+                except Exception as exc:
+                    messages.error(request, f"Falha ao enviar capilaridade: {exc}")
             extra = "&".join(
                 f"{k}={v}" for k, v in filtros.items() if v
             )

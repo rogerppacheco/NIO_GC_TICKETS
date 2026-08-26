@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import io
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+from django.utils import timezone
 
 from tickets.models import Parceiro
 
@@ -12,9 +14,22 @@ from .periodo import periodo_ativo
 from .pipelines.osab import linhas_capilaridade_pdv
 
 
+def _celula_excel(valor):
+    """OpenPyXL recusa datetime com tz; o 500 do Enviar todos vinha daqui."""
+    if isinstance(valor, datetime):
+        if timezone.is_aware(valor):
+            valor = timezone.localtime(valor)
+        return valor.replace(tzinfo=None)
+    return valor
+
+
 def df_para_xlsx(df: pd.DataFrame, nome_arquivo: str) -> tuple[bytes, str]:
+    trabalho = df.copy()
+    if not trabalho.empty:
+        for col in trabalho.columns:
+            trabalho[col] = trabalho[col].map(_celula_excel)
     buf = io.BytesIO()
-    df.to_excel(buf, index=False, engine="openpyxl")
+    trabalho.to_excel(buf, index=False, engine="openpyxl")
     return buf.getvalue(), nome_arquivo
 
 

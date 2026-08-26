@@ -386,7 +386,10 @@ def enviar_capilaridade_todos(
         total.detalhes.extend(parte.detalhes)
 
     for p in parceiros:
-        parte = enviar_capilaridade_pdv(p, user, filtros)
+        try:
+            parte = enviar_capilaridade_pdv(p, user, filtros)
+        except Exception as exc:
+            parte = ResumoEnvio(erros=1, detalhes=[f"{p.nome}: {exc}"])
         total.enviados += parte.enviados
         total.erros += parte.erros
         total.ignorados += parte.ignorados
