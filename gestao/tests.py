@@ -192,6 +192,18 @@ class OsabCapilaridadeTests(TestCase):
         padrao = linhas_capilaridade_pdv(self.pdv)
         self.assertEqual([l["matricula_vendedor"] for l in padrao], ["TT99"])
 
+    def test_mascara_usa_primeiro_e_ultimo_nome(self):
+        from gestao.relatorios import _linha_tt, primeiro_ultimo_nome
+
+        self.assertEqual(
+            primeiro_ultimo_nome("CAUAN HENRIQUE DE OLIVEIRA DA CRUZ"), "CAUAN CRUZ"
+        )
+        self.assertEqual(primeiro_ultimo_nome("ANA PAULA"), "ANA PAULA")
+        self.assertEqual(primeiro_ultimo_nome("JOAO"), "JOAO")
+        linha = _linha_tt("TT99", 2, timezone.now(), "JOAO VITOR VIEIRA DIAS")
+        self.assertIn("JOAO DIAS", linha)
+        self.assertNotIn("VITOR", linha)
+
     def test_planilha_capilaridade_aceita_datetime_com_fuso(self):
         from gestao.planilhas import planilha_capilaridade
 

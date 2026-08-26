@@ -16,6 +16,24 @@ from .pipelines.osab import (
 from tickets.models import Parceiro
 
 
+_PARTICULAS_NOME = {"DE", "DA", "DO", "DOS", "DAS", "E", "DEL", "DI"}
+
+
+def primeiro_ultimo_nome(nome: str) -> str:
+    """CAUAN HENRIQUE DE OLIVEIRA DA CRUZ → CAUAN CRUZ."""
+    partes = [p for p in (nome or "").split() if p]
+    if not partes:
+        return ""
+    if len(partes) == 1:
+        return partes[0]
+    i = len(partes) - 1
+    while i > 0 and partes[i].upper() in _PARTICULAS_NOME:
+        i -= 1
+    if i == 0:
+        return partes[0]
+    return f"{partes[0]} {partes[i]}"
+
+
 def formatar_data_curta(valor) -> str:
     if valor is None:
         return "??"
@@ -26,7 +44,8 @@ def formatar_data_curta(valor) -> str:
 
 def _linha_tt(matricula, dias, ultima, nome: str = "") -> str:
     chave = normalizar_chave_tt(matricula) or str(matricula)
-    prefixo = f"{chave} · {nome}" if (nome or "").strip() else chave
+    curto = primeiro_ultimo_nome(nome)
+    prefixo = f"{chave} · {curto}" if curto else chave
     if dias is None:
         return f"{prefixo} · sem vendas"
     return f"{prefixo} · {int(dias)}d · {formatar_data_curta(ultima)}"
