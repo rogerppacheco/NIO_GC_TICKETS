@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}WhatsApp · Gestão{% endblock %}
+{% block content %}
+{% include "gestao/_nav.html" %}
+{% csrf_token %}
+<div class="hero">
+  <div>
+    <h1>WhatsApp</h1>
+    <p>Status, QR e desconexão da instância Evolution. Escaneie no celular: WhatsApp → Aparelhos conectados.</p>
+  </div>
+  <button class="btn btn-secondary" type="button" id="btn-atualizar">Atualizar status</button>
+</div>
+
+<div class="cards">
+  <div class="card">
+    <div class="label">Instância</div>
+    <div class="value" style="font-size:1.05rem" id="wa-instance">{{ instance_name }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Evolution</div>
+    <div class="value" style="font-size:1.05rem" id="wa-evo">{% if evolution_ok %}ok{% else %}ausente{% endif %}</div>
+  </div>
+  <div class="card">
+    <div class="label">n8n outbound</div>
+    <div class="value" style="font-size:1.05rem" id="wa-n8n">{% if n8n_ok %}ok{% else %}direto{% endif %}</div>
+  </div>
+  <div class="card">
+    <div class="label">Estado</div>
+    <div class="value" style="font-size:1.05rem"><span class="pill em_analise" id="wa-badge">Consultando…</span></div>
+  </div>
+</div>
+
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-h"><h2>Conexão</h2></div>
+  <div class="panel-b">
+    <p class="help" id="wa-status-text">Consultando a Evolution…</p>
+    <p class="help" id="wa-connected-msg" hidden>Aparelho conectado. Pode enviar Capilaridade e os demais relatórios.</p>
+    <p class="help" id="wa-connecting-msg" hidden style="color:var(--warn)">Aguardando pareamento — gere o QR e escaneie no celular (Aparelhos conectados).</p>
+    <p class="help" id="wa-error" hidden style="color:var(--danger)"></p>
+    <div class="fila-toolbar" style="gap:0.5rem;margin-top:0.8rem">
+      <button class="btn btn-primary" type="button" id="btn-qr">Gerar QR Code</button>
+      <button class="btn btn-ghost" type="button" id="btn-disconnect" hidden>Desconectar</button>
+    </div>
+    <div id="wa-qr-wrap" hidden style="margin-top:1rem;text-align:center">
+      <img id="wa-qr-img" alt="QR Code WhatsApp" width="260" height="260" style="background:#fff;padding:8px;border-radius:8px">
+      <p class="help" style="margin-top:0.6rem">No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  function csrfToken() {
+    const el = document.querySelector("[name=csrfmiddlewaretoken]");
+    if (el && el.value) return el.value;
+    const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : "";
+  }
+  function $(id) { return document.getElementById(id); }
+  function setHidden(el, hide) { el.hidden = !!hide; }
+  let poll = null;
+
+  function setError(msg) {
+    const el = $("wa-error");
+    if (!msg) { setHidden(el, true); el.textContent = ""; return; }
+    el.textContent = msg;
+    setHidden(el, false);
+  }
+
+  function applyStatus(data) {
+    if (!data) return;
+    const map = {
+      open: "Conectado",
+      connected: "Conectado",
+      online: "Conectado",
+      close: "Desconectado",
+      closed: "Desconectado",
+      connecting: "Aguardando QR",
+      unconfigured: "Não configurado",
+      error: "Erro",
+    };
+    const badge = $("wa-badge");
+    badge.textContent = map[data.state] || data.state || "—";
+    badge.className = "pill " + (data.connected ? "resolvido" : (data.state === "connecting" ? "aguardando_parceiro" : "cancelado"));
+    if (data.instanceName) $("wa-instance").textContent = data.instanceName;
+    if (typeof data.n8nConfigured === "boolean") {
+      $("wa-n8n").textContent = data.n8nConfigured ? "ok" : "direto";
+    }
+    $("wa-status-text").textContent = data.message || (data.connected ? "Sessão aberta na Evolution." : "Gere o QR para parear o chip.");
+    setHidden($("wa-connected-msg"), !data.connected);
+    setHidden($("wa-connecting-msg"), !(data.state === "connecting" && !data.connected));
+    setHidden($("btn-disconnect"), !(data.connected || data.state === "connecting"));
+    setHidden($("btn-qr"), !!data.connected);
+    if (data.connected && poll) { clearInterval(poll); poll = null; }
+  }
+
+  async function loadStatus(silent) {
+    if (!silent) setError("");
+    try {
+      const res = await fetch("{% url 'gestao_whatsapp_status' %}", { headers: { "Accept": "application/json" } });
+      const data = await res.json();
+      if (!res.ok && data.detail) setError(data.detail);
+      applyStatus(data);
+    } catch (e) {
+      if (!silent) setError("Falha ao consultar o status.");
+    }
+  }
+
+  async function gerarQr() {
+    setError("");
+    $("btn-qr").disabled = true;
+    try {
+      const res = await fetch("{% url 'gestao_whatsapp_qrcode' %}", { headers: { "Accept": "application/json" } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Não foi possível gerar o QR.");
+      const src = data.base64 || "";
+      if (!src) throw new Error("QR não retornado pela Evolution.");
+      $("wa-qr-img").src = src;
+      setHidden($("wa-qr-wrap"), false);
+      if (poll) clearInterval(poll);
+      poll = setInterval(function () { loadStatus(true); }, 3000);
+    } catch (e) {
+      setError(e.message || "Erro ao gerar QR.");
+    } finally {
+      $("btn-qr").disabled = false;
+    }
+  }
+
+  async function desconectar() {
+    if (!confirm("Desconectar e resetar a sessão WhatsApp desta instância?")) return;
+    setError("");
+    try {
+      const res = await fetch("{% url 'gestao_whatsapp_disconnect' %}", {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+          "X-CSRFToken": csrfToken(),
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Falha ao desconectar.");
+      setHidden($("wa-qr-wrap"), true);
+      applyStatus(data.status || data);
+      await loadStatus();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  $("btn-atualizar").addEventListener("click", function () { loadStatus(false); });
+  $("btn-qr").addEventListener("click", gerarQr);
+  $("btn-disconnect").addEventListener("click", desconectar);
+  loadStatus(false);
+})();
+</script>
+{% endblock %}

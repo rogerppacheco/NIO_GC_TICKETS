@@ -226,6 +226,7 @@ class GestaoViewsTests(TestCase):
             "gestao_churn",
             "gestao_configs",
             "gestao_destinatarios",
+            "gestao_whatsapp",
             "gestao_envios",
         ):
             r = self.client.get(reverse(nome))
@@ -287,6 +288,95 @@ class SyncWAClientTests(TestCase):
             result = enviar_texto("120363xxx@g.us", "teste")
         self.assertTrue(result.ok)
         self.assertEqual(post.call_args.kwargs["json"]["number"], "5531888888888")
+
+
+@override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+        },
+    },
+    EVOLUTION_API_URL="https://evo.test",
+    EVOLUTION_API_KEY="evo.key",
+    EVOLUTION_INSTANCE_NAME="nio_gc_tickets",
+    N8N_OUTBOUND_WEBHOOK_URL="",
+)
+class WhatsAppPareamentoTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.gestor = User.objects.create_superuser("gwa", "gwa@x.com", "x")
+        PerfilStaff.objects.create(user=self.gestor, papel=PerfilStaff.Papel.GESTOR)
+        self.client.force_login(self.gestor)
+
+    def test_pagina_gestor(self):
+        r = self.client.get(reverse("gestao_whatsapp"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Gerar QR Code")
+        self.assertContains(r, "nio_gc_tickets")
+
+    def test_especialista_nao_acessa(self):
+        User = get_user_model()
+        spec = User.objects.create_user("specwa", "sw@x.com", "x", is_staff=True)
+        PerfilStaff.objects.create(user=spec, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self.client.force_login(spec)
+        r = self.client.get(reverse("gestao_whatsapp"))
+        self.assertEqual(r.status_code, 404)
+
+    @override_settings(EVOLUTION_API_URL="", EVOLUTION_API_KEY="")
+    def test_status_sem_config(self):
+        r = self.client.get(reverse("gestao_whatsapp_status"))
+        self.assertEqual(r.status_code, 503)
+        self.assertEqual(r.json()["state"], "unconfigured")
+
+    def test_status_conectado(self):
+        from unittest.mock import patch
+
+        with patch(
+            "gestao.views_whatsapp.EvolutionConnectionService.get_status",
+            return_value={
+                "instanceName": "nio_gc_tickets",
+                "state": "open",
+                "connected": True,
+                "n8nConfigured": False,
+                "evolutionConfigured": True,
+            },
+        ):
+            r = self.client.get(reverse("gestao_whatsapp_status"))
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["connected"])
+        self.assertEqual(r.json()["state"], "open")
+
+    def test_qrcode(self):
+        from unittest.mock import patch
+
+        with patch(
+            "gestao.views_whatsapp.EvolutionConnectionService.get_qrcode",
+            return_value={
+                "instanceName": "nio_gc_tickets",
+                "base64": "data:image/png;base64,AAA",
+                "count": 1,
+            },
+        ):
+            r = self.client.get(reverse("gestao_whatsapp_qrcode"))
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["base64"].startswith("data:image/png;base64,"))
+
+    def test_desconectar(self):
+        from unittest.mock import patch
+
+        with patch(
+            "gestao.views_whatsapp.EvolutionConnectionService.disconnect",
+            return_value={
+                "success": True,
+                "instanceName": "nio_gc_tickets",
+                "message": "Instância desconectada com sucesso.",
+                "status": {"state": "close", "connected": False},
+            },
+        ):
+            r = self.client.post(reverse("gestao_whatsapp_disconnect"))
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["success"])
 
 
 @override_settings(

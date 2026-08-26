@@ -117,7 +117,7 @@
         <p style="margin-bottom:0.8rem">
           <a class="btn btn-primary" href="{% url 'gestao_destinatarios' %}?grupos=1">Listar grupos WhatsApp</a>
         </p>
-        <p class="help">1. Clique no botão acima (chip precisa estar pareado na Evolution).</p>
+        <p class="help">1. Clique no botão acima (chip precisa estar <a href="{% url 'gestao_whatsapp' %}">pareado na Evolution</a>).</p>
         <p class="help">2. Filtre pelo nome do grupo do PDV.</p>
         <p class="help">3. Escolha o PDV e <strong>Vincular</strong> — ou use «Usar no formulário» para ajustar flags.</p>
       {% else %}
