@@ -234,15 +234,19 @@ class GestaoViewsTests(TestCase):
 
 class SyncWAClientTests(TestCase):
     def test_normalizar_numero_br(self):
-        from gestao.messaging.syncwa import normalizar_destino
+        from gestao.messaging.syncwa import normalizar_destino, numero_para_evolution
 
         self.assertEqual(normalizar_destino("31999999999"), "5531999999999@s.whatsapp.net")
         self.assertEqual(normalizar_destino("5531999999999"), "5531999999999@s.whatsapp.net")
         self.assertEqual(normalizar_destino("120363@g.us"), "120363@g.us")
+        self.assertEqual(numero_para_evolution("5531999999999@s.whatsapp.net"), "5531999999999")
+        self.assertEqual(numero_para_evolution("120363418335765186@g.us"), "120363418335765186@g.us")
 
     @override_settings(
-        SYNCWA_BASE_URL="https://syncwa.test",
-        SYNCWA_API_KEY="syncwa.key",
+        EVOLUTION_API_URL="https://evo.test",
+        EVOLUTION_API_KEY="evo.key",
+        EVOLUTION_INSTANCE_NAME="nio_gc_tickets",
+        N8N_OUTBOUND_WEBHOOK_URL="",
         SYNCWA_MODO_TESTE=False,
     )
     def test_enviar_texto_registra_ok(self):
@@ -252,19 +256,22 @@ class SyncWAClientTests(TestCase):
 
         fake = MagicMock()
         fake.status_code = 200
-        fake.json.return_value = {"messageLogId": "ml-1", "status": "QUEUED"}
+        fake.json.return_value = {"key": {"id": "ml-1"}}
         with patch("gestao.messaging.syncwa.requests.post", return_value=fake) as post:
             result = enviar_texto("5531999999999", "oi")
         self.assertTrue(result.ok)
         self.assertEqual(result.message_log_id, "ml-1")
         post.assert_called_once()
         kwargs = post.call_args.kwargs
-        self.assertEqual(kwargs["json"]["to"], "5531999999999@s.whatsapp.net")
-        self.assertEqual(kwargs["headers"]["x-api-key"], "syncwa.key")
+        self.assertEqual(kwargs["json"]["number"], "5531999999999")
+        self.assertEqual(kwargs["headers"]["apikey"], "evo.key")
+        self.assertIn("/message/sendText/nio_gc_tickets", post.call_args.args[0])
 
     @override_settings(
-        SYNCWA_BASE_URL="https://syncwa.test",
-        SYNCWA_API_KEY="syncwa.key",
+        EVOLUTION_API_URL="https://evo.test",
+        EVOLUTION_API_KEY="evo.key",
+        EVOLUTION_INSTANCE_NAME="nio_gc_tickets",
+        N8N_OUTBOUND_WEBHOOK_URL="",
         SYNCWA_MODO_TESTE=True,
         SYNCWA_TEST_JID="5531888888888",
     )
@@ -275,11 +282,11 @@ class SyncWAClientTests(TestCase):
 
         fake = MagicMock()
         fake.status_code = 200
-        fake.json.return_value = {"messageLogId": "ml-2", "status": "QUEUED"}
+        fake.json.return_value = {"key": {"id": "ml-2"}}
         with patch("gestao.messaging.syncwa.requests.post", return_value=fake) as post:
             result = enviar_texto("120363xxx@g.us", "teste")
         self.assertTrue(result.ok)
-        self.assertEqual(post.call_args.kwargs["json"]["to"], "5531888888888@s.whatsapp.net")
+        self.assertEqual(post.call_args.kwargs["json"]["number"], "5531888888888")
 
 
 @override_settings(
@@ -289,8 +296,10 @@ class SyncWAClientTests(TestCase):
             "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
         },
     },
-    SYNCWA_BASE_URL="https://syncwa.test",
-    SYNCWA_API_KEY="syncwa.key",
+    EVOLUTION_API_URL="https://evo.test",
+    EVOLUTION_API_KEY="evo.key",
+    EVOLUTION_INSTANCE_NAME="nio_gc_tickets",
+    N8N_OUTBOUND_WEBHOOK_URL="",
     SYNCWA_MODO_TESTE=False,
 )
 class DestinatarioEnvioTests(TestCase):
@@ -335,21 +344,12 @@ class DestinatarioEnvioTests(TestCase):
         )
         fake = MagicMock()
         fake.status_code = 200
-        fake.json.return_value = {"messageLogId": "ml-9", "status": "QUEUED"}
-        fake_get = MagicMock()
-        fake_get.status_code = 200
-        fake_get.json.return_value = {
-            "id": "ml-9",
-            "status": "SENT",
-            "remoteJid": "5531999999999@s.whatsapp.net",
-            "errorMessage": None,
-        }
+        fake.json.return_value = {"key": {"id": "ml-9"}}
         with patch("gestao.messaging.syncwa.requests.post", return_value=fake):
-            with patch("gestao.messaging.syncwa.requests.get", return_value=fake_get):
-                r = self.client.post(
-                    reverse("gestao_capilaridade"),
-                    {"action": "enviar_pdv", "parceiro": self.pdv.id},
-                )
+            r = self.client.post(
+                reverse("gestao_capilaridade"),
+                {"action": "enviar_pdv", "parceiro": self.pdv.id},
+            )
         self.assertEqual(r.status_code, 302)
         log = EnvioWhatsApp.objects.get()
         self.assertEqual(log.status, EnvioWhatsApp.Status.ENVIADO)
@@ -363,14 +363,10 @@ class DestinatarioEnvioTests(TestCase):
 
         fake = MagicMock()
         fake.status_code = 200
-        fake.json.return_value = {"messageLogId": "ml-t", "status": "QUEUED"}
-        fake_get = MagicMock()
-        fake_get.status_code = 200
-        fake_get.json.return_value = {"id": "ml-t", "status": "SENT", "errorMessage": None}
+        fake.json.return_value = {"key": {"id": "ml-t"}}
         with patch("gestao.messaging.syncwa.requests.post", return_value=fake):
-            with patch("gestao.messaging.syncwa.requests.get", return_value=fake_get):
-                with override_settings(SYNCWA_TEST_JID="5531777777777"):
-                    r = self.client.post(reverse("gestao_envios"), {"action": "teste"})
+            with override_settings(SYNCWA_TEST_JID="5531777777777"):
+                r = self.client.post(reverse("gestao_envios"), {"action": "teste"})
         self.assertEqual(r.status_code, 302)
         self.assertTrue(EnvioWhatsApp.objects.filter(tipo=EnvioWhatsApp.Tipo.TESTE).exists())
 

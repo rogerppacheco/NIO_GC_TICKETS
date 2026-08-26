@@ -98,7 +98,7 @@ def _enviar_para_lista(
         return resumo
     if not syncwa_configurado():
         resumo.erros += 1
-        resumo.detalhes.append("SyncWA não configurado.")
+        resumo.detalhes.append("WhatsApp (Evolution) não configurado.")
         return resumo
     if not destinos:
         resumo.ignorados += 1
@@ -128,7 +128,7 @@ def _enviar_para_lista(
 
 def enviar_teste(user: AbstractBaseUser | None = None) -> ResumoEnvio:
     texto = (
-        "*NIO GC Tickets — teste SyncWA*\n\n"
+        "*NIO GC Tickets — teste WhatsApp*\n\n"
         "Se você recebeu esta mensagem, a integração está ok."
     )
     from django.conf import settings
@@ -149,7 +149,7 @@ def enviar_teste(user: AbstractBaseUser | None = None) -> ResumoEnvio:
     # Força envio direto ao JID de teste (mesmo sem Destinatario)
     resumo = ResumoEnvio()
     if not syncwa_configurado():
-        return ResumoEnvio(erros=1, detalhes=["SyncWA não configurado."])
+        return ResumoEnvio(erros=1, detalhes=["WhatsApp (Evolution) não configurado."])
     result = enviar_texto(jid or settings.SYNCWA_TEST_JID, texto)
     _registrar(
         tipo=EnvioWhatsApp.Tipo.TESTE,
@@ -324,7 +324,7 @@ def _enviar_com_anexo(
     """Envia documento (+ texto se caption/mensagem > 900 chars)."""
     resumo = ResumoEnvio()
     if not syncwa_configurado():
-        return ResumoEnvio(erros=1, detalhes=["SyncWA não configurado."])
+        return ResumoEnvio(erros=1, detalhes=["WhatsApp (Evolution) não configurado."])
     if not destinos:
         return ResumoEnvio(ignorados=1, detalhes=["Nenhum destinatário ativo para este envio."])
 

@@ -483,11 +483,11 @@ class EnvioWhatsApp(models.Model):
         VENDA_INDEVIDA = "venda_indevida", "Venda indevida"
         RECOMPRA = "recompra", "Recompra"
         RESUMO = "resumo", "Resumo geral"
-        TESTE = "teste", "Teste SyncWA"
+        TESTE = "teste", "Teste WhatsApp"
 
     class Status(models.TextChoices):
         PENDENTE = "pendente", "Pendente"
-        ENVIADO = "enviado", "Enviado (fila SyncWA)"
+        ENVIADO = "enviado", "Enviado"
         ERRO = "erro", "Erro"
         IGNORADO = "ignorado", "Ignorado"
 

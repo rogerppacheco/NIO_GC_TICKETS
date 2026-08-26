@@ -5,14 +5,14 @@
 <div class="hero">
   <div>
     <h1>Envios WhatsApp</h1>
-    <p>Dispara capilaridade, OSAB, FPD, Churn e Comissionamento via SyncWA. {{ qtd_destinatarios }} destinatário(s) ativo(s).</p>
+    <p>Dispara capilaridade, OSAB, FPD, Churn e Comissionamento via Evolution. {{ qtd_destinatarios }} destinatário(s) ativo(s).</p>
   </div>
   <a class="btn btn-secondary" href="{% url 'gestao_destinatarios' %}">Destinatários</a>
 </div>
 
 <div class="cards">
   <div class="card">
-    <div class="label">SyncWA</div>
+    <div class="label">WhatsApp</div>
     <div class="value" style="font-size:1.1rem">{% if syncwa_ok %}ligado{% else %}off{% endif %}</div>
   </div>
   <div class="card">
@@ -37,7 +37,7 @@
           <option value="{{ p.id }}">{{ p.nome }}</option>
         {% endfor %}
       </select>
-      <button class="btn btn-secondary" type="submit" name="action" value="teste">Teste SyncWA</button>
+      <button class="btn btn-secondary" type="submit" name="action" value="teste">Teste WhatsApp</button>
       <button class="btn btn-primary" type="submit" name="action" value="capilaridade">Capilaridade</button>
       <button class="btn btn-secondary" type="submit" name="action" value="resumo_capilaridade">Resumo capilaridade</button>
       <button class="btn btn-secondary" type="submit" name="action" value="osab">OSAB (PDV)</button>
@@ -64,7 +64,7 @@
           <th>PDV</th>
           <th>Destino</th>
           <th>Status</th>
-          <th>SyncWA</th>
+          <th>WhatsApp</th>
         </tr>
       </thead>
       <tbody>

@@ -5,23 +5,23 @@
 <div class="hero">
   <div>
     <h1>Destinatários WhatsApp</h1>
-    <p>Cadastre o JID (número com DDI ou grupo @g.us). Sem JID o SyncWA não envia.</p>
+    <p>Cadastre o JID (número com DDI ou grupo @g.us). Sem JID a Evolution não envia.</p>
   </div>
   {% if syncwa_ok %}
-  <a class="btn btn-primary" href="{% url 'gestao_destinatarios' %}?grupos=1">Listar grupos SyncWA</a>
+  <a class="btn btn-primary" href="{% url 'gestao_destinatarios' %}?grupos=1">Listar grupos WhatsApp</a>
   {% endif %}
 </div>
 
 {% if not syncwa_ok %}
   <div class="panel" style="margin-bottom:1rem">
     <div class="panel-b">
-      <p class="help" style="color:var(--danger)">Configure <code>SYNCWA_BASE_URL</code> e <code>SYNCWA_API_KEY</code> no Railway para enviar.</p>
+      <p class="help" style="color:var(--danger)">Configure <code>EVOLUTION_API_URL</code> e <code>EVOLUTION_API_KEY</code> no Railway para enviar.</p>
     </div>
   </div>
 {% elif modo_teste %}
   <div class="panel" style="margin-bottom:1rem">
     <div class="panel-b">
-      <p class="help" style="color:var(--warn)">Modo teste ativo: tudo vai para <code>SYNCWA_TEST_JID</code>.</p>
+      <p class="help" style="color:var(--warn)">Modo teste ativo: tudo vai para <code>WHATSAPP_TEST_JID</code>.</p>
     </div>
   </div>
 {% endif %}
@@ -115,13 +115,13 @@
     <div class="panel-b">
       {% if syncwa_ok %}
         <p style="margin-bottom:0.8rem">
-          <a class="btn btn-primary" href="{% url 'gestao_destinatarios' %}?grupos=1">Listar grupos SyncWA</a>
+          <a class="btn btn-primary" href="{% url 'gestao_destinatarios' %}?grupos=1">Listar grupos WhatsApp</a>
         </p>
-        <p class="help">1. Clique no botão acima (chip precisa estar pareado).</p>
+        <p class="help">1. Clique no botão acima (chip precisa estar pareado na Evolution).</p>
         <p class="help">2. Filtre pelo nome do grupo do PDV.</p>
         <p class="help">3. Escolha o PDV e <strong>Vincular</strong> — ou use «Usar no formulário» para ajustar flags.</p>
       {% else %}
-        <p class="help" style="color:var(--danger)">SyncWA não configurado — não dá para listar grupos ainda.</p>
+        <p class="help" style="color:var(--danger)">Evolution não configurada — não dá para listar grupos ainda.</p>
       {% endif %}
       <p class="help">4. Número individual: DDI + DDD + número, ex. <code>5531999999999</code>.</p>
       <p style="margin-top:0.8rem"><a class="btn btn-secondary" href="{% url 'gestao_envios' %}">Ir para Envios</a></p>

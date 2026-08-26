@@ -710,7 +710,7 @@ def destinatarios_view(request: HttpRequest) -> HttpResponse:
 
 @gestor_required
 def destinatario_do_grupo(request: HttpRequest) -> HttpResponse:
-    """Cadastra rápido um grupo SyncWA como destinatário de um PDV."""
+    """Cadastra rápido um grupo WhatsApp como destinatário de um PDV."""
     if request.method != "POST":
         return redirect("gestao_destinatarios")
     parceiro_id = request.POST.get("parceiro")
@@ -783,7 +783,7 @@ def envios_view(request: HttpRequest) -> HttpResponse:
             parceiro = get_object_or_404(_parceiros(request), pk=parceiro_id)
 
         if action == "teste":
-            _flash_resumo(request, "Teste SyncWA", enviar_teste(request.user))
+            _flash_resumo(request, "Teste WhatsApp", enviar_teste(request.user))
             return redirect("gestao_envios")
         if action == "capilaridade":
             if parceiro:

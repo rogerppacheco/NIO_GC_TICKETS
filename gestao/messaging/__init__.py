@@ -1,1 +1,1 @@
-"""Envio WhatsApp via SyncWA (sem acoplar analysis ao sender)."""
+"""Envio WhatsApp via Evolution + n8n (sem acoplar analysis ao sender)."""

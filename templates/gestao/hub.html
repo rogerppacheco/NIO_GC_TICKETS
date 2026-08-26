@@ -5,7 +5,7 @@
 <div class="hero">
   <div>
     <h1>Gestão de bases</h1>
-    <p>Importar OSAB, FPD, Churn, Comissionamento e Sysmap; enviar via SyncWA.</p>
+    <p>Importar OSAB, FPD, Churn, Comissionamento e Sysmap; enviar via WhatsApp (Evolution).</p>
   </div>
 </div>
 
@@ -46,7 +46,7 @@
       <p><a href="{% url 'gestao_venda_indevida' %}">8. Venda indevida</a> — BASE_VI</p>
       <p><a href="{% url 'gestao_recompra' %}">9. Recompra</a> — safra × resultado</p>
       {% if eh_gestor %}
-      <p><a href="{% url 'gestao_destinatarios' %}">6. Destinatários</a> — JID SyncWA</p>
+      <p><a href="{% url 'gestao_destinatarios' %}">6. Destinatários</a> — JID WhatsApp</p>
       <p><a href="{% url 'gestao_envios' %}">7. Envios</a> — histórico WhatsApp</p>
       {% endif %}
     </div>

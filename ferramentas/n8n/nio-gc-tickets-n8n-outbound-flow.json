@@ -1,0 +1,125 @@
+{
+  "name": "NIO GC Tickets — WhatsApp (Outbound)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nio-gc-tickets-enviar-mensagem",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "nio-outbound-webhook",
+      "name": "Webhook NIO Outbound",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "nio-gc-tickets-outbound"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nconst body = payload.body ?? payload;\n\nconst raw = String(body.phone_number ?? body.to ?? body.number ?? '').trim();\nlet number = raw;\nif (!raw.includes('@')) {\n  number = raw.replace(/\\D/g, '');\n}\nconst text = String(body.message_body ?? body.text ?? '').trim();\nconst mediaUrl = body.media_url ?? null;\nconst mediaType = body.media_type ?? 'image';\nconst mimeType = body.media_mimetype ?? body.mimetype ?? null;\nlet fileName = body.media_file_name ?? body.fileName ?? null;\n\nif (!number) {\n  throw new Error('phone_number vazio no payload outbound');\n}\n\nif (!text && !mediaUrl) {\n  throw new Error('message_body ou media_url obrigatório no payload outbound');\n}\n\nfunction inferMime(url, type) {\n  const lower = String(url).toLowerCase();\n  if (lower.includes('.jpeg') || lower.includes('.jpg')) return 'image/jpeg';\n  if (lower.includes('.png')) return 'image/png';\n  if (lower.includes('.webp')) return 'image/webp';\n  if (lower.includes('.gif')) return 'image/gif';\n  if (lower.includes('.pdf')) return 'application/pdf';\n  if (type === 'image') return 'image/jpeg';\n  if (type === 'document') return 'application/pdf';\n  return 'application/octet-stream';\n}\n\nfunction inferFileName(url, type) {\n  const segment = String(url).split('/').pop()?.split('?')[0];\n  if (segment && segment.includes('.')) return segment;\n  if (type === 'document') return 'documento.pdf';\n  return 'imagem.jpg';\n}\n\nconst resolvedMime = mimeType || (mediaUrl ? inferMime(mediaUrl, mediaType) : null);\nconst resolvedFileName = fileName || (mediaUrl ? inferFileName(mediaUrl, mediaType) : null);\nconst evolutionMediaType =\n  mediaType === 'document' ? 'document' :\n  mediaType === 'video' ? 'video' :\n  mediaType === 'audio' ? 'audio' : 'image';\n\nreturn [{\n  json: {\n    phone_number: number,\n    number,\n    text,\n    message_body: text,\n    source: body.source ?? 'nio-gc-tickets',\n    media_type: mediaType,\n    media_url: mediaUrl,\n    media_mimetype: resolvedMime,\n    media_file_name: resolvedFileName,\n    evolution_mediatype: evolutionMediaType,\n    has_media: Boolean(mediaUrl),\n  }\n}];"
+      },
+      "id": "nio-outbound-map",
+      "name": "Mapear payload NIO",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-has-media",
+              "leftValue": "={{ $json.has_media }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "nio-outbound-if-media",
+      "name": "Tem mídia?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://evolution-api-production-b36a.up.railway.app/message/sendText/nio_gc_tickets",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "__EVOLUTION_API_KEY__" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.number, text: $json.text }) }}",
+        "options": {}
+      },
+      "id": "nio-outbound-text",
+      "name": "Evolution sendText",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://evolution-api-production-b36a.up.railway.app/message/sendMedia/nio_gc_tickets",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "__EVOLUTION_API_KEY__" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.number, mediatype: $json.evolution_mediatype, mimetype: $json.media_mimetype, media: $json.media_url, fileName: $json.media_file_name, caption: $json.message_body || '', delay: 1200 }) }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "nio-outbound-media",
+      "name": "Evolution sendMedia",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 440]
+    }
+  ],
+  "connections": {
+    "Webhook NIO Outbound": {
+      "main": [[{ "node": "Mapear payload NIO", "type": "main", "index": 0 }]]
+    },
+    "Mapear payload NIO": {
+      "main": [[{ "node": "Tem mídia?", "type": "main", "index": 0 }]]
+    },
+    "Tem mídia?": {
+      "main": [
+        [{ "node": "Evolution sendMedia", "type": "main", "index": 0 }],
+        [{ "node": "Evolution sendText", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "meta": { "templateCredsSetupCompleted": true }
+}

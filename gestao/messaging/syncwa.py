@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import mimetypes
 import re
 from dataclasses import dataclass
@@ -10,7 +11,7 @@ from django.conf import settings
 
 
 class SyncWAError(Exception):
-    """Falha ao falar com a API SyncWA."""
+    """Falha ao falar com Evolution / n8n."""
 
 
 @dataclass
@@ -22,8 +23,33 @@ class SyncWAResult:
     destino: str = ""
 
 
+def _timeout() -> float:
+    return float(getattr(settings, "SYNCWA_TIMEOUT", 60))
+
+
+def _evo_url() -> str:
+    return (getattr(settings, "EVOLUTION_API_URL", "") or "").strip().rstrip("/")
+
+
+def _evo_key() -> str:
+    return (getattr(settings, "EVOLUTION_API_KEY", "") or "").strip()
+
+
+def _evo_instance() -> str:
+    name = (getattr(settings, "EVOLUTION_INSTANCE_NAME", "") or "").strip()
+    return name or "nio_gc_tickets"
+
+
+def _n8n_url() -> str:
+    return (
+        getattr(settings, "N8N_OUTBOUND_WEBHOOK_URL", "")
+        or getattr(settings, "N8N_WEBHOOK_URL", "")
+        or ""
+    ).strip()
+
+
 def syncwa_configurado() -> bool:
-    return bool(getattr(settings, "SYNCWA_BASE_URL", "").strip() and getattr(settings, "SYNCWA_API_KEY", "").strip())
+    return bool(_evo_url() and _evo_key())
 
 
 def modo_teste_ativo() -> bool:
@@ -31,15 +57,15 @@ def modo_teste_ativo() -> bool:
 
 
 def jid_teste() -> str:
-    return (getattr(settings, "SYNCWA_TEST_JID", "") or "").strip()
+    return (
+        getattr(settings, "WHATSAPP_TEST_JID", "")
+        or getattr(settings, "SYNCWA_TEST_JID", "")
+        or ""
+    ).strip()
 
 
 def normalizar_destino(valor: str) -> str:
-    """Aceita JID completo (@g.us / @s.whatsapp.net) ou número BR com DDI.
-
-    Números individuais vão como JID completo (@s.whatsapp.net) para o SyncWA
-    não reescrever o nono dígito BR (ex.: 5531988… → 5531888…).
-    """
+    """Aceita JID completo (@g.us / @s.whatsapp.net) ou número BR com DDI."""
     bruto = (valor or "").strip()
     if not bruto:
         raise SyncWAError("Destino vazio.")
@@ -53,65 +79,49 @@ def normalizar_destino(valor: str) -> str:
     return f"{digitos}@s.whatsapp.net"
 
 
+def numero_para_evolution(destino: str) -> str:
+    """Evolution: JID de grupo @g.us ou só dígitos do número."""
+    s = (destino or "").strip()
+    if "@g.us" in s or "@lid" in s:
+        return s
+    if "@s.whatsapp.net" in s or "@c.us" in s:
+        return s.split("@", 1)[0]
+    if s.endswith("-group"):
+        return f"{s[: -len('-group')]}@g.us"
+    return re.sub(r"\D", "", s)
+
+
 def destino_efetivo(jid: str) -> tuple[str, bool]:
     """Retorna (destino, foi_redirecionado_para_teste)."""
     destino = normalizar_destino(jid)
     if modo_teste_ativo():
         teste = jid_teste()
         if not teste:
-            raise SyncWAError("SYNCWA_MODO_TESTE=True, mas SYNCWA_TEST_JID está vazio.")
+            raise SyncWAError("Modo teste ativo, mas WHATSAPP_TEST_JID / SYNCWA_TEST_JID está vazio.")
         return normalizar_destino(teste), True
     return destino, False
 
 
-def _headers() -> dict[str, str]:
-    return {
-        "x-api-key": settings.SYNCWA_API_KEY.strip(),
-        "Accept": "application/json",
-    }
+def _evo_headers() -> dict[str, str]:
+    return {"apikey": _evo_key(), "Content-Type": "application/json"}
 
 
-def _base() -> str:
-    return settings.SYNCWA_BASE_URL.rstrip("/")
-
-
-def healthcheck(timeout: float = 5.0) -> dict:
-    if not syncwa_configurado():
-        return {"ok": False, "error": "SYNCWA_BASE_URL / SYNCWA_API_KEY não configurados."}
-    try:
-        r = requests.get(f"{_base()}/health", timeout=timeout)
-        body = {}
-        try:
-            body = r.json()
-        except Exception:
-            body = {"raw": r.text[:200]}
-        return {"ok": r.status_code < 500, "status_code": r.status_code, "body": body}
-    except Exception as exc:
-        return {"ok": False, "error": str(exc)}
-
-
-def listar_grupos(timeout: float | None = None) -> dict:
-    """GET /v1/groups — grupos da sessão SyncWA pareada."""
-    if not syncwa_configurado():
-        return {"ok": False, "error": "SyncWA não configurado.", "groups": []}
-    timeout = timeout if timeout is not None else float(getattr(settings, "SYNCWA_TIMEOUT", 60))
-    try:
-        r = requests.get(f"{_base()}/v1/groups", headers=_headers(), timeout=timeout)
-    except requests.RequestException as exc:
-        return {"ok": False, "error": f"Falha de rede: {exc}", "groups": []}
-    if r.status_code >= 400:
-        try:
-            detail = r.json()
-            msg = detail.get("message") or detail.get("error") or detail
-        except Exception:
-            msg = r.text[:300]
-        return {"ok": False, "error": f"HTTP {r.status_code}: {msg}", "groups": []}
-    try:
-        data = r.json()
-    except Exception:
-        return {"ok": False, "error": "Resposta inválida do SyncWA.", "groups": []}
-    groups = data.get("groups") or []
-    return {"ok": True, "count": int(data.get("count") or len(groups)), "groups": groups}
+def _message_id(data: object) -> str:
+    if not isinstance(data, dict):
+        return ""
+    if data.get("messageId") or data.get("id"):
+        return str(data.get("messageId") or data.get("id"))
+    key = data.get("key")
+    if isinstance(key, dict) and key.get("id"):
+        return str(key["id"])
+    inner = data.get("data")
+    if isinstance(inner, dict):
+        k = inner.get("key")
+        if isinstance(k, dict) and k.get("id"):
+            return str(k["id"])
+        if inner.get("keyId") or inner.get("id"):
+            return str(inner.get("keyId") or inner.get("id"))
+    return ""
 
 
 def _chunk_texto(texto: str, limite: int = 4000) -> list[str]:
@@ -140,109 +150,163 @@ def _chunk_texto(texto: str, limite: int = 4000) -> list[str]:
     return partes
 
 
+def healthcheck(timeout: float = 5.0) -> dict:
+    if not syncwa_configurado():
+        return {"ok": False, "error": "EVOLUTION_API_URL / EVOLUTION_API_KEY não configurados."}
+    try:
+        r = requests.get(
+            f"{_evo_url()}/instance/connectionState/{_evo_instance()}",
+            headers=_evo_headers(),
+            timeout=timeout,
+        )
+        body: dict = {}
+        try:
+            body = r.json() if r.content else {}
+        except Exception:
+            body = {"raw": r.text[:200]}
+        state = ""
+        if isinstance(body, dict):
+            inst = body.get("instance") if isinstance(body.get("instance"), dict) else body
+            state = str(inst.get("state") or inst.get("status") or body.get("state") or "")
+        ok = r.status_code < 500 and state.lower() in {"open", "connected", "online"}
+        return {"ok": ok, "status_code": r.status_code, "state": state, "body": body}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def listar_grupos(timeout: float | None = None) -> dict:
+    """GET /group/fetchAllGroups — grupos da instância Evolution pareada."""
+    if not syncwa_configurado():
+        return {"ok": False, "error": "Evolution não configurada.", "groups": []}
+    timeout = timeout if timeout is not None else _timeout()
+    try:
+        r = requests.get(
+            f"{_evo_url()}/group/fetchAllGroups/{_evo_instance()}?getParticipants=true",
+            headers=_evo_headers(),
+            timeout=timeout,
+        )
+    except requests.RequestException as exc:
+        return {"ok": False, "error": f"Falha de rede: {exc}", "groups": []}
+    if r.status_code >= 400:
+        try:
+            detail = r.json()
+            msg = detail.get("message") or detail.get("error") or detail
+        except Exception:
+            msg = r.text[:300]
+        return {"ok": False, "error": f"HTTP {r.status_code}: {msg}", "groups": []}
+    try:
+        data = r.json()
+    except Exception:
+        return {"ok": False, "error": "Resposta inválida da Evolution.", "groups": []}
+
+    raw: list = []
+    if isinstance(data, list):
+        raw = data
+    elif isinstance(data, dict):
+        inner = data.get("groups") or data.get("response") or data.get("data") or []
+        raw = list(inner.values()) if isinstance(inner, dict) else list(inner)
+
+    groups: list[dict] = []
+    seen: set[str] = set()
+    for g in raw:
+        if not isinstance(g, dict):
+            continue
+        gid = str(g.get("id") or g.get("jid") or g.get("groupId") or "").strip()
+        if not gid:
+            continue
+        if "@g.us" not in gid:
+            gid = f"{re.sub(r'\D', '', gid)}@g.us"
+        if gid in seen:
+            continue
+        seen.add(gid)
+        parts = g.get("participants") or g.get("size") or []
+        size = len(parts) if isinstance(parts, list) else (int(parts) if str(parts).isdigit() else "")
+        groups.append(
+            {
+                "jid": gid,
+                "name": str(g.get("subject") or g.get("name") or "Sem nome"),
+                "size": size,
+            }
+        )
+    return {"ok": True, "count": len(groups), "groups": groups}
+
+
+def _post_json(url: str, payload: dict, headers: dict[str, str], timeout: float) -> tuple[int, object]:
+    r = requests.post(url, headers=headers, json=payload, timeout=timeout)
+    try:
+        body = r.json() if r.content else {}
+    except Exception:
+        body = r.text[:400]
+    return r.status_code, body
+
+
+def _enviar_texto_n8n(number: str, text: str, destino: str, timeout: float) -> SyncWAResult | None:
+    webhook = _n8n_url()
+    if not webhook:
+        return None
+    try:
+        status, body = _post_json(
+            webhook,
+            {
+                "phone_number": number,
+                "message_body": text,
+                "source": "nio-gc-tickets",
+            },
+            {"Content-Type": "application/json", "Accept": "application/json"},
+            timeout,
+        )
+    except requests.RequestException:
+        return None
+    if status not in (200, 201, 202, 204):
+        return None
+    mid = _message_id(body) if isinstance(body, dict) else ""
+    return SyncWAResult(ok=True, message_log_id=mid, status="SENT", destino=destino)
+
+
+def _enviar_texto_evolution(number: str, text: str, destino: str, timeout: float) -> SyncWAResult:
+    try:
+        status, body = _post_json(
+            f"{_evo_url()}/message/sendText/{_evo_instance()}",
+            {"number": number, "text": text},
+            _evo_headers(),
+            timeout,
+        )
+    except requests.RequestException as exc:
+        return SyncWAResult(ok=False, error=f"Falha de rede: {exc}", destino=destino)
+    if status >= 400:
+        return SyncWAResult(ok=False, error=f"HTTP {status}: {body}", destino=destino)
+    if isinstance(body, dict) and body.get("error"):
+        return SyncWAResult(ok=False, error=str(body.get("error")), destino=destino)
+    return SyncWAResult(
+        ok=True,
+        message_log_id=_message_id(body),
+        status="SENT",
+        destino=destino,
+    )
+
+
 def enviar_texto(to: str, text: str, timeout: float | None = None) -> SyncWAResult:
     if not syncwa_configurado():
-        return SyncWAResult(ok=False, error="SyncWA não configurado (SYNCWA_BASE_URL / SYNCWA_API_KEY).")
+        return SyncWAResult(ok=False, error="Evolution não configurada (EVOLUTION_API_URL / EVOLUTION_API_KEY).")
     try:
         destino, _ = destino_efetivo(to)
     except SyncWAError as exc:
         return SyncWAResult(ok=False, error=str(exc), destino=to)
 
-    timeout = timeout if timeout is not None else float(getattr(settings, "SYNCWA_TIMEOUT", 60))
+    timeout = timeout if timeout is not None else _timeout()
     chunks = _chunk_texto(text)
     if not chunks:
         return SyncWAResult(ok=False, error="Mensagem vazia.", destino=destino)
 
+    number = numero_para_evolution(destino)
     last = SyncWAResult(ok=False, destino=destino)
     for idx, chunk in enumerate(chunks):
         corpo = chunk if len(chunks) == 1 else f"({idx + 1}/{len(chunks)})\n{chunk}"
-        try:
-            r = requests.post(
-                f"{_base()}/v1/messages/text",
-                headers=_headers(),
-                json={"to": destino, "text": corpo},
-                timeout=timeout,
-            )
-        except requests.RequestException as exc:
-            return SyncWAResult(ok=False, error=f"Falha de rede: {exc}", destino=destino)
-
-        if r.status_code >= 400:
-            try:
-                detail = r.json()
-            except Exception:
-                detail = r.text[:300]
-            return SyncWAResult(
-                ok=False,
-                error=f"HTTP {r.status_code}: {detail}",
-                destino=destino,
-            )
-        try:
-            data = r.json()
-        except Exception:
-            data = {}
-        last = SyncWAResult(
-            ok=True,
-            message_log_id=str(data.get("messageLogId") or ""),
-            status=str(data.get("status") or "QUEUED"),
-            destino=destino,
-        )
-        # Aguarda o worker concluir (SENT/FAILED) para não reportar falso "OK".
-        if last.message_log_id:
-            last = _aguardar_status_envio(last, timeout=min(timeout, 50.0))
-            if not last.ok:
-                return last
+        via_n8n = _enviar_texto_n8n(number, corpo, destino, timeout)
+        last = via_n8n if via_n8n and via_n8n.ok else _enviar_texto_evolution(number, corpo, destino, timeout)
+        if not last.ok:
+            return last
     return last
-
-
-def _aguardar_status_envio(result: SyncWAResult, timeout: float = 45.0) -> SyncWAResult:
-    """Poll GET /v1/messages/logs/:id até SENT/DELIVERED/READ ou FAILED."""
-    import time
-
-    deadline = time.time() + max(5.0, timeout)
-    mid = result.message_log_id
-    while time.time() < deadline:
-        try:
-            r = requests.get(
-                f"{_base()}/v1/messages/logs/{mid}",
-                headers=_headers(),
-                timeout=10,
-            )
-        except requests.RequestException:
-            time.sleep(1.5)
-            continue
-        if r.status_code >= 400:
-            time.sleep(1.5)
-            continue
-        try:
-            data = r.json()
-        except Exception:
-            time.sleep(1.5)
-            continue
-        status = str(data.get("status") or "").upper()
-        if status in {"SENT", "DELIVERED", "READ"}:
-            return SyncWAResult(
-                ok=True,
-                message_log_id=mid,
-                status=status,
-                destino=result.destino or str(data.get("remoteJid") or ""),
-            )
-        if status in {"FAILED", "ERROR"}:
-            return SyncWAResult(
-                ok=False,
-                message_log_id=mid,
-                status=status,
-                error=str(data.get("errorMessage") or "Falha no SyncWA ao enviar."),
-                destino=result.destino or str(data.get("remoteJid") or ""),
-            )
-        time.sleep(1.5)
-    # Ainda na fila após timeout: não fingir sucesso definitivo
-    return SyncWAResult(
-        ok=False,
-        message_log_id=mid,
-        status=result.status or "QUEUED",
-        error="SyncWA ainda processando / socket indisponível. Tente de novo em alguns segundos.",
-        destino=result.destino,
-    )
 
 
 def enviar_documento(
@@ -254,9 +318,8 @@ def enviar_documento(
     mime_type: str | None = None,
     timeout: float | None = None,
 ) -> SyncWAResult:
-    """Envia anexo via POST /v1/messages/media/upload (multipart)."""
     if not syncwa_configurado():
-        return SyncWAResult(ok=False, error="SyncWA não configurado (SYNCWA_BASE_URL / SYNCWA_API_KEY).")
+        return SyncWAResult(ok=False, error="Evolution não configurada (EVOLUTION_API_URL / EVOLUTION_API_KEY).")
     if not conteudo:
         return SyncWAResult(ok=False, error="Arquivo vazio.")
     try:
@@ -264,40 +327,32 @@ def enviar_documento(
     except SyncWAError as exc:
         return SyncWAResult(ok=False, error=str(exc), destino=to)
 
-    timeout = timeout if timeout is not None else float(getattr(settings, "SYNCWA_TIMEOUT", 60))
+    timeout = timeout if timeout is not None else _timeout()
     nome = Path(file_name or "anexo.xlsx").name
-    mime = mime_type or mimetypes.guess_type(nome)[0] or "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    # SyncWA limita caption a 1024 chars
-    caption_envio = (caption or "")[:1024]
-
+    mime = mime_type or mimetypes.guess_type(nome)[0] or "application/octet-stream"
+    b64 = base64.b64encode(conteudo).decode("ascii")
+    media = f"data:{mime};base64,{b64}"
+    number = numero_para_evolution(destino)
+    mediatype = "image" if mime.startswith("image/") else "document"
+    payload = {
+        "number": number,
+        "mediatype": mediatype,
+        "mimetype": mime,
+        "media": media,
+        "fileName": nome,
+        "caption": (caption or "")[:1024],
+    }
     try:
-        r = requests.post(
-            f"{_base()}/v1/messages/media/upload",
-            headers={"x-api-key": settings.SYNCWA_API_KEY.strip()},
-            data={"to": destino, "caption": caption_envio, "fileName": nome},
-            files={"file": (nome, conteudo, mime)},
-            timeout=timeout,
+        status, body = _post_json(
+            f"{_evo_url()}/message/sendMedia/{_evo_instance()}",
+            payload,
+            _evo_headers(),
+            max(timeout, 60.0),
         )
     except requests.RequestException as exc:
         return SyncWAResult(ok=False, error=f"Falha de rede: {exc}", destino=destino)
-
-    if r.status_code >= 400:
-        try:
-            detail = r.json()
-        except Exception:
-            detail = r.text[:300]
-        return SyncWAResult(ok=False, error=f"HTTP {r.status_code}: {detail}", destino=destino)
-
-    try:
-        data = r.json()
-    except Exception:
-        data = {}
-    result = SyncWAResult(
-        ok=True,
-        message_log_id=str(data.get("messageLogId") or ""),
-        status=str(data.get("status") or "QUEUED"),
-        destino=destino,
-    )
-    if result.message_log_id:
-        return _aguardar_status_envio(result, timeout=min(timeout, 50.0))
-    return result
+    if status >= 400:
+        return SyncWAResult(ok=False, error=f"HTTP {status}: {body}", destino=destino)
+    if isinstance(body, dict) and body.get("error"):
+        return SyncWAResult(ok=False, error=str(body.get("error")), destino=destino)
+    return SyncWAResult(ok=True, message_log_id=_message_id(body), status="SENT", destino=destino)

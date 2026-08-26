@@ -157,15 +157,18 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 
-# --- SyncWA (WhatsApp API) — 2ª onda gestão ---
-SYNCWA_BASE_URL = os.environ.get("SYNCWA_BASE_URL", "").strip()
-SYNCWA_API_KEY = os.environ.get("SYNCWA_API_KEY", "").strip()
-SYNCWA_TEST_JID = os.environ.get("SYNCWA_TEST_JID", "").strip()
-SYNCWA_MODO_TESTE = os.environ.get("SYNCWA_MODO_TESTE", "False").lower() in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
+# --- WhatsApp: Evolution API + n8n (mesmo padrão do site-record) ---
+EVOLUTION_API_URL = os.environ.get("EVOLUTION_API_URL", "").strip()
+EVOLUTION_API_KEY = os.environ.get("EVOLUTION_API_KEY", "").strip()
+EVOLUTION_INSTANCE_NAME = os.environ.get("EVOLUTION_INSTANCE_NAME", "nio_gc_tickets").strip() or "nio_gc_tickets"
+N8N_OUTBOUND_WEBHOOK_URL = (
+    os.environ.get("N8N_OUTBOUND_WEBHOOK_URL") or os.environ.get("N8N_WEBHOOK_URL") or ""
+).strip()
+N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "").strip()
+WHATSAPP_TEST_JID = (os.environ.get("WHATSAPP_TEST_JID") or os.environ.get("SYNCWA_TEST_JID") or "").strip()
+SYNCWA_TEST_JID = WHATSAPP_TEST_JID
+SYNCWA_MODO_TESTE = (
+    os.environ.get("WHATSAPP_MODO_TESTE") or os.environ.get("SYNCWA_MODO_TESTE") or "False"
+).lower() in {"1", "true", "yes", "on"}
 SYNCWA_TIMEOUT = int(os.environ.get("SYNCWA_TIMEOUT", "60"))
 FPD_PERCENTUAL_CRITICO = float(os.environ.get("FPD_PERCENTUAL_CRITICO", "30"))
