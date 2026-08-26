@@ -291,6 +291,8 @@ class GestaoViewsTests(TestCase):
         self.assertContains(cap, "Filtros")
         self.assertContains(cap, 'name="tt"')
         self.assertContains(cap, "VENDEDOR EXTERNO")
+        self.assertContains(cap, "Meus parceiros")
+        self.assertContains(cap, "Outros especialistas")
 
     def test_paginas_especialista_sem_whatsapp_qr(self):
         User = get_user_model()
@@ -313,6 +315,7 @@ class GestaoViewsTests(TestCase):
             r = self.client.get(reverse(nome))
             self.assertEqual(r.status_code, 200, nome)
             self.assertContains(r, "Capilaridade")
+            self.assertContains(r, "Meus parceiros")
         self.assertEqual(self.client.get(reverse("gestao_whatsapp")).status_code, 404)
         self.assertEqual(self.client.get(reverse("gestao_destinatarios")).status_code, 404)
 
@@ -522,13 +525,13 @@ class DestinatarioEnvioTests(TestCase):
         with patch("gestao.messaging.syncwa.requests.post", return_value=fake):
             r = self.client.post(
                 reverse("gestao_capilaridade"),
-                {"action": "enviar_pdv", "parceiro": self.pdv.id},
+                {"action": "enviar_pdv", "parceiro": self.pdv.id, "escopo": "outros"},
             )
         self.assertEqual(r.status_code, 302)
-        log = EnvioWhatsApp.objects.get()
-        self.assertEqual(log.status, EnvioWhatsApp.Status.ENVIADO)
-        self.assertEqual(log.tipo, EnvioWhatsApp.Tipo.CAPILARIDADE)
-        self.assertEqual(log.syncwa_message_id, "ml-9")
+        logs = EnvioWhatsApp.objects.filter(tipo=EnvioWhatsApp.Tipo.CAPILARIDADE)
+        self.assertTrue(logs.exists())
+        self.assertTrue(all(l.status == EnvioWhatsApp.Status.ENVIADO for l in logs))
+        self.assertTrue(any(l.syncwa_message_id == "ml-9" for l in logs))
 
     def test_destinos_especialista_usa_whatsapp_do_perfil(self):
         from gestao.messaging.envio import destinos_para_envio
@@ -558,6 +561,27 @@ class DestinatarioEnvioTests(TestCase):
         perfil.save(update_fields=["whatsapp"])
         self.assertEqual(destinos_para_envio(spec, "envio_capilaridade", self.pdv), [])
 
+    def test_emails_so_gestor(self):
+        from gestao.messaging.envio import emails_para_envio
+        from gestao.models import Destinatario
+
+        Destinatario.objects.create(
+            parceiro=self.pdv,
+            nome="Grupo PDV",
+            jid="120363grupo@g.us",
+            email="grupo@x.com",
+            email_capilaridade=True,
+            envio_capilaridade=True,
+        )
+        User = get_user_model()
+        spec = User.objects.create_user("specmailg", "smg@x.com", "x", is_staff=True)
+        PerfilStaff.objects.create(user=spec, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self.assertEqual(emails_para_envio(spec, "envio_capilaridade", self.pdv), [])
+        self.assertEqual(
+            emails_para_envio(self.gestor, "envio_capilaridade", self.pdv),
+            ["grupo@x.com"],
+        )
+
     def test_especialista_envia_capilaridade_para_si(self):
         from unittest.mock import MagicMock, patch
 
@@ -586,11 +610,14 @@ class DestinatarioEnvioTests(TestCase):
                 {"action": "enviar_pdv", "parceiro": self.pdv.id},
             )
         self.assertEqual(r.status_code, 302)
-        log = EnvioWhatsApp.objects.get()
-        self.assertEqual(log.criado_por, spec)
-        self.assertIn("5531911112222", log.destino_jid)
-        self.assertNotIn("120363grupo", log.destino_jid)
-        self.assertNotIn("120363grupo", post.call_args.kwargs["json"]["number"])
+        logs = EnvioWhatsApp.objects.filter(tipo=EnvioWhatsApp.Tipo.CAPILARIDADE)
+        self.assertTrue(logs.exists())
+        self.assertEqual(logs.first().criado_por, spec)
+        for log in logs:
+            self.assertIn("5531911112222", log.destino_jid)
+            self.assertNotIn("120363grupo", log.destino_jid)
+        for call in post.call_args_list:
+            self.assertNotIn("120363grupo", call.kwargs["json"]["number"])
 
     def test_enviar_teste_via_envios(self):
         from unittest.mock import MagicMock, patch
@@ -843,3 +870,83 @@ class RecompraTests(TestCase):
         self.assertEqual(por_pdv.count(), 1)
         self.assertEqual(por_pdv.get().total, 2)
         self.assertIn("RECOMPRA", por_pdv.get().mensagem)
+
+
+@override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+        },
+    },
+)
+class GestaoEscopoTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.gestor = User.objects.create_superuser("gesc", "gesc@x.com", "x")
+        PerfilStaff.objects.create(user=self.gestor, papel=PerfilStaff.Papel.GESTOR)
+        self.spec = User.objects.create_user(
+            "specesc", "se@x.com", "x", is_staff=True, first_name="Carla"
+        )
+        PerfilStaff.objects.create(user=self.spec, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self.outro = User.objects.create_user(
+            "outroesc", "oe@x.com", "x", is_staff=True, first_name="Diego"
+        )
+        PerfilStaff.objects.create(user=self.outro, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self.pdv_spec = Parceiro.objects.create(
+            codigo_pdv="s1", nome="PDV Carla", especialista=self.spec
+        )
+        self.pdv_outro = Parceiro.objects.create(
+            codigo_pdv="s2", nome="PDV Diego", especialista=self.outro
+        )
+
+    def test_especialista_meus_e_outros(self):
+        self.client.force_login(self.spec)
+        meus = self.client.get(reverse("gestao_capilaridade") + "?escopo=meus")
+        self.assertContains(meus, "PDV Carla")
+        self.assertNotContains(meus, "PDV Diego")
+        outros = self.client.get(reverse("gestao_capilaridade") + "?escopo=outros")
+        self.assertContains(outros, "PDV Diego")
+        self.assertContains(outros, "Diego")
+        self.assertNotContains(outros, "PDV Carla")
+
+    def test_gestor_meus_vazio_outros_lista_pdvs(self):
+        self.client.force_login(self.gestor)
+        meus = self.client.get(reverse("gestao_capilaridade") + "?escopo=meus")
+        self.assertNotContains(meus, "PDV Carla")
+        self.assertNotContains(meus, "PDV Diego")
+        outros = self.client.get(reverse("gestao_capilaridade") + "?escopo=outros")
+        self.assertContains(outros, "PDV Carla")
+        self.assertContains(outros, "PDV Diego")
+        self.assertContains(outros, "Carla")
+
+    def test_fila_nao_muda_com_escopo_gestao(self):
+        from tickets.acesso import tickets_visiveis
+
+        self.assertEqual(tickets_visiveis(self.spec).count(), 0)
+        from tickets.models import Ticket, TipoDemanda
+
+        Ticket.objects.create(
+            parceiro=self.pdv_outro, tipo=TipoDemanda.RESET_SENHA, tt="TTX"
+        )
+        Ticket.objects.create(
+            parceiro=self.pdv_spec, tipo=TipoDemanda.RESET_SENHA, tt="TTY"
+        )
+        self.assertEqual(tickets_visiveis(self.spec).count(), 1)
+        self.assertEqual(tickets_visiveis(self.gestor).count(), 2)
+
+
+class PlanilhaGestaoTests(TestCase):
+    def setUp(self):
+        self.pdv = Parceiro.objects.create(codigo_pdv="px", nome="INOVA MG")
+
+    def test_capilaridade_e_osab_geram_xlsx(self):
+        from gestao.planilhas import planilha_capilaridade, planilha_osab
+
+        dados, nome = planilha_capilaridade(self.pdv)
+        self.assertTrue(nome.endswith(".xlsx"))
+        self.assertTrue(dados.startswith(b"PK"))
+        dados2, nome2 = planilha_osab(self.pdv)
+        self.assertTrue(nome2.endswith(".xlsx"))
+        self.assertTrue(dados2.startswith(b"PK"))
+

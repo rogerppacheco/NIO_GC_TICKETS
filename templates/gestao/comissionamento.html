@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Comissionamento · Gestão{% endblock %}
 {% block content %}
+{% include "gestao/_escopo.html" %}
 <div class="hero">
   <div>
     <h1>Comissionamento</h1>
@@ -13,7 +14,7 @@
   <div class="panel-h"><h2>Importar ciclo</h2></div>
   <div class="panel-b">
     <form method="post" enctype="multipart/form-data">
-      {% csrf_token %}
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       {{ form.arquivo }}
       <label style="display:block;margin-top:0.7rem">
         <input type="checkbox" name="enviar_whatsapp" value="1" {% if syncwa_ok %}{% else %}disabled{% endif %}>
@@ -49,7 +50,7 @@
   <div class="panel-h"><h2>Reenviar lote</h2></div>
   <div class="panel-b">
     <form method="post" class="fila-toolbar" style="gap:0.6rem">
-      {% csrf_token %}
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       <input type="hidden" name="action" value="enviar_lote">
       <select name="lote" class="fila-pick">
         {% for l in lotes %}
@@ -67,6 +68,7 @@
     <div class="mask-card-h">
       <div>
         <strong>{{ r.pdv_nome }}</strong>
+        {% include "gestao/_especialista.html" with parceiro=r.parceiro %}
         <div class="help">
           {{ r.qtd_pedido }} pedido(s) · {{ r.qtd_linha }} linha(s) ·
           {{ r.criado_em|date:"d/m H:i" }}
@@ -78,7 +80,7 @@
         <button class="btn btn-primary" type="button" data-copy-target="com-{{ r.id }}">Copiar</button>
         {% if pode_enviar %}
         <form method="post">
-          {% csrf_token %}
+          {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
           <input type="hidden" name="action" value="enviar_pdv">
           <input type="hidden" name="parceiro" value="{{ r.parceiro_id }}">
           <button class="btn btn-secondary" type="submit">WhatsApp</button>

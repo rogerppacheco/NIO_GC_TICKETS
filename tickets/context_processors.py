@@ -1,4 +1,4 @@
-from .acesso import eh_gestor, tem_acesso_interno, tickets_visiveis
+from .acesso import eh_gestor, escopo_gestao, tem_acesso_interno, tickets_visiveis
 from .models import ContatoParceiro, Parceiro, StatusTicket
 
 
@@ -35,4 +35,11 @@ def nav_counts(request):
         if parceiro:
             ctx["portal_parceiro"] = parceiro
 
+    ctx["gestao_escopo"] = escopo_gestao(request)
+    user = getattr(request, "user", None)
+    if user and user.is_authenticated and tem_acesso_interno(user):
+        from .acesso import parceiros_gestao
+
+        ctx["gestao_qtd_meus"] = parceiros_gestao(user, "meus").count()
+        ctx["gestao_qtd_outros"] = parceiros_gestao(user, "outros").count()
     return ctx

@@ -86,3 +86,36 @@ def render_mascara(mascara: Mascara, ticket: Ticket) -> str:
         return str(ctx.get(key, ""))
 
     return _VAR.sub(repl, mascara.template)
+
+
+def notificar_mascaras_por_email(ticket: Ticket) -> int:
+    """Envia máscaras marcadas para o especialista do PDV (e e-mail do parceiro, se houver)."""
+    from gestao.messaging.email_smtp import enviar_email_com_anexos, smtp_configurado
+
+    if not smtp_configurado():
+        return 0
+    destinos: list[str] = []
+    spec = ticket.parceiro.especialista
+    if spec and (spec.email or "").strip():
+        destinos.append(spec.email.strip())
+    if (ticket.parceiro.email or "").strip():
+        destinos.append(ticket.parceiro.email.strip())
+    vistos: list[str] = []
+    for mail in destinos:
+        if mail.lower() not in {v.lower() for v in vistos}:
+            vistos.append(mail)
+    if not vistos:
+        return 0
+    enviados = 0
+    for mascara in Mascara.objects.filter(ativo=True, enviar_email=True):
+        if not mascara.aplica_para(ticket.tipo):
+            continue
+        corpo = render_mascara(mascara, ticket)
+        ok, _erro = enviar_email_com_anexos(
+            vistos,
+            assunto=f"[NIO GC] {mascara.nome} · {ticket.protocolo} · {ticket.parceiro.nome}",
+            corpo_texto=corpo,
+        )
+        if ok:
+            enviados += 1
+    return enviados

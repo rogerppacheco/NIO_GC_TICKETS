@@ -28,6 +28,16 @@ class DestinatarioForm(forms.ModelForm):
             "envio_tarefas",
             "envio_venda_indevida",
             "envio_recompra",
+            "email",
+            "email_osab",
+            "email_capilaridade",
+            "email_fpd",
+            "email_fpd_critico",
+            "email_churn",
+            "email_comissionamento",
+            "email_tarefas",
+            "email_venda_indevida",
+            "email_recompra",
             "razoes_sociais_comissionamento",
         )
         widgets = {

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Gestão · NIO{% endblock %}
 {% block content %}
+{% include "gestao/_escopo.html" %}
 <div class="hero">
   <div>
     <h1>Gestão de bases</h1>
@@ -20,7 +21,7 @@
   <div class="panel-h"><h2>Período de cálculo</h2></div>
   <div class="panel-b">
     <form method="post" class="fila-toolbar">
-      {% csrf_token %}
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       <input type="hidden" name="action" value="periodo">
       {{ periodo_form.ano }}
       {{ periodo_form.mes }}

@@ -1,17 +1,19 @@
 <nav class="gestao-nav" aria-label="Gestão">
-  <a href="{% url 'gestao_hub' %}" {% if request.resolver_match.url_name == 'gestao_hub' %}class="is-on"{% endif %}>Início</a>
-  <a href="{% url 'gestao_osab' %}" {% if request.resolver_match.url_name == 'gestao_osab' %}class="is-on"{% endif %}>OSAB</a>
-  <a href="{% url 'gestao_capilaridade' %}" {% if request.resolver_match.url_name == 'gestao_capilaridade' %}class="is-on"{% endif %}>Capilaridade</a>
-  <a href="{% url 'gestao_fpd' %}" {% if request.resolver_match.url_name == 'gestao_fpd' %}class="is-on"{% endif %}>FPD</a>
-  <a href="{% url 'gestao_churn' %}" {% if request.resolver_match.url_name == 'gestao_churn' %}class="is-on"{% endif %}>Churn</a>
-  <a href="{% url 'gestao_comissionamento' %}" {% if request.resolver_match.url_name == 'gestao_comissionamento' %}class="is-on"{% endif %}>Comissionamento</a>
-  <a href="{% url 'gestao_tarefas' %}" {% if request.resolver_match.url_name == 'gestao_tarefas' %}class="is-on"{% endif %}>Tarefas</a>
-  <a href="{% url 'gestao_venda_indevida' %}" {% if request.resolver_match.url_name == 'gestao_venda_indevida' %}class="is-on"{% endif %}>Venda indevida</a>
-  <a href="{% url 'gestao_recompra' %}" {% if request.resolver_match.url_name == 'gestao_recompra' %}class="is-on"{% endif %}>Recompra</a>
-  <a href="{% url 'gestao_configs' %}" {% if request.resolver_match.url_name == 'gestao_configs' %}class="is-on"{% endif %}>Metas</a>
+  {% with esc=gestao_escopo|default:"meus" %}
+  <a href="{% url 'gestao_hub' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_hub' %}class="is-on"{% endif %}>Início</a>
+  <a href="{% url 'gestao_osab' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_osab' %}class="is-on"{% endif %}>OSAB</a>
+  <a href="{% url 'gestao_capilaridade' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_capilaridade' %}class="is-on"{% endif %}>Capilaridade</a>
+  <a href="{% url 'gestao_fpd' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_fpd' %}class="is-on"{% endif %}>FPD</a>
+  <a href="{% url 'gestao_churn' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_churn' %}class="is-on"{% endif %}>Churn</a>
+  <a href="{% url 'gestao_comissionamento' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_comissionamento' %}class="is-on"{% endif %}>Comissionamento</a>
+  <a href="{% url 'gestao_tarefas' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_tarefas' %}class="is-on"{% endif %}>Tarefas</a>
+  <a href="{% url 'gestao_venda_indevida' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_venda_indevida' %}class="is-on"{% endif %}>Venda indevida</a>
+  <a href="{% url 'gestao_recompra' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_recompra' %}class="is-on"{% endif %}>Recompra</a>
+  <a href="{% url 'gestao_configs' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_configs' %}class="is-on"{% endif %}>Metas</a>
   {% if eh_gestor %}
     <a href="{% url 'gestao_whatsapp' %}" {% if request.resolver_match.url_name == 'gestao_whatsapp' %}class="is-on"{% endif %}>WhatsApp</a>
     <a href="{% url 'gestao_destinatarios' %}" {% if 'destinatario' in request.resolver_match.url_name %}class="is-on"{% endif %}>Destinatários</a>
   {% endif %}
-  <a href="{% url 'gestao_envios' %}" {% if request.resolver_match.url_name == 'gestao_envios' %}class="is-on"{% endif %}>Envios</a>
+  <a href="{% url 'gestao_envios' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_envios' %}class="is-on"{% endif %}>Envios</a>
+  {% endwith %}
 </nav>

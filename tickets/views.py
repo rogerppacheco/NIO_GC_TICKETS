@@ -59,7 +59,7 @@ from .models import (
     Ticket,
     TipoDemanda,
 )
-from .services import render_mascara
+from .services import notificar_mascaras_por_email, render_mascara
 
 
 class StaffLoginView(LoginView):
@@ -208,6 +208,7 @@ def ticket_criar(request: HttpRequest) -> HttpResponse:
                 corpo=ticket.descricao or f"Demanda aberta: {ticket.get_tipo_display()}",
             )
             _salvar_anexos(request, ticket)
+            notificar_mascaras_por_email(ticket)
             messages.success(request, f"Ticket {ticket.protocolo} criado.")
             return redirect("ticket_detalhe", protocolo=ticket.protocolo)
     else:
@@ -362,6 +363,7 @@ def abrir_demanda_form(request: HttpRequest) -> HttpResponse:
                 corpo=ticket.descricao or f"Demanda aberta: {ticket.get_tipo_display()}",
             )
             _salvar_anexos(request, ticket)
+            notificar_mascaras_por_email(ticket)
             messages.success(
                 request,
                 f"Demanda registrada! Protocolo {ticket.protocolo}. Guarde este número.",

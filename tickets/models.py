@@ -409,6 +409,11 @@ class Mascara(models.Model):
         )
     )
     ativo = models.BooleanField(default=True)
+    enviar_email = models.BooleanField(
+        "Enviar por e-mail ao abrir a demanda",
+        default=False,
+        help_text="O especialista do PDV recebe esta máscara por e-mail quando a solicitação é registrada.",
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:

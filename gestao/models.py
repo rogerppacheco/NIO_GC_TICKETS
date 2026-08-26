@@ -459,6 +459,20 @@ class Destinatario(models.Model):
         blank=True,
         help_text="Uma por linha (ou separadas por ;). Filtra as abas PEDIDO / LINHA_A_LINHA.",
     )
+    email = models.EmailField(
+        "E-mail",
+        blank=True,
+        help_text="Se preenchido e a máscara estiver marcada abaixo, o envio também vai por e-mail.",
+    )
+    email_osab = models.BooleanField("E-mail OSAB", default=False)
+    email_capilaridade = models.BooleanField("E-mail Capilaridade", default=False)
+    email_fpd = models.BooleanField("E-mail FPD", default=False)
+    email_fpd_critico = models.BooleanField("E-mail FPD crítico", default=False)
+    email_churn = models.BooleanField("E-mail Churn", default=False)
+    email_comissionamento = models.BooleanField("E-mail Comissionamento", default=False)
+    email_tarefas = models.BooleanField("E-mail Tarefas", default=False)
+    email_venda_indevida = models.BooleanField("E-mail Venda indevida", default=False)
+    email_recompra = models.BooleanField("E-mail Recompra", default=False)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 

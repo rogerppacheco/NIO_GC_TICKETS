@@ -15,7 +15,7 @@
         <div class="mask-card-h">
           <div>
             <strong>{{ m.nome }}</strong>
-            <div class="help">→ {{ m.destino }} · tipos: {{ m.tipos|default:"todos" }} · {% if m.ativo %}ativa{% else %}inativa{% endif %}</div>
+            <div class="help">→ {{ m.destino }} · tipos: {{ m.tipos|default:"todos" }} · {% if m.ativo %}ativa{% else %}inativa{% endif %}{% if m.enviar_email %} · e-mail{% endif %}</div>
           </div>
           <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
             <button class="btn btn-primary" type="button" data-copy-target="mask-tpl-{{ m.id }}">Copiar template</button>

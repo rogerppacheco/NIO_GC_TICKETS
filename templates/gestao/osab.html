@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}OSAB · Gestão{% endblock %}
 {% block content %}
+{% include "gestao/_escopo.html" %}
 <div class="hero">
   <div>
     <h1>OSAB</h1>
@@ -9,14 +10,14 @@
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
     {% if pode_importar %}
     <form method="post">
-      {% csrf_token %}
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       <input type="hidden" name="action" value="recalcular">
       <button class="btn btn-secondary" type="submit">Recalcular relatórios</button>
     </form>
     {% endif %}
     {% if pode_enviar %}
     <form method="post">
-      {% csrf_token %}
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       <input type="hidden" name="action" value="enviar_todos">
       <button class="btn btn-primary" type="submit">Enviar todos (WhatsApp)</button>
     </form>
@@ -28,7 +29,7 @@
   <div class="panel-h"><h2>Importar OSAB</h2></div>
   <div class="panel-b">
     <form method="post" enctype="multipart/form-data">
-      {% csrf_token %}
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       {{ form.arquivo }}
       <p class="help">Arquivo .xlsb ou .xlsx. Merge por PEDIDO + DT_REF. Recalcula capilaridade e VL/Gross.</p>
       <button class="btn btn-primary" type="submit" style="margin-top:0.7rem">Atualizar base OSAB</button>
@@ -43,6 +44,7 @@
       <div class="mask-card-h">
         <div>
           <strong>{{ h.descricao_pdv }}</strong>
+          {% include "gestao/_especialista.html" with parceiro=h.parceiro %}
           <div class="help">{{ h.status }} · VL {{ h.realizado_vl|default:"—" }} · Gross {{ h.realizado_gross|default:"—" }} · {{ h.data_processamento|date:"d/m H:i" }}</div>
         </div>
         <div style="display:flex;gap:0.4rem">
@@ -52,7 +54,7 @@
           {% endif %}
           {% if pode_enviar and h.parceiro_id and h.mensagem %}
           <form method="post">
-            {% csrf_token %}
+            {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
             <input type="hidden" name="action" value="enviar_pdv">
             <input type="hidden" name="parceiro" value="{{ h.parceiro_id }}">
             <button class="btn btn-secondary" type="submit">Enviar</button>

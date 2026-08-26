@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Churn · Gestão{% endblock %}
 {% block content %}
+{% include "gestao/_escopo.html" %}
 <div class="hero">
   <div>
     <h1>Churn</h1>
@@ -8,7 +9,7 @@
   </div>
   {% if pode_enviar %}
   <form method="post">
-    {% csrf_token %}
+    {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
     <input type="hidden" name="action" value="enviar_todos">
     <button class="btn btn-primary" type="submit">Enviar todos (WhatsApp)</button>
   </form>
@@ -20,7 +21,7 @@
     <div class="panel-h"><h2>Importar Churn</h2></div>
     <div class="panel-b">
       <form method="post" enctype="multipart/form-data">
-        {% csrf_token %}
+        {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
         {{ form.arquivo }}
         <button class="btn btn-primary" type="submit" style="margin-top:0.7rem">Processar Churn</button>
       </form>
@@ -31,7 +32,7 @@
     <div class="panel-h"><h2>Gross mensal</h2></div>
     <div class="panel-b">
       <form method="post">
-        {% csrf_token %}
+        {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
         <input type="hidden" name="action" value="gross">
         <div class="form-grid">
           <div>{{ gross_form.parceiro.label_tag }}{{ gross_form.parceiro }}</div>
@@ -51,13 +52,14 @@
     <div class="mask-card-h">
       <div>
         <strong>{{ m.pdv_nome }}</strong>
+        {% include "gestao/_especialista.html" with parceiro=m.parceiro %}
       </div>
       <div style="display:flex;gap:0.4rem">
         <textarea id="churn-{{ m.id }}" hidden>{{ m.mensagem }}</textarea>
         <button class="btn btn-primary" type="button" data-copy-target="churn-{{ m.id }}">Copiar</button>
         {% if pode_enviar and m.parceiro_id %}
         <form method="post">
-          {% csrf_token %}
+          {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
           <input type="hidden" name="action" value="enviar_pdv">
           <input type="hidden" name="parceiro" value="{{ m.parceiro_id }}">
           <button class="btn btn-secondary" type="submit">Enviar</button>

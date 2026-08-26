@@ -21,8 +21,29 @@ from ..models import (
     RelatorioVendaIndevida,
 )
 from ..periodo import periodo_ativo
+from ..planilhas import (
+    bytes_arquivo_field,
+    planilha_capilaridade,
+    planilha_churn,
+    planilha_fpd,
+    planilha_osab,
+)
 from ..relatorios import montar_mascara_pdv, resumo_geral
+from .email_smtp import enviar_email_com_anexos, smtp_configurado
 from .syncwa import SyncWAResult, enviar_documento, enviar_texto, modo_teste_ativo, syncwa_configurado
+
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+FLAG_EMAIL = {
+    "envio_osab": "email_osab",
+    "envio_capilaridade": "email_capilaridade",
+    "envio_fpd": "email_fpd",
+    "envio_fpd_critico": "email_fpd_critico",
+    "envio_churn": "email_churn",
+    "envio_comissionamento": "email_comissionamento",
+    "envio_tarefas": "email_tarefas",
+    "envio_venda_indevida": "email_venda_indevida",
+    "envio_recompra": "email_recompra",
+}
 
 
 @dataclass
@@ -68,6 +89,64 @@ def destinos_para_envio(
         DestinoEnvio(jid=d.jid, nome=d.nome, parceiro=d.parceiro, destinatario=d)
         for d in destinatarios_para(flag, parceiro, somente_grupos=somente_grupos)
     ]
+
+
+def emails_para_envio(
+    user: AbstractBaseUser | None,
+    flag: str,
+    parceiro: Parceiro | None = None,
+) -> list[str]:
+    """Gestor: e-mails marcados no Destinatário. Especialista não dispara e-mail de Gestão."""
+    if user is not None and not eh_gestor(user):
+        return []
+    flag_email = FLAG_EMAIL.get(flag)
+    if not flag_email:
+        return []
+    qs = Destinatario.objects.filter(ativo=True, **{flag_email: True}).exclude(email="")
+    if parceiro is not None:
+        qs = qs.filter(parceiro=parceiro)
+    vistos: list[str] = []
+    for raw in qs.values_list("email", flat=True):
+        mail = (raw or "").strip()
+        if mail and mail.lower() not in {v.lower() for v in vistos}:
+            vistos.append(mail)
+    return vistos
+
+
+def _talvez_email(
+    *,
+    flag: str,
+    tipo: str,
+    mensagem: str,
+    parceiro: Parceiro | None,
+    user: AbstractBaseUser | None,
+    arquivo_bytes: bytes = b"",
+    nome_arquivo: str = "",
+    resumo: ResumoEnvio,
+) -> None:
+    destinos = emails_para_envio(user, flag, parceiro)
+    if not destinos:
+        return
+    if not smtp_configurado():
+        resumo.detalhes.append("E-mail: SMTP não configurado.")
+        return
+    anexos = []
+    if arquivo_bytes and nome_arquivo:
+        anexos.append((nome_arquivo, arquivo_bytes, XLSX_MIME))
+    titulo = dict(EnvioWhatsApp.Tipo.choices).get(tipo, tipo)
+    pdv = parceiro.nome if parceiro else "Gestão"
+    ok, erro = enviar_email_com_anexos(
+        destinos,
+        assunto=f"[NIO GC] {titulo} — {pdv}",
+        corpo_texto=(mensagem or "").replace("*", ""),
+        anexos=anexos,
+    )
+    if ok:
+        resumo.enviados += 1
+        resumo.detalhes.append(f"OK e-mail → {', '.join(destinos)}")
+    else:
+        resumo.erros += 1
+        resumo.detalhes.append(f"ERRO e-mail: {erro}")
 
 
 def _msg_sem_destino(user: AbstractBaseUser | None) -> str:
@@ -132,6 +211,9 @@ def _enviar_para_lista(
     destinos: list[DestinoEnvio] | list[Destinatario],
     parceiro: Parceiro | None,
     user: AbstractBaseUser | None,
+    flag: str = "",
+    arquivo_bytes: bytes = b"",
+    nome_arquivo: str = "",
 ) -> ResumoEnvio:
     resumo = ResumoEnvio()
     if not mensagem.strip():
@@ -172,6 +254,17 @@ def _enviar_para_lista(
         else:
             resumo.erros += 1
             resumo.detalhes.append(f"ERRO → {dest.nome}: {result.error}")
+    if flag:
+        _talvez_email(
+            flag=flag,
+            tipo=tipo,
+            mensagem=mensagem,
+            parceiro=parceiro,
+            user=user,
+            arquivo_bytes=arquivo_bytes,
+            nome_arquivo=nome_arquivo,
+            resumo=resumo,
+        )
     return resumo
 
 
@@ -234,12 +327,17 @@ def enviar_capilaridade_pdv(
     ano, mes = periodo_ativo()
     mensagem = montar_mascara_pdv(parceiro, ano, mes, filtros)
     destinos = destinos_para_envio(user, "envio_capilaridade", parceiro)
-    return _enviar_para_lista(
+    arquivo_bytes, nome_arquivo = planilha_capilaridade(parceiro, filtros)
+    return _enviar_com_anexo(
         tipo=EnvioWhatsApp.Tipo.CAPILARIDADE,
         mensagem=mensagem,
+        caption=f"📁 *Capilaridade* — {parceiro.nome}",
         destinos=destinos,
         parceiro=parceiro,
         user=user,
+        arquivo_bytes=arquivo_bytes,
+        nome_arquivo=nome_arquivo,
+        flag="envio_capilaridade",
     )
 
 
@@ -268,6 +366,7 @@ def enviar_resumo_capilaridade(
         destinos=unicos,
         parceiro=None,
         user=user,
+        flag="envio_capilaridade",
     )
 
 
@@ -305,12 +404,17 @@ def enviar_osab_pdv(parceiro: Parceiro, user: AbstractBaseUser | None = None) ->
     if not hist or not hist.mensagem.strip():
         return ResumoEnvio(ignorados=1, detalhes=[f"{parceiro.nome}: sem relatório OSAB."])
     destinos = destinos_para_envio(user, "envio_osab", parceiro)
-    return _enviar_para_lista(
+    arquivo_bytes, nome_arquivo = planilha_osab(parceiro)
+    return _enviar_com_anexo(
         tipo=EnvioWhatsApp.Tipo.OSAB,
         mensagem=hist.mensagem,
+        caption=f"📁 *OSAB* — {parceiro.nome}",
         destinos=destinos,
         parceiro=parceiro,
         user=user,
+        arquivo_bytes=arquivo_bytes,
+        nome_arquivo=nome_arquivo,
+        flag="envio_osab",
     )
 
 
@@ -319,12 +423,17 @@ def enviar_fpd_pdv(parceiro: Parceiro, user: AbstractBaseUser | None = None) -> 
     if not rel or not rel.mensagem.strip():
         return ResumoEnvio(ignorados=1, detalhes=[f"{parceiro.nome}: sem relatório FPD."])
     destinos = destinos_para_envio(user, "envio_fpd", parceiro)
-    resumo = _enviar_para_lista(
+    arquivo_bytes, nome_arquivo = planilha_fpd(rel)
+    resumo = _enviar_com_anexo(
         tipo=EnvioWhatsApp.Tipo.FPD,
         mensagem=rel.mensagem,
+        caption=f"📁 *FPD* — {rel.pdv_nome}",
         destinos=destinos,
         parceiro=parceiro,
         user=user,
+        arquivo_bytes=arquivo_bytes,
+        nome_arquivo=nome_arquivo,
+        flag="envio_fpd",
     )
     # Alerta crítico global
     from django.conf import settings
@@ -344,6 +453,7 @@ def enviar_fpd_pdv(parceiro: Parceiro, user: AbstractBaseUser | None = None) -> 
                 destinos=criticos,
                 parceiro=parceiro,
                 user=user,
+                flag="envio_fpd_critico",
             )
             resumo.enviados += parte.enviados
             resumo.erros += parte.erros
@@ -361,12 +471,17 @@ def enviar_churn_pdv(parceiro: Parceiro, user: AbstractBaseUser | None = None) -
     if not row or not row.mensagem.strip():
         return ResumoEnvio(ignorados=1, detalhes=[f"{parceiro.nome}: sem relatório Churn."])
     destinos = destinos_para_envio(user, "envio_churn", parceiro)
-    return _enviar_para_lista(
+    arquivo_bytes, nome_arquivo = planilha_churn(parceiro)
+    return _enviar_com_anexo(
         tipo=EnvioWhatsApp.Tipo.CHURN,
         mensagem=row.mensagem,
+        caption=f"📁 *Churn* — {parceiro.nome}",
         destinos=destinos,
         parceiro=parceiro,
         user=user,
+        arquivo_bytes=arquivo_bytes,
+        nome_arquivo=nome_arquivo,
+        flag="envio_churn",
     )
 
 
@@ -392,6 +507,7 @@ def _enviar_com_anexo(
     user: AbstractBaseUser | None,
     arquivo_bytes: bytes,
     nome_arquivo: str,
+    flag: str = "",
 ) -> ResumoEnvio:
     """Envia documento (+ texto se caption/mensagem > 900 chars)."""
     resumo = ResumoEnvio()
@@ -454,6 +570,17 @@ def _enviar_com_anexo(
             else:
                 resumo.erros += 1
                 resumo.detalhes.append(f"ERRO texto → {dest.nome}: {result_txt.error}")
+    if flag:
+        _talvez_email(
+            flag=flag,
+            tipo=tipo,
+            mensagem=msg,
+            parceiro=parceiro,
+            user=user,
+            arquivo_bytes=arquivo_bytes,
+            nome_arquivo=nome_arquivo,
+            resumo=resumo,
+        )
     return resumo
 
 
@@ -503,6 +630,7 @@ def enviar_comissionamento_pdv(
         user=user,
         arquivo_bytes=arquivo_bytes,
         nome_arquivo=nome_arquivo,
+        flag="envio_comissionamento",
     )
 
 
@@ -552,11 +680,14 @@ def enviar_tarefa(rel: RelatorioTarefa, user: AbstractBaseUser | None = None) ->
         user=user,
         arquivo_bytes=arquivo_bytes,
         nome_arquivo=nome_arquivo,
+        flag="envio_tarefas",
     )
 
 
-def enviar_tarefas_lote(lote_id: int, user: AbstractBaseUser | None = None) -> ResumoEnvio:
-    total = ResumoEnvio()
+def enviar_tarefas_lote(
+    lote_id: int,
+    user: AbstractBaseUser | None = None,
+) -> ResumoEnvio:
     qs = RelatorioTarefa.objects.filter(lote_id=lote_id).select_related("parceiro")
     if not qs.exists():
         return ResumoEnvio(ignorados=1, detalhes=["Lote sem relatórios de tarefas."])
@@ -598,6 +729,7 @@ def enviar_venda_indevida(rel: RelatorioVendaIndevida, user: AbstractBaseUser | 
         user=user,
         arquivo_bytes=arquivo_bytes,
         nome_arquivo=nome_arquivo,
+        flag="envio_venda_indevida",
     )
 
 
@@ -651,6 +783,7 @@ def enviar_recompra(rel: RelatorioRecompra, user: AbstractBaseUser | None = None
         user=user,
         arquivo_bytes=arquivo_bytes,
         nome_arquivo=nome_arquivo,
+        flag="envio_recompra",
     )
 
 

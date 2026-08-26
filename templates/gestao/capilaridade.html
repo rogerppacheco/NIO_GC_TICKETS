@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Capilaridade · Gestão{% endblock %}
 {% block content %}
+{% include "gestao/_escopo.html" %}
 <div class="hero">
   <div>
     <h1>Capilaridade</h1>
@@ -9,14 +10,14 @@
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
     {% if pode_recalcular %}
     <form method="post">
-      {% csrf_token %}
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       <input type="hidden" name="action" value="recalcular">
       <button class="btn btn-secondary" type="submit">Recalcular</button>
     </form>
     {% endif %}
     {% if pode_enviar %}
     <form method="post">
-      {% csrf_token %}
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       {% include "gestao/_filtros_hidden.html" %}
       <input type="hidden" name="action" value="enviar_todos">
       <button class="btn btn-primary" type="submit">Enviar todos (WhatsApp)</button>
@@ -78,6 +79,7 @@
     <div class="mask-card-h">
       <div>
         <strong>{{ card.parceiro.nome }}</strong>
+        {% include "gestao/_especialista.html" with parceiro=card.parceiro %}
         <div class="help">Meta {{ card.meta }} vendedor(es)</div>
       </div>
       <textarea id="cap-{{ card.parceiro.id }}" hidden>{{ card.mascara }}</textarea>
@@ -85,7 +87,7 @@
         <button class="btn btn-primary" type="button" data-copy-target="cap-{{ card.parceiro.id }}">Copiar</button>
         {% if pode_enviar %}
         <form method="post">
-          {% csrf_token %}
+          {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
           {% include "gestao/_filtros_hidden.html" %}
           <input type="hidden" name="action" value="enviar_pdv">
           <input type="hidden" name="parceiro" value="{{ card.parceiro.id }}">

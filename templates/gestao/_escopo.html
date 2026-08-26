@@ -1,0 +1,9 @@
+{% with escopo=gestao_escopo|default:"meus" %}
+<div class="gestao-escopo" role="tablist" aria-label="Parceiros">
+  <a href="?escopo=meus" class="{% if escopo == 'meus' %}is-on{% endif %}">Meus parceiros <span class="help">({{ gestao_qtd_meus|default:0 }})</span></a>
+  <a href="?escopo=outros" class="{% if escopo == 'outros' %}is-on{% endif %}">Outros especialistas <span class="help">({{ gestao_qtd_outros|default:0 }})</span></a>
+</div>
+{% if escopo == "outros" %}
+  <p class="help" style="margin:-0.4rem 0 1rem">PDVs de outros especialistas. O envio WhatsApp segue a regra de sempre: admin → Destinatários; especialista → o próprio número.</p>
+{% endif %}
+{% endwith %}

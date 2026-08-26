@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Envios WhatsApp · Gestão{% endblock %}
 {% block content %}
+{% include "gestao/_escopo.html" %}
 <div class="hero">
   <div>
     <h1>Envios WhatsApp</h1>
@@ -32,7 +33,7 @@
   <div class="panel-h"><h2>Disparar</h2></div>
   <div class="panel-b">
     <form method="post" class="fila-toolbar" style="gap:0.6rem">
-      {% csrf_token %}
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       <select name="parceiro" class="fila-pick">
         <option value="">Todos / escolha o PDV</option>
         {% for p in parceiros %}
@@ -74,7 +75,10 @@
         <tr>
           <td>{{ e.criado_em|date:"d/m H:i" }}</td>
           <td>{{ e.get_tipo_display }}{% if e.modo_teste %} <span class="help">teste</span>{% endif %}</td>
-          <td>{{ e.parceiro.nome|default:"—" }}</td>
+          <td>
+            {{ e.parceiro.nome|default:"—" }}
+            {% include "gestao/_especialista.html" with parceiro=e.parceiro %}
+          </td>
           <td>
             <div>{{ e.destino_nome|default:"—" }}</div>
             <div class="help mono">{{ e.destino_jid }}</div>

@@ -172,3 +172,17 @@ SYNCWA_MODO_TESTE = (
 ).lower() in {"1", "true", "yes", "on"}
 SYNCWA_TIMEOUT = int(os.environ.get("SYNCWA_TIMEOUT", "60"))
 FPD_PERCENTUAL_CRITICO = float(os.environ.get("FPD_PERCENTUAL_CRITICO", "30"))
+
+# SMTP — mesmo padrão do sistema de auditorias (Office 365 / sysr)
+SMTP_HOST = (os.environ.get("SMTP_HOST") or "").strip()
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587") or "587")
+SMTP_USER = (os.environ.get("SMTP_USER") or "").strip()
+SMTP_PASS = os.environ.get("SMTP_PASS") or ""
+SMTP_FROM = (os.environ.get("SMTP_FROM") or "").strip()
+SMTP_USE_TLS = (os.environ.get("SMTP_USE_TLS", "true") or "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+    "sim",
+}

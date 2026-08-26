@@ -103,6 +103,15 @@ class EspecialistaAcessoTests(TestCase):
         qs = tickets_visiveis(self.spec)
         self.assertEqual(list(qs), [self.ticket_ana])
 
+    def test_gestao_escopo_nao_altera_fila(self):
+        from tickets.acesso import parceiros_gestao, parceiros_visiveis
+
+        self.assertEqual(list(parceiros_visiveis(self.spec)), [self.pdv_ana])
+        self.assertEqual(list(parceiros_gestao(self.spec, "meus")), [self.pdv_ana])
+        self.assertEqual(list(parceiros_gestao(self.spec, "outros")), [self.pdv_outro])
+        self.assertEqual(tickets_visiveis(self.spec).count(), 1)
+
+
     def test_especialista_nao_abre_ticket_alheio(self):
         self.client.force_login(self.spec)
         r = self.client.get(
@@ -757,3 +766,74 @@ class SeedNioParceirosTests(TestCase):
         call_command("seed_nio")
         p.refresh_from_db()
         self.assertFalse(p.ativo)
+
+
+class MascaraEmailTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.spec = User.objects.create_user(
+            "specmail", "spec@x.com", "x", is_staff=True
+        )
+        PerfilStaff.objects.create(user=self.spec, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self.pdv = Parceiro.objects.create(
+            codigo_pdv="m1",
+            nome="PDV Mail",
+            especialista=self.spec,
+            email="pdv@x.com",
+        )
+
+    @override_settings(SMTP_HOST="smtp.test", SMTP_FROM="from@test.com")
+    def test_envia_mascara_marcada(self):
+        from unittest.mock import patch
+
+        from tickets.models import Mascara
+        from tickets.services import notificar_mascaras_por_email
+
+        Mascara.objects.create(
+            nome="Elite",
+            destino="Grupo Elite",
+            tipos=TipoDemanda.PRIORIDADE_ELITE,
+            template="Pedido {{pedido}}",
+            enviar_email=True,
+            ativo=True,
+        )
+        ticket = Ticket.objects.create(
+            parceiro=self.pdv, tipo=TipoDemanda.PRIORIDADE_ELITE, pedido="123"
+        )
+        with patch(
+            "gestao.messaging.email_smtp.enviar_email_com_anexos",
+            return_value=(True, ""),
+        ) as send:
+            n = notificar_mascaras_por_email(ticket)
+        self.assertEqual(n, 1)
+        destinos = send.call_args.args[0]
+        self.assertIn("spec@x.com", destinos)
+        self.assertIn("pdv@x.com", destinos)
+        self.assertIn("123", send.call_args.kwargs["corpo_texto"])
+
+    @override_settings(SMTP_HOST="smtp.test", SMTP_FROM="from@test.com")
+    def test_ignora_mascara_de_outro_tipo(self):
+        from unittest.mock import patch
+
+        from tickets.models import Mascara
+        from tickets.services import notificar_mascaras_por_email
+
+        Mascara.objects.create(
+            nome="Reset",
+            destino="GC",
+            tipos=TipoDemanda.RESET_SENHA,
+            template="TT {{tt}}",
+            enviar_email=True,
+            ativo=True,
+        )
+        ticket = Ticket.objects.create(
+            parceiro=self.pdv, tipo=TipoDemanda.PRIORIDADE_ELITE, pedido="9"
+        )
+        with patch(
+            "gestao.messaging.email_smtp.enviar_email_com_anexos",
+            return_value=(True, ""),
+        ) as send:
+            n = notificar_mascaras_por_email(ticket)
+        self.assertEqual(n, 0)
+        send.assert_not_called()
+

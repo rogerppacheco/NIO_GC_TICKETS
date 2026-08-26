@@ -57,6 +57,20 @@ def parceiros_visiveis(user):
     return qs.filter(especialista=user)
 
 
+def escopo_gestao(request) -> str:
+    src = request.POST if getattr(request, "method", "") == "POST" else getattr(request, "GET", {})
+    valor = (src.get("escopo") or "meus").strip().lower()
+    return valor if valor in {"meus", "outros"} else "meus"
+
+
+def parceiros_gestao(user, escopo: str = "meus"):
+    """Abas de Gestão: meus PDVs vs PDVs de outros especialistas. Vale para admin e especialista."""
+    qs = Parceiro.objects.filter(ativo=True).select_related("especialista")
+    if escopo == "outros":
+        return qs.exclude(especialista=user).order_by("nome")
+    return qs.filter(especialista=user).order_by("nome")
+
+
 def pode_ver_ticket(user, ticket: Ticket) -> bool:
     if eh_gestor(user):
         return True

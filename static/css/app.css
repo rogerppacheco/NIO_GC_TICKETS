@@ -74,6 +74,17 @@ a:hover { text-decoration: underline; }
   color: var(--ink); border-color: var(--brand); text-decoration: none;
 }
 .gestao-nav a.is-on { background: #eef8f5; }
+.gestao-escopo {
+  display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0 0 1.1rem;
+}
+.gestao-escopo a {
+  border: 1px solid var(--line); background: #fff; color: var(--muted);
+  border-radius: 10px; padding: 0.4rem 0.85rem; font-size: 0.9rem; font-weight: 700;
+}
+.gestao-escopo a:hover, .gestao-escopo a.is-on {
+  color: var(--ink); border-color: var(--brand); text-decoration: none;
+}
+.gestao-escopo a.is-on { background: #eef8f5; }
 .mono { font-family: var(--mono); font-size: 0.9rem; }
 .logout-form { display: inline; margin: 0; }
 .nav-btn {

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Sysmap · Gestão{% endblock %}
 {% block content %}
+{% include "gestao/_escopo.html" %}
 <div class="hero">
   <div>
     <h1>Sysmap / Supply</h1>
@@ -17,7 +18,7 @@
   <div class="panel-h"><h2>Importar planilha</h2></div>
   <div class="panel-b">
     <form method="post" enctype="multipart/form-data">
-      {% csrf_token %}
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       {{ form.arquivo }}
       <p class="help">{{ form.arquivo.help_text }}</p>
       <button class="btn btn-primary" type="submit" style="margin-top:0.7rem">Importar Sysmap</button>
@@ -37,7 +38,10 @@
         <tr>
           <td class="mono">{{ t.chave_acesso }}</td>
           <td>{{ t.nome_terceiro|default:"—" }}</td>
-          <td>{{ t.parceiro.nome|default:"—" }}</td>
+          <td>
+            {{ t.parceiro.nome|default:"—" }}
+            {% include "gestao/_especialista.html" with parceiro=t.parceiro %}
+          </td>
           <td>{{ t.cargo_funcao|default:"—" }}</td>
           <td>
             {% if t.ativo %}<span class="pill resolvido">Ativo</span>

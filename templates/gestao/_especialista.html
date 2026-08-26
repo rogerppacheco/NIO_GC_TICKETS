@@ -1,0 +1,3 @@
+{% if gestao_escopo == "outros" and parceiro %}
+  <div class="help">Especialista: {{ parceiro.especialista.get_full_name|default:parceiro.especialista.username|default:"—" }}</div>
+{% endif %}

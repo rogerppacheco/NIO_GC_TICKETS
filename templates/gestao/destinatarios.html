@@ -88,6 +88,7 @@
         <div class="full">{{ form.jid.label_tag }}{{ form.jid }}<div class="help">{{ form.jid.help_text }}</div></div>
         <div>{{ form.tipo.label_tag }}{{ form.tipo }}</div>
         <div>{{ form.prioridade.label_tag }}{{ form.prioridade }}</div>
+        <div class="full">{{ form.email.label_tag }}{{ form.email }}<div class="help">{{ form.email.help_text }}</div></div>
         <div class="full" style="display:flex;flex-wrap:wrap;gap:1rem;align-items:center">
           <label>{{ form.ativo }} Ativo</label>
           <label>{{ form.envio_osab }} OSAB</label>
@@ -99,6 +100,18 @@
           <label>{{ form.envio_tarefas }} Tarefas</label>
           <label>{{ form.envio_venda_indevida }} Venda indevida</label>
           <label>{{ form.envio_recompra }} Recompra</label>
+        </div>
+        <div class="full help"><strong>Enviar a máscara também por e-mail</strong> (além do WhatsApp):</div>
+        <div class="full" style="display:flex;flex-wrap:wrap;gap:1rem;align-items:center">
+          <label>{{ form.email_osab }} OSAB</label>
+          <label>{{ form.email_capilaridade }} Capilaridade</label>
+          <label>{{ form.email_fpd }} FPD</label>
+          <label>{{ form.email_fpd_critico }} FPD crítico</label>
+          <label>{{ form.email_churn }} Churn</label>
+          <label>{{ form.email_comissionamento }} Comissionamento</label>
+          <label>{{ form.email_tarefas }} Tarefas</label>
+          <label>{{ form.email_venda_indevida }} Venda indevida</label>
+          <label>{{ form.email_recompra }} Recompra</label>
         </div>
         <div class="full">
           {{ form.razoes_sociais_comissionamento.label_tag }}

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}FPD · Gestão{% endblock %}
 {% block content %}
+{% include "gestao/_escopo.html" %}
 <div class="hero">
   <div>
     <h1>FPD</h1>
@@ -8,7 +9,7 @@
   </div>
   {% if pode_enviar %}
   <form method="post">
-    {% csrf_token %}
+    {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
     <input type="hidden" name="action" value="enviar_todos">
     <button class="btn btn-primary" type="submit">Enviar todos (WhatsApp)</button>
   </form>
@@ -19,7 +20,7 @@
   <div class="panel-h"><h2>Importar FPD</h2></div>
   <div class="panel-b">
     <form method="post" enctype="multipart/form-data">
-      {% csrf_token %}
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       {{ form.arquivo }}
       <button class="btn btn-primary" type="submit" style="margin-top:0.7rem">Processar FPD</button>
     </form>
@@ -31,6 +32,7 @@
     <div class="mask-card-h">
       <div>
         <strong>{{ r.pdv_nome }}</strong>
+        {% include "gestao/_especialista.html" with parceiro=r.parceiro %}
         <div class="help">{{ r.percentual|floatformat:2 }}% · abertas {{ r.total_abertas }}/{{ r.total_faturas }} · {{ r.criado_em|date:"d/m H:i" }}</div>
       </div>
       <div style="display:flex;gap:0.4rem">
@@ -38,7 +40,7 @@
         <button class="btn btn-primary" type="button" data-copy-target="fpd-{{ r.id }}">Copiar</button>
         {% if pode_enviar %}
         <form method="post">
-          {% csrf_token %}
+          {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
           <input type="hidden" name="action" value="enviar_pdv">
           <input type="hidden" name="parceiro" value="{{ r.parceiro_id }}">
           <button class="btn btn-secondary" type="submit">Enviar</button>
