@@ -56,6 +56,21 @@ class DestinatarioForm(forms.ModelForm):
             ),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["parceiro"].label_from_instance = self._rotulo_parceiro
+
+    @staticmethod
+    def _rotulo_parceiro(obj: Parceiro) -> str:
+        spec = getattr(obj, "especialista", None)
+        if not spec:
+            return f"{obj.nome} · sem GC"
+        nome = spec.get_full_name() or spec.username
+        gerencia = (getattr(getattr(spec, "perfil_staff", None), "gerencia", "") or "").strip()
+        if gerencia:
+            return f"{obj.nome} · {nome} · {gerencia}"
+        return f"{obj.nome} · {nome}"
+
     def clean_jid(self):
         jid = (self.cleaned_data.get("jid") or "").strip()
         if not jid:

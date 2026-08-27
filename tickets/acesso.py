@@ -134,6 +134,15 @@ def parceiros_gestao_ambos(user):
     ).distinct().order_by("nome")
 
 
+def parceiros_para_destinatarios(user):
+    """Admin cadastra destinatários em qualquer gerência; os demais seguem o recorte da Gestão."""
+    if eh_gestor(user):
+        return Parceiro.objects.filter(ativo=True).select_related(
+            "especialista", "especialista__perfil_staff"
+        ).order_by("nome")
+    return parceiros_gestao_ambos(user)
+
+
 def pode_ver_ticket(user, ticket: Ticket) -> bool:
     if eh_gestor(user):
         return True

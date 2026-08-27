@@ -1643,6 +1643,22 @@ class GestaoEscopoTests(TestCase):
         self.assertContains(outros, "PDV Carla")
         self.assertNotContains(outros, "PDV Diego")
 
+    def test_admin_destinatarios_ve_todas_as_gerencias(self):
+        self.spec.perfil_staff.gerencia = "PP"
+        self.spec.perfil_staff.save(update_fields=["gerencia"])
+        self.outro.perfil_staff.gerencia = "CMGES"
+        self.outro.perfil_staff.save(update_fields=["gerencia"])
+        self.gestor.perfil_staff.gerencia = "PP"
+        self.gestor.perfil_staff.save(update_fields=["gerencia"])
+        self.client.force_login(self.gestor)
+        r = self.client.get(reverse("gestao_destinatarios"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "PDV Carla")
+        self.assertContains(r, "PDV Diego")
+        self.assertContains(r, "CMGES")
+        nomes = list(r.context["form"].fields["parceiro"].queryset.values_list("nome", flat=True))
+        self.assertEqual(set(nomes), {"PDV Carla", "PDV Diego"})
+
     def test_relatorios_osab_e_tarefas_seguem_a_gerencia(self):
         from gestao.models import HistoricoOSAB, LoteImportacao, RelatorioTarefa
         from gestao.periodo import hoje

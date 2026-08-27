@@ -15,6 +15,7 @@ from tickets.acesso import (
     gestor_required,
     parceiros_gestao,
     parceiros_gestao_ambos,
+    parceiros_para_destinatarios,
     pode_importar_bases,
     tem_acesso_interno,
     ve_relatorios_sem_pdv,
@@ -1271,7 +1272,7 @@ def _flash_resumo(request, titulo: str, resumo) -> None:
 
 @gestor_required
 def destinatarios_view(request: HttpRequest) -> HttpResponse:
-    visiveis = parceiros_gestao_ambos(request.user)
+    visiveis = parceiros_para_destinatarios(request.user)
     if request.method == "POST" and request.POST.get("action") == "sincronizar_especialistas":
         cad = sincronizar_destinatarios_especialistas(visiveis)
         partes = [
@@ -1304,9 +1305,11 @@ def destinatarios_view(request: HttpRequest) -> HttpResponse:
         form.save()
         messages.success(request, "Destinatário salvo.")
         return _voltar(request, "gestao_destinatarios")
-    lista = Destinatario.objects.select_related("parceiro", "parceiro__especialista").filter(
-        parceiro__in=visiveis
-    )
+    lista = Destinatario.objects.select_related(
+        "parceiro",
+        "parceiro__especialista",
+        "parceiro__especialista__perfil_staff",
+    ).filter(parceiro__in=visiveis)
     grupos = None
     if request.GET.get("grupos") == "1" and syncwa_configurado():
         grupos = listar_grupos()
@@ -1361,6 +1364,7 @@ def destinatario_do_grupo(request: HttpRequest) -> HttpResponse:
 def destinatario_editar(request: HttpRequest, pk: int) -> HttpResponse:
     dest = get_object_or_404(Destinatario, pk=pk)
     form = DestinatarioForm(request.POST or None, instance=dest)
+    form.fields["parceiro"].queryset = parceiros_para_destinatarios(request.user)
     if request.method == "POST" and form.is_valid():
         form.save()
         messages.success(request, "Destinatário atualizado.")
