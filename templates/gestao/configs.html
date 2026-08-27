@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load l10n %}
 {% block title %}Metas · Gestão{% endblock %}
 {% block content %}
 {% include "gestao/_escopo.html" %}
@@ -76,8 +77,8 @@
                 {% if dia %}
                 <div style="font-weight:700;margin-bottom:0.3rem">{{ dia.data.day }}{% if dia.observacao %} · {{ dia.observacao }}{% endif %}</div>
                 <input type="hidden" name="dia_id" value="{{ dia.id }}">
-                <label class="help">VL <input type="number" step="0.01" min="0" name="peso_vl" value="{{ dia.peso_vl }}" style="width:4.2rem" {% if not pode_editar %}disabled{% endif %}></label>
-                <label class="help">Gross <input type="number" step="0.01" min="0" name="peso_gross" value="{{ dia.peso_gross }}" style="width:4.2rem" {% if not pode_editar %}disabled{% endif %}></label>
+                <label class="help">VL <input type="number" step="0.01" min="0" name="peso_vl" value="{{ dia.peso_vl|unlocalize }}" style="width:4.2rem" {% if not pode_editar %}disabled{% endif %}></label>
+                <label class="help">Gross <input type="number" step="0.01" min="0" name="peso_gross" value="{{ dia.peso_gross|unlocalize }}" style="width:4.2rem" {% if not pode_editar %}disabled{% endif %}></label>
                 <input type="hidden" name="observacao_dia" value="{{ dia.observacao }}">
                 {% endif %}
               </td>
@@ -203,9 +204,9 @@
             </td>
             <td><input type="number" name="p{{ linha.parceiro.id }}_meta_vendedores" min="0" value="{{ linha.meta.meta_vendedores|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
             <td><input type="number" name="p{{ linha.parceiro.id }}_meta_vl" min="0" value="{{ linha.osab.meta_vl|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
-            <td><input type="number" step="0.1" name="p{{ linha.parceiro.id }}_du_vl" min="0" value="{% if linha.osab.du_vl %}{{ linha.osab.du_vl }}{% else %}{{ calendario_totais.du_vl }}{% endif %}" {% if not pode_editar %}disabled{% endif %}></td>
+            <td><input type="number" step="0.1" name="p{{ linha.parceiro.id }}_du_vl" min="0" value="{% if linha.osab.du_vl %}{{ linha.osab.du_vl|unlocalize }}{% else %}{{ calendario_totais.du_vl|unlocalize }}{% endif %}" {% if not pode_editar %}disabled{% endif %}></td>
             <td><input type="number" name="p{{ linha.parceiro.id }}_meta_gross" min="0" value="{{ linha.osab.meta_gross|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
-            <td><input type="number" step="0.1" name="p{{ linha.parceiro.id }}_du_gross" min="0" value="{% if linha.osab.du_gross %}{{ linha.osab.du_gross }}{% else %}{{ calendario_totais.du_gross }}{% endif %}" {% if not pode_editar %}disabled{% endif %}></td>
+            <td><input type="number" step="0.1" name="p{{ linha.parceiro.id }}_du_gross" min="0" value="{% if linha.osab.du_gross %}{{ linha.osab.du_gross|unlocalize }}{% else %}{{ calendario_totais.du_gross|unlocalize }}{% endif %}" {% if not pode_editar %}disabled{% endif %}></td>
             <td><input type="checkbox" name="p{{ linha.parceiro.id }}_tem_bonus" {% if linha.osab.tem_bonus %}checked{% endif %} {% if not pode_editar %}disabled{% endif %}></td>
             <td><input type="number" name="p{{ linha.parceiro.id }}_comissao_bonus" min="0" value="{{ linha.osab.comissao_bonus|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
             <td><input type="checkbox" name="p{{ linha.parceiro.id }}_tem_bonus_m10" {% if linha.osab.tem_bonus_m10 %}checked{% endif %} {% if not pode_editar %}disabled{% endif %}></td>

@@ -1660,6 +1660,30 @@ class MetasAcompanhamentoTests(TestCase):
         self.assertContains(r, "calendário de pesos")
         self.assertContains(r, "DU VL")
 
+    def test_inputs_du_usam_ponto_nao_virgula(self):
+        from gestao.models import ConfiguracaoOSAB
+        from gestao.pipelines.calendario import aplicar_nos_pdvs, garantir_mes
+
+        garantir_mes(2026, 8)
+        self.pdv.especialista = self.gestor
+        self.pdv.save(update_fields=["especialista"])
+        ConfiguracaoOSAB.objects.create(
+            parceiro=self.pdv, ano=2026, mes=8, meta_vl=80, meta_gross=66
+        )
+        aplicar_nos_pdvs(2026, 8)
+        html = self.client.get(reverse("gestao_configs")).content.decode()
+        self.assertIn('name="peso_vl"', html)
+        self.assertNotIn('value="0,5"', html)
+        self.assertRegex(html, r'name="peso_vl" value="0\.5')
+        self.assertRegex(
+            html,
+            rf'name="p{self.pdv.id}_du_vl"[^>]*value="[0-9]+\.[0-9]',
+        )
+        self.assertNotRegex(
+            html,
+            rf'name="p{self.pdv.id}_du_vl"[^>]*value="[0-9]+,[0-9]',
+        )
+
     def test_importa_vl_gross_cap_e_du(self):
         from gestao.models import ConfiguracaoOSAB, MetaCapilaridade
         from gestao.pipelines.metas import processar_metas
