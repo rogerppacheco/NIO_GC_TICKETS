@@ -27,6 +27,7 @@ class LoteImportacao(models.Model):
         VENDA_INDEVIDA = "venda_indevida", "Venda indevida"
         RECOMPRA = "recompra", "Recompra"
         GDP = "gdp", "GDP / praças BTU"
+        METAS = "metas", "Metas (acompanhamento)"
 
     tipo = models.CharField(max_length=20, choices=Tipo.choices, db_index=True)
     arquivo_nome = models.CharField(max_length=255)

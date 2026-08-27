@@ -8,8 +8,23 @@
     <p>Capilaridade (vendedores) e OSAB (VL/Gross/comissões) por parceiro.{% if not pode_editar %} Somente o admin altera.{% endif %}</p>
   </div>
 </div>
+{% if form_import %}
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-h"><h2>Importar acompanhamento semanal</h2></div>
+  <div class="panel-b">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+      <input type="hidden" name="action" value="importar_metas">
+      {{ form_import.arquivo }}
+      <p class="help">Arquivo <code>BASE_Acompanhamento Semanal_…xlsb</code>. Lê a aba <code>BASE_FISICOS</code>: o orçado mensal (INDB=META, mesma coluna ORÇADO das fichas) vira Meta VL, Meta Gross e Meta vend. Não usa o plano semanal (FCAST). A aba <code>CALENDARIO</code> traz DU VL = DU_REG, DU Gross = DU_GROSS e os pesos diários. Comissões e bônus não vêm desta base e permanecem como estão. Usa o período ativo {{ mes|stringformat:"02d" }}/{{ ano }}.</p>
+      <button class="btn btn-primary" type="submit" style="margin-top:0.7rem">Atualizar metas da planilha</button>
+    </form>
+  </div>
+</div>
+{% endif %}
 <form method="post">
   {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+  <input type="hidden" name="action" value="salvar">
   <div class="panel">
     <div class="table-scroll">
       <table class="table">

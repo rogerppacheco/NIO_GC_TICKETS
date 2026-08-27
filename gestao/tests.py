@@ -1613,4 +1613,151 @@ class ResultadosTests(TestCase):
         self.assertFalse(PracaBTU.objects.filter(nome_norm="BETIM", ativo=True).exists())
 
 
+def _acompanhamento_xlsx(linhas_meta, linhas_cal, ano_mes=202608):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "BASE_FISICOS"
+    ws.append(["INDB", "INDICADOR", "QTDE", "ANOMES", "SEMANA", "NM_PDV_GRUPO"])
+    for linha in linhas_meta:
+        ws.append(linha)
+    cal = wb.create_sheet("CALENDARIO")
+    cal.append(["DATA", "ANOMES", "DU_REG", "DU_GROSS"])
+    for linha in linhas_cal:
+        cal.append(linha)
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    buf.name = "acompanhamento.xlsx"
+    return buf
+
+
+@override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+        },
+    }
+)
+class MetasAcompanhamentoTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.gestor = User.objects.create_superuser("gmeta", "gm@x.com", "x")
+        PerfilStaff.objects.create(user=self.gestor, papel=PerfilStaff.Papel.GESTOR)
+        self.pdv = Parceiro.objects.create(codigo_pdv="m1", nome="INOVA MG")
+        self.client.force_login(self.gestor)
+        salvar_periodo(2026, 8)
+
+    def test_pagina_tem_importacao(self):
+        r = self.client.get(reverse("gestao_configs"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Importar acompanhamento semanal")
+        self.assertContains(r, "orçado mensal")
+        self.assertContains(r, "BASE_FISICOS")
+
+    def test_importa_vl_gross_cap_e_du(self):
+        from gestao.models import ConfiguracaoOSAB, MetaCapilaridade
+        from gestao.pipelines.metas import processar_metas
+
+        arquivo = _acompanhamento_xlsx(
+            [
+                ["META", "VL", 113.14, 202608, "S1", "INOVA MG"],
+                ["META", "GROSS", 96.71, 202608, "S1", "INOVA MG"],
+                ["META", "CAPILARIDADE", 7.77, 202608, "S1", "INOVA MG"],
+                ["FCAST", "VL", 107, 202608, None, "INOVA MG"],
+                ["FCAST", "GROSS", 84, 202608, None, "INOVA MG"],
+                ["FCAST", "CAPILARIDADE", 3, 202608, None, "INOVA MG"],
+                ["REAL", "VL", 50, 202608, "S1", "INOVA MG"],
+                ["META", "VL", 200, 202608, "S1", "PDV FANTASMA"],
+            ],
+            [
+                [datetime(2026, 8, 1), 202608, 0.4, 0.8],
+                [datetime(2026, 8, 3), 202608, 1.0, 1.0],
+            ],
+        )
+        resumo = processar_metas(arquivo, "a.xlsx", 2026, 8)
+        self.assertEqual(resumo["atualizados"], 1)
+        self.assertEqual(resumo["sem_cadastro_n"], 1)
+        self.assertAlmostEqual(resumo["du_vl"], 1.4)
+        self.assertAlmostEqual(resumo["du_gross"], 1.8)
+        cap = MetaCapilaridade.objects.get(parceiro=self.pdv, ano=2026, mes=8)
+        self.assertEqual(cap.meta_vendedores, 8)
+        osab = ConfiguracaoOSAB.objects.get(parceiro=self.pdv, ano=2026, mes=8)
+        self.assertEqual(osab.meta_vl, 113)
+        self.assertEqual(osab.meta_gross, 97)
+        self.assertAlmostEqual(osab.du_vl, 1.4)
+        self.assertAlmostEqual(osab.du_gross, 1.8)
+        pesos = __import__("json").loads(osab.pesos_diarios_vl)
+        self.assertAlmostEqual(pesos["1"], 0.4)
+        self.assertAlmostEqual(pesos["3"], 1.0)
+
+    def test_preserva_comissao(self):
+        from gestao.models import ConfiguracaoOSAB
+        from gestao.pipelines.metas import processar_metas
+
+        ConfiguracaoOSAB.objects.create(
+            parceiro=self.pdv,
+            ano=2026,
+            mes=8,
+            meta_vl=1,
+            comissao_500=15,
+            tem_bonus=True,
+        )
+        arquivo = _acompanhamento_xlsx(
+            [["META", "VL", 80, 202608, "S1", "INOVA MG"]],
+            [[datetime(2026, 8, 2), 202608, 1, 1]],
+        )
+        processar_metas(arquivo, "a.xlsx", 2026, 8)
+        osab = ConfiguracaoOSAB.objects.get(parceiro=self.pdv, ano=2026, mes=8)
+        self.assertEqual(osab.meta_vl, 80)
+        self.assertEqual(osab.comissao_500, 15)
+        self.assertTrue(osab.tem_bonus)
+
+    def test_importar_pela_tela(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from gestao.models import ConfiguracaoOSAB
+
+        buf = _acompanhamento_xlsx(
+            [["META", "VL", 50, 202608, "S1", "INOVA MG"]],
+            [[datetime(2026, 8, 1), 202608, 1, 1]],
+        )
+        upload = SimpleUploadedFile(
+            "BASE_Acompanhamento.xlsx",
+            buf.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        r = self.client.post(
+            reverse("gestao_configs"),
+            {"action": "importar_metas", "arquivo": upload},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(
+            ConfiguracaoOSAB.objects.get(parceiro=self.pdv, ano=2026, mes=8).meta_vl, 50
+        )
+
+    @skipUnless(
+        Path(r"c:\Users\rogge\Downloads\BASE_Acompanhamento Semanal_AGO_S4 2 (1).xlsb").exists(),
+        "acompanhamento semanal local não encontrado",
+    )
+    def test_arquivo_real_agosto(self):
+        from gestao.models import ConfiguracaoOSAB, MetaCapilaridade
+        from gestao.pipelines.metas import processar_metas
+
+        caminho = Path(
+            r"c:\Users\rogge\Downloads\BASE_Acompanhamento Semanal_AGO_S4 2 (1).xlsb"
+        )
+        with caminho.open("rb") as fh:
+            resumo = processar_metas(fh, caminho.name, 2026, 8)
+        self.assertEqual(resumo["atualizados"], 1)
+        osab = ConfiguracaoOSAB.objects.get(parceiro=self.pdv, ano=2026, mes=8)
+        # Orçado (INDB=META / coluna ORÇADO), não o plano semanal FCAST 107/84/3.
+        self.assertEqual(osab.meta_vl, 113)
+        self.assertEqual(osab.meta_gross, 97)
+        self.assertAlmostEqual(osab.du_vl, 23.1855, places=3)
+        cap = MetaCapilaridade.objects.get(parceiro=self.pdv, ano=2026, mes=8)
+        self.assertEqual(cap.meta_vendedores, 8)
+
+
+
 

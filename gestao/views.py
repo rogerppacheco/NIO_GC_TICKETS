@@ -67,6 +67,7 @@ from .pipelines.churn import processar_churn
 from .pipelines.comissionamento import mapa_pdv_razoes, processar_comissionamento
 from .pipelines.fpd import processar_fpd
 from .pipelines.gdp import processar_gdp
+from .pipelines.metas import processar_metas
 from .pipelines.osab import calcular_osab, persistir_capilaridade, processar_osab
 from .pipelines.recompra import processar_recompra
 from .pipelines.resultados import (
@@ -998,9 +999,41 @@ def _render_recompra(request, form):
 def configs_view(request: HttpRequest) -> HttpResponse:
     ano, mes = periodo_ativo()
     parceiros = list(_parceiros(request))
+    form_import = UploadBaseForm() if eh_gestor(request.user) else None
     if request.method == "POST":
         if not eh_gestor(request.user):
             messages.error(request, "Só o admin altera metas.")
+            return _voltar(request, "gestao_configs")
+        action = request.POST.get("action") or "salvar"
+        if action == "importar_metas":
+            form_import = UploadBaseForm(
+                request.POST, request.FILES, extensoes=[".xlsx", ".xlsb", ".xls"]
+            )
+            if form_import.is_valid():
+                arquivo = form_import.cleaned_data["arquivo"]
+                try:
+                    resumo = processar_metas(arquivo, arquivo.name, ano, mes)
+                    _lote(request, LoteImportacao.Tipo.METAS, arquivo.name, True, resumo)
+                    du = ""
+                    if resumo.get("du_vl") is not None:
+                        du = f" DU VL {resumo['du_vl']:.2f} · DU Gross {resumo['du_gross']:.2f}."
+                    extra = ""
+                    if resumo.get("sem_cadastro_n"):
+                        extra = (
+                            f" {resumo['sem_cadastro_n']} PDV(s) da base sem cadastro"
+                            f" (ex.: {', '.join(resumo['sem_cadastro'][:5])})."
+                        )
+                    messages.success(
+                        request,
+                        f"Metas {mes:02d}/{ano}: {resumo['atualizados']} PDV(s) atualizados."
+                        f"{du}{extra}",
+                    )
+                    return _voltar(request, "gestao_configs")
+                except Exception as exc:
+                    _lote(request, LoteImportacao.Tipo.METAS, arquivo.name, False, {}, str(exc))
+                    messages.error(request, f"Falha ao importar metas: {exc}")
+            else:
+                messages.error(request, "Selecione o acompanhamento semanal (.xlsb ou .xlsx).")
             return _voltar(request, "gestao_configs")
         for p in parceiros:
             prefix = f"p{p.id}_"
@@ -1036,7 +1069,7 @@ def configs_view(request: HttpRequest) -> HttpResponse:
     return render(
         request,
         "gestao/configs.html",
-        {"ano": ano, "mes": mes, "linhas": linhas, "pode_editar": eh_gestor(request.user)},
+        {"ano": ano, "mes": mes, "linhas": linhas, "pode_editar": eh_gestor(request.user), "form_import": form_import},
     )
 
 
