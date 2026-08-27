@@ -18,7 +18,7 @@ from .acesso import (
     eh_gestor,
     escopo_gestao,
     gestor_required,
-    parceiros_gestao,
+    parceiros_para_cadastro,
     parceiros_visiveis,
     qs_equipe,
     ticket_para_usuario,
@@ -682,8 +682,8 @@ def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
 def parceiros_lista(request: HttpRequest) -> HttpResponse:
     escopo = escopo_gestao(request)
     parceiros = (
-        parceiros_gestao(request.user, escopo)
-        .select_related("especialista")
+        parceiros_para_cadastro(request.user, escopo)
+        .select_related("especialista", "especialista__perfil_staff")
         .prefetch_related("contatos")
         .annotate(qtd_tickets=Count("tickets"))
         .order_by("nome")
@@ -695,7 +695,12 @@ def parceiros_lista(request: HttpRequest) -> HttpResponse:
     return render(
         request,
         "tickets/parceiros.html",
-        {"parceiros": parceiros, "gestao_escopo": escopo},
+        {
+            "parceiros": parceiros,
+            "gestao_escopo": escopo,
+            "gestao_qtd_meus": parceiros_para_cadastro(request.user, "meus").count(),
+            "gestao_qtd_outros": parceiros_para_cadastro(request.user, "outros").count(),
+        },
     )
 
 
@@ -943,16 +948,25 @@ def especialista_form(request: HttpRequest, pk: int | None = None) -> HttpRespon
         if form.is_valid():
             user = form.save()
             nome = user.get_full_name() or user.username
+            from gestao.parceiros import associar_parceiros_ao_especialista
+
+            pdvs = associar_parceiros_ao_especialista(user)
             if eh_gestor(user):
                 messages.success(
                     request,
                     f"{nome} salvo como admin e passa a ver todos os tickets.",
                 )
+            elif pdvs:
+                messages.success(
+                    request,
+                    f"Especialista {nome} salvo. "
+                    f"Parceiros da OSAB vinculados: {', '.join(pdvs)}.",
+                )
             else:
                 messages.success(
                     request,
                     f"Especialista {nome} salvo. "
-                    "Associe-o no cadastro de cada parceiro.",
+                    "Associe-o no cadastro de cada parceiro se a OSAB ainda não tiver o GC.",
                 )
             return redirect("especialistas")
     parceiros = []

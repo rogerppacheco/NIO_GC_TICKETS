@@ -317,6 +317,56 @@ class CadastroParceirosOsabTests(TestCase):
         pdv2 = Parceiro.objects.get(nome="PDV GC 2")
         self.assertEqual(pdv2.especialista_id, pdv.especialista_id)
 
+    def test_associa_pdvs_do_gc_ao_especialista_homonimo(self):
+        from gestao.parceiros import associar_parceiros_ao_especialista
+
+        User = get_user_model()
+        auto = User.objects.create_user(
+            "marcella.oliveira.duarte",
+            "auto@x.com",
+            "x",
+            is_staff=True,
+            first_name="Marcella Oliveira Duarte",
+        )
+        PerfilStaff.objects.create(user=auto, papel=PerfilStaff.Papel.ESPECIALISTA)
+        manual = User.objects.create_user(
+            "Marcella",
+            "ma@x.com",
+            "x",
+            is_staff=True,
+            first_name="Marcella Oliveira Duarte",
+        )
+        PerfilStaff.objects.create(user=manual, papel=PerfilStaff.Papel.ESPECIALISTA)
+        outro_esp = User.objects.create_user(
+            "samuel", "sa@x.com", "x", is_staff=True, first_name="Samuel Octavio"
+        )
+        PerfilStaff.objects.create(user=outro_esp, papel=PerfilStaff.Papel.ESPECIALISTA)
+        pdv = Parceiro.objects.create(
+            codigo_pdv="DF1", nome="DIGITAL FIBRA", especialista=auto
+        )
+        outro = Parceiro.objects.create(
+            codigo_pdv="RC1", nome="RECORD", especialista=outro_esp
+        )
+        agora = timezone.now()
+        VendaOSAB.objects.create(
+            pedido="M1",
+            pdv_nome="DIGITAL FIBRA",
+            nm_gc="MARCELLA OLIVEIRA DUARTE",
+            data_abertura=agora,
+        )
+        VendaOSAB.objects.create(
+            pedido="M2",
+            pdv_nome="RECORD",
+            nm_gc="SAMUEL OCTAVIO",
+            data_abertura=agora,
+        )
+        movidos = associar_parceiros_ao_especialista(manual)
+        pdv.refresh_from_db()
+        outro.refresh_from_db()
+        self.assertEqual(movidos, ["DIGITAL FIBRA"])
+        self.assertEqual(pdv.especialista_id, manual.id)
+        self.assertEqual(outro.especialista_id, outro_esp.id)
+
     def test_preenche_gerencia_de_especialista_existente(self):
         from gestao.parceiros import aplicar_gerencias_osab, sincronizar_parceiros_osab
 
@@ -1658,6 +1708,22 @@ class GestaoEscopoTests(TestCase):
         self.assertContains(r, "CMGES")
         nomes = list(r.context["form"].fields["parceiro"].queryset.values_list("nome", flat=True))
         self.assertEqual(set(nomes), {"PDV Carla", "PDV Diego"})
+
+    def test_admin_parceiros_ve_todas_as_gerencias(self):
+        # placeholder to keep unique match
+        self.spec.perfil_staff.gerencia = "PP"
+        self.spec.perfil_staff.save(update_fields=["gerencia"])
+        self.outro.perfil_staff.gerencia = "CMGES"
+        self.outro.perfil_staff.save(update_fields=["gerencia"])
+        self.gestor.perfil_staff.gerencia = "PP"
+        self.gestor.perfil_staff.save(update_fields=["gerencia"])
+        self.client.force_login(self.gestor)
+        r = self.client.get(reverse("parceiros") + "?escopo=outros")
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "PDV Carla")
+        self.assertContains(r, "PDV Diego")
+        self.assertContains(r, "CMGES")
+        self.assertEqual(r.context["gestao_qtd_outros"], 2)
 
     def test_relatorios_osab_e_tarefas_seguem_a_gerencia(self):
         from gestao.models import HistoricoOSAB, LoteImportacao, RelatorioTarefa

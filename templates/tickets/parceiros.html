@@ -10,7 +10,7 @@
 <div class="hero">
   <div>
     <h1>Parceiros</h1>
-    <p>Com demandas no PDV: use <strong>Inativar</strong>. Sem demandas: pode <strong>Excluir</strong>. A OSAB vai para o <strong>Empresário</strong> (ou para o grupo em Destinatários, se não houver empresário).</p>
+    <p>Com demandas no PDV: use <strong>Inativar</strong>. Sem demandas: pode <strong>Excluir</strong>. O admin vê <strong>todas as gerências</strong> em Outros especialistas. A OSAB vai para o <strong>Empresário</strong> (ou para o grupo em Destinatários, se não houver empresário).</p>
   </div>
   <a class="btn btn-primary" href="{% url 'parceiro_novo' %}">Novo parceiro</a>
 </div>
@@ -22,6 +22,7 @@
           <th>Código</th>
           <th>Nome</th>
           <th>Especialista</th>
+          <th>Gerência</th>
           <th>Empresários</th>
           <th>Contatos</th>
           <th>Demandas</th>
@@ -40,6 +41,11 @@
             {% else %}
               —
             {% endif %}
+          </td>
+          <td>
+            {% if p.especialista and p.especialista.perfil_staff.gerencia %}
+              {{ p.especialista.perfil_staff.gerencia }}
+            {% else %}—{% endif %}
           </td>
           <td>
             {% for c in p.empresarios %}
@@ -83,7 +89,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="8">Nenhum parceiro neste escopo.</td></tr>
+        <tr><td colspan="9">Nenhum parceiro neste escopo.</td></tr>
         {% endfor %}
       </tbody>
     </table>

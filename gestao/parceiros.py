@@ -385,6 +385,32 @@ def _gerencia_do_gc(nm_gc: str, mapa: dict[str, str] | None = None) -> str:
     return mapa.get(normalizar_pdv(formatar_nome_pessoa(nm_gc)), "")
 
 
+def associar_parceiros_ao_especialista(user) -> list[str]:
+    """Liga ao especialista os PDVs da OSAB deste GC, se estiverem livres ou num homônimo."""
+    nome = formatar_nome_pessoa((user.get_full_name() or "").strip() or user.first_name)
+    if not nome or not getattr(user, "pk", None):
+        return []
+    chave = normalizar_pdv(nome)
+    gcs = mapa_gc_por_pdv()
+    movidos: list[str] = []
+    for p in Parceiro.objects.filter(ativo=True).select_related("especialista"):
+        if normalizar_pdv(gcs.get(p.nome.casefold(), "")) != chave:
+            continue
+        atual = p.especialista
+        if atual is not None:
+            if atual.id == user.id:
+                continue
+            atual_nome = formatar_nome_pessoa(
+                (atual.get_full_name() or "").strip() or atual.first_name
+            )
+            if normalizar_pdv(atual_nome) != chave:
+                continue
+        p.especialista = user
+        p.save(update_fields=["especialista"])
+        movidos.append(p.nome)
+    return movidos
+
+
 def _preencher_especialista_vazio(
     gcs: dict[str, str], cache_esp: dict, gerencias: dict[str, str] | None = None
 ) -> tuple[list[str], list[str]]:

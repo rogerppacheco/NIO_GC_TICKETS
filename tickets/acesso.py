@@ -143,6 +143,18 @@ def parceiros_para_destinatarios(user):
     return parceiros_gestao_ambos(user)
 
 
+def parceiros_para_cadastro(user, escopo: str = "meus"):
+    """Aba Parceiros: admin vê todas as gerências; especialista segue o recorte da Gestão."""
+    if eh_gestor(user):
+        qs = Parceiro.objects.filter(ativo=True).select_related(
+            "especialista", "especialista__perfil_staff"
+        )
+        if escopo == "outros":
+            return qs.exclude(especialista=user).order_by("nome")
+        return qs.filter(especialista=user).order_by("nome")
+    return parceiros_gestao(user, escopo)
+
+
 def pode_ver_ticket(user, ticket: Ticket) -> bool:
     if eh_gestor(user):
         return True
