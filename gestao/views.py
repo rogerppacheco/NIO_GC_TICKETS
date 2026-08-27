@@ -15,6 +15,7 @@ from tickets.acesso import (
     gestor_required,
     parceiros_gestao,
     parceiros_gestao_ambos,
+    pode_importar_bases,
     tem_acesso_interno,
     ve_relatorios_sem_pdv,
 )
@@ -123,6 +124,10 @@ def _pode_enviar(request) -> bool:
     return tem_acesso_interno(request.user) and syncwa_configurado()
 
 
+def _pode_importar(request) -> bool:
+    return pode_importar_bases(request.user)
+
+
 def _filtros_capilaridade(request) -> dict:
     src = request.POST if request.method == "POST" else request.GET
     return {
@@ -226,7 +231,7 @@ def _enviar_todos_pdv(request, enviar_fn, parceiros, titulo: str) -> None:
 @login_required
 def hub(request: HttpRequest) -> HttpResponse:
     ano, mes = periodo_ativo()
-    if request.method == "POST" and eh_gestor(request.user) and request.POST.get("action") == "periodo":
+    if request.method == "POST" and _pode_importar(request) and request.POST.get("action") == "periodo":
         form = PeriodoForm(request.POST)
         if form.is_valid():
             salvar_periodo(form.cleaned_data["ano"], form.cleaned_data["mes"])
@@ -256,7 +261,7 @@ def hub(request: HttpRequest) -> HttpResponse:
             "ano": ano,
             "mes": mes,
             "periodo_form": form,
-            "pode_importar": eh_gestor(request.user),
+            "pode_importar": _pode_importar(request),
             "osab": ultima_osab,
             "sysmap": ultima_sysmap,
             "fpd": ultima_fpd,
@@ -269,7 +274,7 @@ def hub(request: HttpRequest) -> HttpResponse:
 @login_required
 def importar_sysmap_view(request: HttpRequest) -> HttpResponse:
     form = None
-    if eh_gestor(request.user):
+    if _pode_importar(request):
         form = UploadBaseForm(request.POST or None, request.FILES or None, extensoes=[".xlsx", ".xls", ".xlsb"])
         if request.method == "POST" and form.is_valid():
             arquivo = form.cleaned_data["arquivo"]
@@ -315,7 +320,7 @@ def capilaridade_view(request: HttpRequest) -> HttpResponse:
     filtros = _filtros_capilaridade(request)
     if request.method == "POST":
         action = request.POST.get("action")
-        if action == "recalcular" and eh_gestor(request.user):
+        if action == "recalcular" and _pode_importar(request):
             resumo = persistir_capilaridade(ano, mes)
             messages.success(
                 request,
@@ -378,7 +383,7 @@ def capilaridade_view(request: HttpRequest) -> HttpResponse:
             "cargos": cargos,
             "situacoes": situacoes,
             "parceiros_filtro": _parceiros(request),
-            "pode_recalcular": eh_gestor(request.user),
+            "pode_recalcular": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
             "modo_teste": modo_teste_ativo(),
             "whatsapp_usuario": ""
@@ -397,11 +402,11 @@ def osab_view(request: HttpRequest) -> HttpResponse:
     )
     if request.method == "POST":
         action = request.POST.get("action") or ""
-        if action == "recalcular" and eh_gestor(request.user):
+        if action == "recalcular" and _pode_importar(request):
             resumo = calcular_osab(ano, mes)
             messages.success(request, f"OSAB recalculada: {resumo['pdvs']} PDV(s).")
             return _voltar(request, "gestao_osab")
-        if action == "cadastrar_parceiros" and eh_gestor(request.user):
+        if action == "cadastrar_parceiros" and _pode_importar(request):
             cad = sincronizar_parceiros_osab()
             novos = cad["criados"]
             if novos:
@@ -418,7 +423,7 @@ def osab_view(request: HttpRequest) -> HttpResponse:
         if action == "enviar_todos" and _pode_enviar(request):
             _enviar_todos_pdv(request, enviar_osab_pdv, visiveis, "OSAB (todos)")
             return _voltar(request, "gestao_osab")
-        if eh_gestor(request.user) and request.FILES:
+        if _pode_importar(request) and request.FILES:
             form = UploadBaseForm(request.POST, request.FILES)
             if form.is_valid():
                 arquivo = form.cleaned_data["arquivo"]
@@ -444,13 +449,13 @@ def osab_view(request: HttpRequest) -> HttpResponse:
         request,
         "gestao/osab.html",
         {
-            "form": UploadBaseForm() if eh_gestor(request.user) else None,
+            "form": UploadBaseForm() if _pode_importar(request) else None,
             "ano": ano,
             "mes": mes,
             "total_vendas": VendaOSAB.objects.filter(parceiro__in=visiveis).count(),
             "historico": historico,
-            "cadastro_osab": classificar_parceiros_osab() if eh_gestor(request.user) else None,
-            "pode_importar": eh_gestor(request.user),
+            "cadastro_osab": classificar_parceiros_osab() if _pode_importar(request) else None,
+            "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
         },
     )
@@ -470,7 +475,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
 
     if request.method == "POST":
         action = request.POST.get("action") or ""
-        if action == "importar_gdp" and eh_gestor(request.user):
+        if action == "importar_gdp" and _pode_importar(request):
             form_gdp = GdpImportForm(request.POST, request.FILES)
             if form_gdp.is_valid():
                 arquivos = []
@@ -503,7 +508,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             else:
                 messages.error(request, "Envie o GDP B2C e/ou B2B em .xlsx.")
             return _voltar(request, "gestao_resultados")
-        if action == "add_praca_btu" and eh_gestor(request.user):
+        if action == "add_praca_btu" and _pode_importar(request):
             form_btu = PracaBTUForm(request.POST)
             if form_btu.is_valid():
                 try:
@@ -514,7 +519,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             else:
                 messages.error(request, "Informe o município BTU.")
             return _voltar(request, "gestao_resultados")
-        if action == "del_praca_btu" and eh_gestor(request.user):
+        if action == "del_praca_btu" and _pode_importar(request):
             pk = request.POST.get("praca")
             apagada, _ = PracaBTU.objects.filter(pk=pk).delete()
             if apagada:
@@ -591,8 +596,8 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             "ano": ano,
             "mes": mes,
             "form": form,
-            "form_btu": form_btu if eh_gestor(request.user) else None,
-            "form_gdp": form_gdp if eh_gestor(request.user) else None,
+            "form_btu": form_btu if _pode_importar(request) else None,
+            "form_gdp": form_gdp if _pode_importar(request) else None,
             "acumulado": acumulado,
             "msg_acumulado": mensagem_acumulado_consolidada(acumulado),
             "ranking": ranking,
@@ -602,12 +607,12 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             "pracas_btu_mg": pracas_ativas.filter(uf="MG").count(),
             "ultimo_gdp": LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.GDP).first(),
             "pode_enviar": _pode_enviar(request),
-            "pode_editar": eh_gestor(request.user),
+            "pode_editar": _pode_importar(request),
         },
     )
 
 
-@gestor_required
+@login_required
 def importar_fpd_view(request: HttpRequest) -> HttpResponse:
     form = UploadBaseForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
@@ -648,9 +653,9 @@ def fpd_view(request: HttpRequest) -> HttpResponse:
                 "FPD (todos)",
             )
             return _voltar(request, "gestao_fpd")
-        if eh_gestor(request.user) and request.FILES:
+        if _pode_importar(request) and request.FILES:
             return importar_fpd_view(request)
-    return _render_fpd(request, UploadBaseForm() if eh_gestor(request.user) else None)
+    return _render_fpd(request, UploadBaseForm() if _pode_importar(request) else None)
 
 
 def _render_fpd(request, form):
@@ -659,11 +664,11 @@ def _render_fpd(request, form):
     return render(
         request,
         "gestao/fpd.html",
-        {"form": form, "relatorios": relatorios, "pode_importar": eh_gestor(request.user), "pode_enviar": _pode_enviar(request)},
+        {"form": form, "relatorios": relatorios, "pode_importar": _pode_importar(request), "pode_enviar": _pode_enviar(request)},
     )
 
 
-@gestor_required
+@login_required
 def importar_churn_view(request: HttpRequest) -> HttpResponse:
     form = UploadBaseForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
@@ -701,12 +706,12 @@ def churn_view(request: HttpRequest) -> HttpResponse:
             "Churn (todos)",
         )
         return _voltar(request, "gestao_churn")
-    if request.method == "POST" and eh_gestor(request.user) and request.FILES:
+    if request.method == "POST" and _pode_importar(request) and request.FILES:
         return importar_churn_view(request)
-    return _render_churn(request, UploadBaseForm() if eh_gestor(request.user) else None)
+    return _render_churn(request, UploadBaseForm() if _pode_importar(request) else None)
 
 
-@gestor_required
+@login_required
 def gross_salvar(request: HttpRequest) -> HttpResponse:
     form = GrossForm(request.POST)
     if form.is_valid():
@@ -742,17 +747,17 @@ def _render_churn(request, form):
         "gestao/churn.html",
         {
             "form": form,
-            "gross_form": GrossForm() if eh_gestor(request.user) else None,
+            "gross_form": GrossForm() if _pode_importar(request) else None,
             "historico": historico,
             "mensagens": mensagens,
             "gross": GrossMensal.objects.select_related("parceiro").filter(parceiro__in=visiveis).order_by("-anomes")[:40],
-            "pode_importar": eh_gestor(request.user),
+            "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
         },
     )
 
 
-@gestor_required
+@login_required
 def importar_comissionamento_view(request: HttpRequest) -> HttpResponse:
     form = UploadBaseForm(request.POST or None, request.FILES or None)
     enviar = bool(request.POST.get("enviar_whatsapp"))
@@ -806,10 +811,10 @@ def comissionamento_view(request: HttpRequest) -> HttpResponse:
                     ),
                 )
             return _voltar(request, "gestao_comissionamento")
-        if eh_gestor(request.user) and request.FILES:
+        if _pode_importar(request) and request.FILES:
             return importar_comissionamento_view(request)
     return _render_comissionamento(
-        request, UploadBaseForm() if eh_gestor(request.user) else None
+        request, UploadBaseForm() if _pode_importar(request) else None
     )
 
 
@@ -830,14 +835,14 @@ def _render_comissionamento(request, form):
             "relatorios": relatorios,
             "lotes": lotes,
             "mapa_razoes": mapa_pdv_razoes(),
-            "pode_importar": eh_gestor(request.user),
+            "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
             "syncwa_ok": syncwa_configurado(),
         },
     )
 
 
-@gestor_required
+@login_required
 def importar_tarefas_view(request: HttpRequest) -> HttpResponse:
     form = UploadBaseForm(request.POST or None, request.FILES or None)
     enviar = bool(request.POST.get("enviar_whatsapp"))
@@ -895,9 +900,9 @@ def tarefas_view(request: HttpRequest) -> HttpResponse:
                 enviar_tarefas_todos(_parceiros(request), request.user),
             )
             return _voltar(request, "gestao_tarefas")
-        if eh_gestor(request.user) and request.FILES:
+        if _pode_importar(request) and request.FILES:
             return importar_tarefas_view(request)
-    return _render_tarefas(request, UploadBaseForm() if eh_gestor(request.user) else None)
+    return _render_tarefas(request, UploadBaseForm() if _pode_importar(request) else None)
 
 
 def _render_tarefas(request, form):
@@ -913,14 +918,14 @@ def _render_tarefas(request, form):
             "form": form,
             "relatorios": relatorios,
             "lotes": lotes,
-            "pode_importar": eh_gestor(request.user),
+            "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
             "syncwa_ok": syncwa_configurado(),
         },
     )
 
 
-@gestor_required
+@login_required
 def importar_venda_indevida_view(request: HttpRequest) -> HttpResponse:
     form = UploadBaseForm(request.POST or None, request.FILES or None)
     enviar = bool(request.POST.get("enviar_whatsapp"))
@@ -971,10 +976,10 @@ def venda_indevida_view(request: HttpRequest) -> HttpResponse:
                 ),
             )
             return _voltar(request, "gestao_venda_indevida")
-        if eh_gestor(request.user) and request.FILES:
+        if _pode_importar(request) and request.FILES:
             return importar_venda_indevida_view(request)
     return _render_venda_indevida(
-        request, UploadBaseForm() if eh_gestor(request.user) else None
+        request, UploadBaseForm() if _pode_importar(request) else None
     )
 
 
@@ -991,14 +996,14 @@ def _render_venda_indevida(request, form):
             "form": form,
             "relatorios": relatorios,
             "lotes": lotes,
-            "pode_importar": eh_gestor(request.user),
+            "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
             "syncwa_ok": syncwa_configurado(),
         },
     )
 
 
-@gestor_required
+@login_required
 def importar_recompra_view(request: HttpRequest) -> HttpResponse:
     form = UploadBaseForm(request.POST or None, request.FILES or None)
     enviar = bool(request.POST.get("enviar_whatsapp"))
@@ -1049,9 +1054,9 @@ def recompra_view(request: HttpRequest) -> HttpResponse:
                 ),
             )
             return _voltar(request, "gestao_recompra")
-        if eh_gestor(request.user) and request.FILES:
+        if _pode_importar(request) and request.FILES:
             return importar_recompra_view(request)
-    return _render_recompra(request, UploadBaseForm() if eh_gestor(request.user) else None)
+    return _render_recompra(request, UploadBaseForm() if _pode_importar(request) else None)
 
 
 def _render_recompra(request, form):
@@ -1067,7 +1072,7 @@ def _render_recompra(request, form):
             "form": form,
             "relatorios": relatorios,
             "lotes": lotes,
-            "pode_importar": eh_gestor(request.user),
+            "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
             "syncwa_ok": syncwa_configurado(),
         },
@@ -1078,13 +1083,13 @@ def _render_recompra(request, form):
 def configs_view(request: HttpRequest) -> HttpResponse:
     ano, mes = periodo_ativo()
     parceiros = list(_parceiros(request))
-    form_import = UploadBaseForm() if eh_gestor(request.user) else None
+    form_import = UploadBaseForm() if _pode_importar(request) else None
     if request.method == "POST":
-        if not eh_gestor(request.user):
-            messages.error(request, "Só o admin altera metas.")
-            return _voltar(request, "gestao_configs")
         action = request.POST.get("action") or "salvar"
         if action == "importar_metas":
+            if not _pode_importar(request):
+                messages.error(request, "Sem permissão para importar metas.")
+                return _voltar(request, "gestao_configs")
             form_import = UploadBaseForm(
                 request.POST, request.FILES, extensoes=[".xlsx", ".xlsb", ".xls"]
             )
@@ -1113,6 +1118,9 @@ def configs_view(request: HttpRequest) -> HttpResponse:
                     messages.error(request, f"Falha ao importar metas: {exc}")
             else:
                 messages.error(request, "Selecione o acompanhamento semanal (.xlsb ou .xlsx).")
+            return _voltar(request, "gestao_configs")
+        if not eh_gestor(request.user):
+            messages.error(request, "Só o admin altera metas, política e calendário.")
             return _voltar(request, "gestao_configs")
         if action == "salvar_politica":
             politica = PoliticaComissao.vigente()

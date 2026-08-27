@@ -6,7 +6,7 @@
 <div class="hero">
   <div>
     <h1>Metas {{ mes|stringformat:"02d" }}/{{ ano }}</h1>
-    <p>Capilaridade (vendedores) e OSAB (VL/Gross/comissões) por parceiro.{% if not pode_editar %} Somente o admin altera.{% endif %}</p>
+    <p>Capilaridade (vendedores) e OSAB (VL/Gross/comissões) por parceiro.{% if not pode_editar %} A grade, a política PAP e o calendário só o admin altera; a importação da base está liberada.{% endif %}</p>
   </div>
 </div>
 {% if form_import %}

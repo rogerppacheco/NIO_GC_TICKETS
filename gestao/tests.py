@@ -716,6 +716,30 @@ class GestaoViewsTests(TestCase):
         self.assertEqual(self.client.get(reverse("gestao_whatsapp")).status_code, 404)
         self.assertEqual(self.client.get(reverse("gestao_destinatarios")).status_code, 404)
 
+    def test_especialista_importa_bases(self):
+        from gestao.periodo import periodo_ativo
+
+        User = get_user_model()
+        spec = User.objects.create_user("specimp", "si@x.com", "x", is_staff=True)
+        PerfilStaff.objects.create(user=spec, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self.client.force_login(spec)
+        self.assertContains(self.client.get(reverse("gestao_osab")), "Importar OSAB")
+        self.assertContains(self.client.get(reverse("gestao_sysmap")), "Importar Sysmap")
+        self.assertContains(self.client.get(reverse("gestao_fpd")), "Importar FPD")
+        self.assertContains(self.client.get(reverse("gestao_tarefas")), "Importar tarefas")
+        self.assertContains(
+            self.client.get(reverse("gestao_configs")), "Importar acompanhamento semanal"
+        )
+        r = self.client.post(
+            reverse("gestao_hub"), {"action": "periodo", "ano": 2026, "mes": 7}
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(periodo_ativo(), (2026, 7))
+        bloqueado = self.client.post(
+            reverse("gestao_configs"), {"action": "salvar_politica"}
+        )
+        self.assertEqual(bloqueado.status_code, 302)
+
 
 class SyncWAClientTests(TestCase):
     def test_normalizar_numero_br(self):

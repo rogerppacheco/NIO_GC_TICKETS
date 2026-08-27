@@ -94,6 +94,11 @@ def ve_relatorios_sem_pdv(user) -> bool:
     return eh_gestor(user) and not gerencia_de(user)
 
 
+def pode_importar_bases(user) -> bool:
+    """Gestor e especialista importam OSAB e as demais bases da Gestão."""
+    return tem_acesso_interno(user)
+
+
 def parceiros_gestao(user, escopo: str = "meus"):
     """Abas de Gestão: meus PDVs vs PDVs de outros da mesma gerência."""
     from django.db.models import Q
