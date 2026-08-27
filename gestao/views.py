@@ -8,11 +8,16 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
 from django.db.models import Count, Max, Q
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
 
 from tickets.acesso import (
+    GERENCIA_SESSAO,
+    GERENCIA_TODAS,
     eh_gestor,
     escopo_gestao,
     gestor_required,
+    listar_gerencias,
     parceiros_gestao,
     parceiros_gestao_ambos,
     parceiros_para_destinatarios,
@@ -227,6 +232,27 @@ def _enviar_todos_pdv(request, enviar_fn, parceiros, titulo: str) -> None:
         acc.ignorados += parte.ignorados
         acc.detalhes.extend(parte.detalhes[:1])
     _flash_resumo(request, titulo, acc)
+
+
+@gestor_required
+@require_POST
+def gerencia_ativa_view(request: HttpRequest) -> HttpResponse:
+    """Troca a gerência das bases da Gestão só nesta sessão (não altera o cadastro)."""
+    valor = (request.POST.get("gerencia") or "").strip()
+    if valor == GERENCIA_TODAS:
+        request.session[GERENCIA_SESSAO] = GERENCIA_TODAS
+    else:
+        nomes = {g.casefold(): g for g in listar_gerencias()}
+        if valor.casefold() in nomes:
+            request.session[GERENCIA_SESSAO] = nomes[valor.casefold()]
+        else:
+            request.session.pop(GERENCIA_SESSAO, None)
+    nxt = request.POST.get("next") or reverse("gestao_hub")
+    if not url_has_allowed_host_and_scheme(
+        nxt, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        nxt = reverse("gestao_hub")
+    return redirect(nxt)
 
 
 @login_required

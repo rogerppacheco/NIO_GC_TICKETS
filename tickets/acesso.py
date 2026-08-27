@@ -63,6 +63,51 @@ def escopo_gestao(request) -> str:
     return valor if valor in {"meus", "outros"} else "meus"
 
 
+GERENCIA_SESSAO = "gestao_gerencia"
+GERENCIA_TODAS = "__todas__"
+
+
+def listar_gerencias() -> list[str]:
+    """Gerências conhecidas (perfil da equipe + coluna GERENCIA da OSAB)."""
+    vistos: dict[str, str] = {}
+
+    def _add(valor: str) -> None:
+        texto = (valor or "").strip()
+        if texto:
+            vistos.setdefault(texto.casefold(), texto)
+
+    for g in PerfilStaff.objects.exclude(gerencia="").values_list("gerencia", flat=True):
+        _add(g)
+    from gestao.models import VendaOSAB
+
+    for g in (
+        VendaOSAB.objects.exclude(gerencia="").values_list("gerencia", flat=True).distinct()
+    ):
+        _add(g)
+    return sorted(vistos.values(), key=str.casefold)
+
+
+def aplicar_gerencia_sessao(request) -> None:
+    """Admin pode recortar as bases da Gestão sem mudar o cadastro do perfil."""
+    user = getattr(request, "user", None)
+    if not user or not getattr(user, "is_authenticated", False) or not eh_gestor(user):
+        return
+    if GERENCIA_SESSAO not in request.session:
+        return
+    bruto = request.session.get(GERENCIA_SESSAO)
+    if bruto == GERENCIA_TODAS:
+        user._gerencia_cache = ""
+        return
+    user._gerencia_cache = (bruto or "").strip()
+
+
+def gerencia_seletor_valor(request) -> str:
+    if getattr(request, "session", None) and request.session.get(GERENCIA_SESSAO) == GERENCIA_TODAS:
+        return GERENCIA_TODAS
+    user = getattr(request, "user", None)
+    return gerencia_de(user) or GERENCIA_TODAS
+
+
 def gerencia_de(user) -> str:
     """Gerência do perfil ou, no especialista, a mais frequente na OSAB dos PDVs dele."""
     cached = getattr(user, "_gerencia_cache", None)

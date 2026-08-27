@@ -38,8 +38,17 @@ def nav_counts(request):
     ctx["gestao_escopo"] = escopo_gestao(request)
     user = getattr(request, "user", None)
     if user and user.is_authenticated and tem_acesso_interno(user):
-        from .acesso import parceiros_gestao
+        from .acesso import (
+            GERENCIA_TODAS,
+            gerencia_seletor_valor,
+            listar_gerencias,
+            parceiros_gestao,
+        )
 
         ctx["gestao_qtd_meus"] = parceiros_gestao(user, "meus").count()
         ctx["gestao_qtd_outros"] = parceiros_gestao(user, "outros").count()
+        if eh_gestor(user):
+            ctx["gestao_gerencias"] = listar_gerencias()
+            ctx["gestao_gerencia_sel"] = gerencia_seletor_valor(request)
+            ctx["gestao_gerencia_todas"] = GERENCIA_TODAS
     return ctx

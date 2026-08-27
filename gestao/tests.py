@@ -1693,6 +1693,44 @@ class GestaoEscopoTests(TestCase):
         self.assertContains(outros, "PDV Carla")
         self.assertNotContains(outros, "PDV Diego")
 
+    def test_admin_troca_gerencia_das_bases(self):
+        self.spec.perfil_staff.gerencia = "PP"
+        self.spec.perfil_staff.save(update_fields=["gerencia"])
+        self.outro.perfil_staff.gerencia = "CMGES"
+        self.outro.perfil_staff.save(update_fields=["gerencia"])
+        self.gestor.perfil_staff.gerencia = "PP"
+        self.gestor.perfil_staff.save(update_fields=["gerencia"])
+        self.client.force_login(self.gestor)
+        padrao = self.client.get(reverse("gestao_capilaridade") + "?escopo=outros")
+        self.assertContains(padrao, "PDV Carla")
+        self.assertNotContains(padrao, "PDV Diego")
+        r = self.client.post(
+            reverse("gestao_gerencia"),
+            {
+                "gerencia": "CMGES",
+                "next": reverse("gestao_capilaridade") + "?escopo=outros",
+            },
+        )
+        self.assertEqual(r.status_code, 302)
+        cmges = self.client.get(reverse("gestao_capilaridade") + "?escopo=outros")
+        self.assertContains(cmges, "PDV Diego")
+        self.assertNotContains(cmges, "PDV Carla")
+        self.client.post(
+            reverse("gestao_gerencia"),
+            {
+                "gerencia": "__todas__",
+                "next": reverse("gestao_capilaridade") + "?escopo=outros",
+            },
+        )
+        todas = self.client.get(reverse("gestao_capilaridade") + "?escopo=outros")
+        self.assertContains(todas, "PDV Carla")
+        self.assertContains(todas, "PDV Diego")
+
+    def test_especialista_nao_troca_gerencia(self):
+        self.client.force_login(self.spec)
+        r = self.client.post(reverse("gestao_gerencia"), {"gerencia": "CMGES"})
+        self.assertEqual(r.status_code, 404)
+
     def test_admin_destinatarios_ve_todas_as_gerencias(self):
         self.spec.perfil_staff.gerencia = "PP"
         self.spec.perfil_staff.save(update_fields=["gerencia"])
@@ -1710,7 +1748,6 @@ class GestaoEscopoTests(TestCase):
         self.assertEqual(set(nomes), {"PDV Carla", "PDV Diego"})
 
     def test_admin_parceiros_ve_todas_as_gerencias(self):
-        # placeholder to keep unique match
         self.spec.perfil_staff.gerencia = "PP"
         self.spec.perfil_staff.save(update_fields=["gerencia"])
         self.outro.perfil_staff.gerencia = "CMGES"

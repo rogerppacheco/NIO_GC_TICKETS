@@ -17,5 +17,20 @@
     <a href="{% url 'gestao_destinatarios' %}" {% if 'destinatario' in request.resolver_match.url_name %}class="is-on"{% endif %}>Destinatários</a>
   {% endif %}
   <a href="{% url 'gestao_envios' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_envios' %}class="is-on"{% endif %}>Envios</a>
+  {% if eh_gestor %}
+  <form method="post" action="{% url 'gestao_gerencia' %}" class="gestao-gerencia">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <label>
+      <span>Gerência</span>
+      <select name="gerencia" class="fila-pick" onchange="this.form.submit()" aria-label="Gerência das bases">
+        <option value="{{ gestao_gerencia_todas|default:'__todas__' }}" {% if gestao_gerencia_sel == gestao_gerencia_todas %}selected{% endif %}>Todas</option>
+        {% for g in gestao_gerencias %}
+        <option value="{{ g }}" {% if gestao_gerencia_sel == g %}selected{% endif %}>{{ g }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </form>
+  {% endif %}
   {% endwith %}
 </nav>

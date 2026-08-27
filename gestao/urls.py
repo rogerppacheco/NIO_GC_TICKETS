@@ -4,6 +4,7 @@ from . import views, views_whatsapp
 
 urlpatterns = [
     path("", views.hub, name="gestao_hub"),
+    path("gerencia/", views.gerencia_ativa_view, name="gestao_gerencia"),
     path("sysmap/", views.importar_sysmap_view, name="gestao_sysmap"),
     path("osab/", views.osab_view, name="gestao_osab"),
     path("resultados/", views.resultados_view, name="gestao_resultados"),

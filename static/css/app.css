@@ -64,7 +64,7 @@ a:hover { text-decoration: underline; }
 }
 .topbar-gestao .gestao-nav { margin: 0; }
 .gestao-nav {
-  display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0 0 1.1rem;
+  display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0 0 1.1rem; align-items: center;
 }
 .gestao-nav a {
   border: 1px solid var(--line); background: #fff; color: var(--muted);
@@ -74,6 +74,12 @@ a:hover { text-decoration: underline; }
   color: var(--ink); border-color: var(--brand); text-decoration: none;
 }
 .gestao-nav a.is-on { background: #eef8f5; }
+.gestao-gerencia { margin-left: auto; }
+.gestao-gerencia label {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.82rem; font-weight: 700; color: var(--muted);
+}
+.gestao-gerencia select { min-width: 8.5rem; }
 .gestao-escopo {
   display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0 0 1.1rem;
 }
