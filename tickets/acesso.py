@@ -64,21 +64,69 @@ def escopo_gestao(request) -> str:
 
 
 def gerencia_de(user) -> str:
+    """Gerência do perfil ou, no especialista, a mais frequente na OSAB dos PDVs dele."""
+    cached = getattr(user, "_gerencia_cache", None)
+    if cached is not None:
+        return cached
     perfil = perfil_de(user)
-    return (perfil.gerencia or "").strip() if perfil else ""
+    valor = (perfil.gerencia or "").strip() if perfil else ""
+    if not valor and user and not eh_gestor(user):
+        from django.db.models import Count
+
+        from gestao.models import VendaOSAB
+
+        row = (
+            VendaOSAB.objects.filter(parceiro__especialista=user)
+            .exclude(gerencia="")
+            .values("gerencia")
+            .annotate(n=Count("id"))
+            .order_by("-n")
+            .first()
+        )
+        valor = (row["gerencia"] if row else "") or ""
+    if user is not None:
+        user._gerencia_cache = valor
+    return valor
+
+
+def ve_relatorios_sem_pdv(user) -> bool:
+    """Relatório consolidado (sem PDV) mistura gerências: só admin sem gerência vê."""
+    return eh_gestor(user) and not gerencia_de(user)
 
 
 def parceiros_gestao(user, escopo: str = "meus"):
-    """Abas de Gestão: meus PDVs vs PDVs de outros especialistas da mesma gerência."""
+    """Abas de Gestão: meus PDVs vs PDVs de outros da mesma gerência."""
+    from django.db.models import Q
+
     qs = Parceiro.objects.filter(ativo=True).select_related(
         "especialista", "especialista__perfil_staff"
     )
     gerencia = gerencia_de(user)
     if gerencia:
-        qs = qs.filter(especialista__perfil_staff__gerencia__iexact=gerencia)
+        from gestao.models import VendaOSAB
+
+        ids_osab = (
+            VendaOSAB.objects.filter(gerencia__iexact=gerencia)
+            .exclude(parceiro_id=None)
+            .values("parceiro_id")
+        )
+        qs = qs.filter(
+            Q(especialista__perfil_staff__gerencia__iexact=gerencia) | Q(id__in=ids_osab)
+        )
+    elif not eh_gestor(user):
+        if escopo == "outros":
+            return qs.none()
+        return qs.filter(especialista=user).order_by("nome")
     if escopo == "outros":
         return qs.exclude(especialista=user).order_by("nome")
     return qs.filter(especialista=user).order_by("nome")
+
+
+def parceiros_gestao_ambos(user):
+    """Meus + outros da mesma gerência (cadastros que não usam aba)."""
+    return (
+        parceiros_gestao(user, "meus") | parceiros_gestao(user, "outros")
+    ).distinct().order_by("nome")
 
 
 def pode_ver_ticket(user, ticket: Ticket) -> bool:

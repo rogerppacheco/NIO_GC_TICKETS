@@ -420,11 +420,14 @@ def _contar_cartao(vendas: list) -> int:
     return sum(1 for v in vendas if _eh_cartao(getattr(v, "meio_pagamento", "") or ""))
 
 
-def relatorios_osab_atuais(parceiros, limite: int = 80):
+def relatorios_osab_atuais(parceiros, limite: int = 80, incluir_sem_pdv: bool = False):
     """Um relatório por PDV: o mais recente. Evita misturar o snapshot de ontem com o de hoje."""
+    filtro = Q(parceiro__in=parceiros)
+    if incluir_sem_pdv:
+        filtro |= Q(parceiro__isnull=True)
     qs = (
         HistoricoOSAB.objects.select_related("parceiro", "parceiro__especialista")
-        .filter(Q(parceiro__in=parceiros) | Q(parceiro__isnull=True))
+        .filter(filtro)
         .order_by("-data_processamento")
     )
     vistos: set = set()

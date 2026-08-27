@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Especialistas · NIO GC Tickets{% endblock %}
+{% block main_class %}wrap wrap-wide{% endblock %}
 {% block content %}
 <div class="hero">
   <div>
@@ -9,7 +10,7 @@
   <a class="btn btn-primary" href="{% url 'especialista_novo' %}">Novo especialista</a>
 </div>
 <div class="panel">
-  <div class="table-scroll">
+  <div class="table-scroll table-scroll-wide">
     <table class="table">
       <thead>
         <tr>

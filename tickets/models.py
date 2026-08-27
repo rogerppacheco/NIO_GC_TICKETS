@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import unicodedata
 from decimal import Decimal
 
 from django.conf import settings
@@ -49,13 +50,21 @@ class Parceiro(models.Model):
 class ContatoParceiro(models.Model):
     """Pessoa autorizada a abrir demandas em nome do PDV."""
 
+    class Cargo(models.TextChoices):
+        EMPRESARIO = "Empresário", "Empresário"
+        BACKOFFICE = "Backoffice", "Backoffice"
+
     parceiro = models.ForeignKey(
         Parceiro, on_delete=models.CASCADE, related_name="contatos"
     )
     nome = models.CharField(max_length=120)
     email = models.EmailField(blank=True)
     telefone = models.CharField("WhatsApp / telefone", max_length=40, blank=True)
-    cargo = models.CharField(max_length=80, blank=True)
+    cargo = models.CharField(
+        max_length=80,
+        blank=True,
+        choices=Cargo.choices,
+    )
     token_acesso = models.CharField(
         max_length=64,
         blank=True,
@@ -78,6 +87,11 @@ class ContatoParceiro(models.Model):
 
     def __str__(self) -> str:
         return f"{self.nome} ({self.parceiro.codigo_pdv})"
+
+    def eh_empresario(self) -> bool:
+        texto = unicodedata.normalize("NFKD", self.cargo or "")
+        texto = "".join(c for c in texto if not unicodedata.combining(c)).casefold().strip()
+        return texto == "empresario"
 
 
 class TipoDemanda(models.TextChoices):

@@ -5,7 +5,7 @@
 <div class="hero">
   <div>
     <h1>OSAB</h1>
-    <p>Base de vendas do período {{ mes|stringformat:"02d" }}/{{ ano }}. {{ total_vendas }} pedido(s) no banco.</p>
+    <p>Base de vendas do período {{ mes|stringformat:"02d" }}/{{ ano }}. {{ total_vendas }} pedido(s) no banco. O WhatsApp da OSAB vai para o <strong>Empresário</strong> do PDV e para o especialista (não para grupos nem Backoffice). Nos seus próprios PDVs, não envia para o seu número.</p>
   </div>
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
     {% if pode_importar %}

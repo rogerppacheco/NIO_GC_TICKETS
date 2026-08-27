@@ -4,11 +4,18 @@
 <div class="hero">
   <div>
     <h1>Destinatários WhatsApp</h1>
-    <p>Cadastre o JID (número com DDI ou grupo @g.us). Sem JID a Evolution não envia.</p>
+    <p>Cadastre o JID (número com DDI ou grupo @g.us). Sem JID a Evolution não envia. O botão abaixo cria o número do especialista em cada PDV (não apaga grupos e não cria número nos PDVs do admin). A OSAB não usa esta lista: vai para o Empresário e para o especialista do PDV.</p>
   </div>
-  {% if syncwa_ok %}
-  <a class="btn btn-primary" href="{% url 'gestao_destinatarios' %}?grupos=1">Listar grupos WhatsApp</a>
-  {% endif %}
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    <form method="post">
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+      <input type="hidden" name="action" value="sincronizar_especialistas">
+      <button class="btn btn-primary" type="submit">Criar números dos especialistas</button>
+    </form>
+    {% if syncwa_ok %}
+    <a class="btn btn-primary" href="{% url 'gestao_destinatarios' %}?grupos=1">Listar grupos WhatsApp</a>
+    {% endif %}
+  </div>
 </div>
 
 {% if not syncwa_ok %}
@@ -138,6 +145,7 @@
         <p class="help" style="color:var(--danger)">Evolution não configurada — não dá para listar grupos ainda.</p>
       {% endif %}
       <p class="help">4. Número individual: DDI + DDD + número, ex. <code>5531999999999</code>.</p>
+      <p class="help">5. <strong>Criar números dos especialistas</strong> gera um destinatário individual por PDV com o WhatsApp do especialista responsável. Os grupos já cadastrados permanecem.</p>
       <p style="margin-top:0.8rem"><a class="btn btn-secondary" href="{% url 'gestao_envios' %}">Ir para Envios</a></p>
     </div>
   </div>
@@ -149,6 +157,7 @@
       <thead>
         <tr>
           <th>PDV</th>
+          <th>Especialista</th>
           <th>Nome</th>
           <th>JID</th>
           <th>Tipo</th>
@@ -161,6 +170,11 @@
         {% for d in destinatarios %}
         <tr {% if not d.ativo %}style="opacity:0.6"{% endif %}>
           <td>{{ d.parceiro.nome }}</td>
+          <td>
+            {% if d.parceiro.especialista %}
+              {{ d.parceiro.especialista.get_full_name|default:d.parceiro.especialista.username }}
+            {% else %}—{% endif %}
+          </td>
           <td>{{ d.nome }}</td>
           <td class="mono">{{ d.jid }}</td>
           <td>{{ d.get_tipo_display }}</td>
@@ -186,7 +200,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="7">Nenhum destinatário ainda.</td></tr>
+        <tr><td colspan="8">Nenhum destinatário ainda.</td></tr>
         {% endfor %}
       </tbody>
     </table>

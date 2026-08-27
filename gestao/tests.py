@@ -964,6 +964,148 @@ class DestinatarioEnvioTests(TestCase):
         self.assertTrue(dest.envio_capilaridade)
         self.assertFalse(dest.envio_fpd)
 
+    def test_sincroniza_whatsapp_do_especialista_em_massa(self):
+        from gestao.models import Destinatario
+
+        User = get_user_model()
+        spec = User.objects.create_user(
+            "ana.gc", "ana@x.com", "x", is_staff=True, first_name="Ana GC"
+        )
+        PerfilStaff.objects.create(
+            user=spec, papel=PerfilStaff.Papel.ESPECIALISTA, whatsapp="31988887777"
+        )
+        self.pdv.especialista = spec
+        self.pdv.save(update_fields=["especialista"])
+        grupo = Destinatario.objects.create(
+            parceiro=self.pdv,
+            nome="Grupo PDV",
+            jid="120363grupo@g.us",
+            tipo=Destinatario.TipoDestino.GRUPO,
+            envio_capilaridade=True,
+        )
+        r = self.client.post(
+            reverse("gestao_destinatarios"),
+            {"action": "sincronizar_especialistas"},
+        )
+        self.assertEqual(r.status_code, 302)
+        dest = Destinatario.objects.get(
+            parceiro=self.pdv, tipo=Destinatario.TipoDestino.INDIVIDUAL
+        )
+        self.assertEqual(dest.jid, "5531988887777")
+        self.assertTrue(dest.nome.startswith("Especialista:"))
+        self.assertFalse(dest.envio_osab)
+        self.assertTrue(dest.envio_tarefas)
+        self.assertTrue(Destinatario.objects.filter(pk=grupo.pk).exists())
+        r2 = self.client.post(
+            reverse("gestao_destinatarios"),
+            {"action": "sincronizar_especialistas"},
+        )
+        self.assertEqual(r2.status_code, 302)
+        self.assertEqual(
+            Destinatario.objects.filter(
+                parceiro=self.pdv, tipo=Destinatario.TipoDestino.INDIVIDUAL
+            ).count(),
+            1,
+        )
+        spec.perfil_staff.whatsapp = "5531911112222"
+        spec.perfil_staff.save(update_fields=["whatsapp"])
+        self.client.post(
+            reverse("gestao_destinatarios"),
+            {"action": "sincronizar_especialistas"},
+        )
+        dest.refresh_from_db()
+        self.assertEqual(dest.jid, "5531911112222")
+
+    def test_sincroniza_nao_cria_dest_do_admin_e_remove_o_existente(self):
+        from gestao.models import Destinatario
+
+        self.pdv.especialista = self.gestor
+        self.pdv.save(update_fields=["especialista"])
+        self.gestor.perfil_staff.whatsapp = "21979630377"
+        self.gestor.perfil_staff.save(update_fields=["whatsapp"])
+        Destinatario.objects.create(
+            parceiro=self.pdv,
+            nome="Especialista: Rogério Pereira Pacheco",
+            jid="5521979630377",
+            tipo=Destinatario.TipoDestino.INDIVIDUAL,
+            envio_osab=True,
+        )
+        grupo = Destinatario.objects.create(
+            parceiro=self.pdv,
+            nome="Grupo PDV",
+            jid="120363grupo@g.us",
+            tipo=Destinatario.TipoDestino.GRUPO,
+        )
+        r = self.client.post(
+            reverse("gestao_destinatarios"),
+            {"action": "sincronizar_especialistas"},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertFalse(
+            Destinatario.objects.filter(
+                parceiro=self.pdv, tipo=Destinatario.TipoDestino.INDIVIDUAL
+            ).exists()
+        )
+        self.assertTrue(Destinatario.objects.filter(pk=grupo.pk).exists())
+
+    def test_destinos_osab_empresario_e_especialista(self):
+        from gestao.messaging.envio import destinos_para_envio
+        from gestao.models import Destinatario
+        from tickets.models import ContatoParceiro
+
+        User = get_user_model()
+        spec = User.objects.create_user(
+            "specosab", "so@x.com", "x", is_staff=True, first_name="Ana"
+        )
+        PerfilStaff.objects.create(
+            user=spec, papel=PerfilStaff.Papel.ESPECIALISTA, whatsapp="31988887777"
+        )
+        self.pdv.especialista = spec
+        self.pdv.save(update_fields=["especialista"])
+        ContatoParceiro.objects.create(
+            parceiro=self.pdv,
+            nome="Dono",
+            telefone="21987654321",
+            cargo=ContatoParceiro.Cargo.EMPRESARIO,
+        )
+        ContatoParceiro.objects.create(
+            parceiro=self.pdv,
+            nome="BO",
+            telefone="21911112222",
+            cargo=ContatoParceiro.Cargo.BACKOFFICE,
+        )
+        Destinatario.objects.create(
+            parceiro=self.pdv,
+            nome="Grupo PDV",
+            jid="120363grupo@g.us",
+            tipo=Destinatario.TipoDestino.GRUPO,
+            envio_osab=True,
+        )
+        destinos = destinos_para_envio(self.gestor, "envio_osab", self.pdv)
+        jids = [d.jid for d in destinos]
+        self.assertEqual(jids, ["5521987654321", "5531988887777"])
+        self.assertNotIn("120363grupo@g.us", jids)
+
+        so_empresario = destinos_para_envio(spec, "envio_osab", self.pdv)
+        self.assertEqual([d.jid for d in so_empresario], ["5521987654321"])
+
+    def test_destinos_osab_pdv_do_admin_nao_inclui_o_proprio_numero(self):
+        from gestao.messaging.envio import destinos_para_envio
+        from tickets.models import ContatoParceiro
+
+        self.pdv.especialista = self.gestor
+        self.pdv.save(update_fields=["especialista"])
+        self.gestor.perfil_staff.whatsapp = "21979630377"
+        self.gestor.perfil_staff.save(update_fields=["whatsapp"])
+        ContatoParceiro.objects.create(
+            parceiro=self.pdv,
+            nome="Empresário do PDV",
+            telefone="11999998888",
+            cargo="Empresário",
+        )
+        destinos = destinos_para_envio(self.gestor, "envio_osab", self.pdv)
+        self.assertEqual([d.jid for d in destinos], ["5511999998888"])
+
     def test_enviar_capilaridade_registra_log(self):
         from unittest.mock import MagicMock, patch
 
@@ -1389,8 +1531,7 @@ class GestaoEscopoTests(TestCase):
         self.assertContains(meus, "PDV Carla")
         self.assertNotContains(meus, "PDV Diego")
         outros = self.client.get(reverse("gestao_capilaridade") + "?escopo=outros")
-        self.assertContains(outros, "PDV Diego")
-        self.assertContains(outros, "Diego")
+        self.assertNotContains(outros, "PDV Diego")
         self.assertNotContains(outros, "PDV Carla")
 
     def test_gestor_meus_vazio_outros_lista_pdvs(self):
@@ -1435,6 +1576,55 @@ class GestaoEscopoTests(TestCase):
         outros = self.client.get(reverse("gestao_capilaridade") + "?escopo=outros")
         self.assertContains(outros, "PDV Carla")
         self.assertNotContains(outros, "PDV Diego")
+
+    def test_relatorios_osab_e_tarefas_seguem_a_gerencia(self):
+        from gestao.models import HistoricoOSAB, LoteImportacao, RelatorioTarefa
+        from gestao.periodo import hoje
+
+        self.spec.perfil_staff.gerencia = "MG INTERIOR"
+        self.spec.perfil_staff.save(update_fields=["gerencia"])
+        self.outro.perfil_staff.gerencia = "MG METROPOLITANA"
+        self.outro.perfil_staff.save(update_fields=["gerencia"])
+        HistoricoOSAB.objects.create(
+            parceiro=self.pdv_spec,
+            descricao_pdv="PDV Carla",
+            status="Ok",
+            mensagem="Relatório Carla gerência interior",
+        )
+        HistoricoOSAB.objects.create(
+            parceiro=self.pdv_outro,
+            descricao_pdv="PDV Diego",
+            status="Ok",
+            mensagem="Relatório Diego gerência metro",
+        )
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.TAREFAS, arquivo_nome="t.xlsx", ok=True
+        )
+        RelatorioTarefa.objects.create(
+            lote=lote,
+            tipo_relatorio=RelatorioTarefa.TipoRelatorio.FECHADAS,
+            pdv_nome="MG consolidado",
+            data_referencia=hoje(),
+            mensagem="Tarefas de todas as gerências",
+        )
+        RelatorioTarefa.objects.create(
+            lote=lote,
+            tipo_relatorio=RelatorioTarefa.TipoRelatorio.ABERTAS,
+            parceiro=self.pdv_outro,
+            pdv_nome="PDV Diego",
+            data_referencia=hoje(),
+            mensagem="Tarefas só do Diego",
+        )
+        self.client.force_login(self.spec)
+        osab_meus = self.client.get(reverse("gestao_osab") + "?escopo=meus")
+        self.assertContains(osab_meus, "Relatório Carla gerência interior")
+        self.assertNotContains(osab_meus, "Relatório Diego gerência metro")
+        osab_outros = self.client.get(reverse("gestao_osab") + "?escopo=outros")
+        self.assertNotContains(osab_outros, "Relatório Diego gerência metro")
+        self.assertNotContains(osab_outros, "Relatório Carla gerência interior")
+        tarefas = self.client.get(reverse("gestao_tarefas") + "?escopo=outros")
+        self.assertNotContains(tarefas, "Tarefas de todas as gerências")
+        self.assertNotContains(tarefas, "Tarefas só do Diego")
 
     def test_fila_nao_muda_com_escopo_gestao(self):
         from tickets.acesso import tickets_visiveis

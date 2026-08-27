@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from django.contrib.auth.models import AbstractBaseUser
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 
-from tickets.acesso import eh_gestor
+from tickets.acesso import eh_gestor, gerencia_de
 from tickets.models import Parceiro
 
 from ..models import (
@@ -50,6 +50,18 @@ FLAG_EMAIL = {
 }
 
 
+def _filtrar_lote_escopo(qs, user, parceiros=None, incluir_sem_pdv=None):
+    if parceiros is None:
+        return qs
+    ids = [getattr(p, "pk", p) for p in parceiros]
+    filtro = Q(parceiro_id__in=ids)
+    if incluir_sem_pdv is None:
+        incluir_sem_pdv = bool(user and eh_gestor(user) and not gerencia_de(user))
+    if incluir_sem_pdv:
+        filtro |= Q(parceiro__isnull=True)
+    return qs.filter(filtro)
+
+
 @dataclass
 class ResumoEnvio:
     enviados: int = 0
@@ -82,7 +94,9 @@ def destinos_para_envio(
     *,
     somente_grupos: bool = False,
 ) -> list[DestinoEnvio]:
-    """Gestor → cadastro Destinatários. Especialista → o próprio WhatsApp."""
+    """OSAB: empresário e/ou especialista. Demais: gestor usa Destinatários; especialista, o próprio WhatsApp."""
+    if flag == "envio_osab" and parceiro is not None and not somente_grupos:
+        return destinos_osab(user, parceiro)
     if user is not None and not eh_gestor(user):
         jid = whatsapp_do_usuario(user)
         if not jid:
@@ -93,6 +107,33 @@ def destinos_para_envio(
         DestinoEnvio(jid=d.jid, nome=d.nome, parceiro=d.parceiro, destinatario=d)
         for d in destinatarios_para(flag, parceiro, somente_grupos=somente_grupos)
     ]
+
+
+def destinos_osab(user: AbstractBaseUser | None, parceiro: Parceiro) -> list[DestinoEnvio]:
+    """OSAB vai só para o empresário do PDV e para o especialista (não grupos)."""
+    from ..destinatarios_especialista import jid_individual
+
+    destinos: list[DestinoEnvio] = []
+    vistos: set[str] = set()
+
+    def add(jid: str, nome: str) -> None:
+        chave = jid_individual(jid)
+        if not chave or chave in vistos:
+            return
+        vistos.add(chave)
+        destinos.append(DestinoEnvio(jid=chave, nome=nome, parceiro=parceiro))
+
+    for contato in parceiro.contatos.filter(ativo=True):
+        if contato.eh_empresario():
+            add(contato.telefone, contato.nome or "Empresário")
+
+    spec = parceiro.especialista
+    if spec and not (user is not None and spec.id == user.id):
+        add(
+            whatsapp_do_usuario(spec),
+            (spec.get_full_name() or spec.get_username() or "Especialista").strip(),
+        )
+    return destinos
 
 
 def emails_para_envio(
@@ -645,9 +686,11 @@ def enviar_comissionamento_pdv(
 def enviar_comissionamento_lote(
     lote_id: int,
     user: AbstractBaseUser | None = None,
+    parceiros=None,
 ) -> ResumoEnvio:
     total = ResumoEnvio()
     qs = RelatorioComissionamento.objects.filter(lote_id=lote_id).select_related("parceiro")
+    qs = _filtrar_lote_escopo(qs, user, parceiros, incluir_sem_pdv=False)
     if not qs.exists():
         return ResumoEnvio(ignorados=1, detalhes=["Lote sem relatórios de comissionamento."])
     for rel in qs:
@@ -705,7 +748,7 @@ def enviar_tarefas_todos(
         if rel and rel.id not in vistos:
             vistos.add(rel.id)
             rels.append(rel)
-    if user is None or eh_gestor(user):
+    if user is None or (eh_gestor(user) and not gerencia_de(user)):
         for tipo in (
             RelatorioTarefa.TipoRelatorio.FECHADAS,
             RelatorioTarefa.TipoRelatorio.FUTUROS,
@@ -733,9 +776,11 @@ def enviar_tarefas_todos(
 def enviar_tarefas_lote(
     lote_id: int,
     user: AbstractBaseUser | None = None,
+    parceiros=None,
 ) -> ResumoEnvio:
     total = ResumoEnvio()
     qs = RelatorioTarefa.objects.filter(lote_id=lote_id).select_related("parceiro")
+    qs = _filtrar_lote_escopo(qs, user, parceiros)
     if not qs.exists():
         return ResumoEnvio(ignorados=1, detalhes=["Lote sem relatórios de tarefas."])
     for rel in qs:
@@ -785,11 +830,13 @@ def enviar_venda_indevida_lote(
     user: AbstractBaseUser | None = None,
     *,
     incluir_consolidado: bool = True,
+    parceiros=None,
 ) -> ResumoEnvio:
     total = ResumoEnvio()
     qs = RelatorioVendaIndevida.objects.filter(lote_id=lote_id).select_related("parceiro")
     if not incluir_consolidado:
         qs = qs.filter(consolidado=False)
+    qs = _filtrar_lote_escopo(qs, user, parceiros)
     if not qs.exists():
         return ResumoEnvio(ignorados=1, detalhes=["Lote sem relatórios de venda indevida."])
     for rel in qs:
@@ -839,11 +886,13 @@ def enviar_recompra_lote(
     user: AbstractBaseUser | None = None,
     *,
     incluir_consolidado: bool = True,
+    parceiros=None,
 ) -> ResumoEnvio:
     total = ResumoEnvio()
     qs = RelatorioRecompra.objects.filter(lote_id=lote_id).select_related("parceiro")
     if not incluir_consolidado:
         qs = qs.filter(consolidado=False)
+    qs = _filtrar_lote_escopo(qs, user, parceiros)
     if not qs.exists():
         return ResumoEnvio(ignorados=1, detalhes=["Lote sem relatórios de recompra."])
     for rel in qs:

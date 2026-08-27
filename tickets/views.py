@@ -757,6 +757,8 @@ def parceiro_form(request: HttpRequest, pk: int | None = None) -> HttpResponse:
             "qtd_tickets": qtd_tickets,
             "pode_excluir": bool(instance) and qtd_tickets == 0,
             "sugestoes_token": sugestoes_token,
+            "cargos_contato": ContatoParceiro.Cargo.choices,
+            "cargos_contato_valores": {c.value for c in ContatoParceiro.Cargo},
         },
     )
 

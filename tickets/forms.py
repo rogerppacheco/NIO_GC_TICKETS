@@ -328,7 +328,21 @@ class ContatoParceiroForm(forms.ModelForm):
         fields = ["nome", "email", "telefone", "cargo", "ativo"]
         labels = {
             "telefone": "WhatsApp / telefone",
+            "cargo": "Cargo",
         }
+        help_texts = {
+            "cargo": "OSAB vai para o Empresário (e para o especialista do PDV). Backoffice não recebe.",
+        }
+        widgets = {
+            "cargo": forms.Select(attrs={"class": "fila-pick"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["cargo"].choices = [("", "Selecione")] + list(
+            ContatoParceiro.Cargo.choices
+        )
+        self.fields["cargo"].required = False
 
     def clean_ativo(self):
         # checkbox: se ausente no POST, fica False

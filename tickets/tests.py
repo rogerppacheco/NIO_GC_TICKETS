@@ -108,7 +108,7 @@ class EspecialistaAcessoTests(TestCase):
 
         self.assertEqual(list(parceiros_visiveis(self.spec)), [self.pdv_ana])
         self.assertEqual(list(parceiros_gestao(self.spec, "meus")), [self.pdv_ana])
-        self.assertEqual(list(parceiros_gestao(self.spec, "outros")), [self.pdv_outro])
+        self.assertEqual(list(parceiros_gestao(self.spec, "outros")), [])
         self.assertEqual(tickets_visiveis(self.spec).count(), 1)
 
 
@@ -250,6 +250,7 @@ class EspecialistaAcessoTests(TestCase):
         self.assertContains(r, "Admin")
         self.assertContains(r, "Editar")
         self.assertContains(r, "Excluir")
+        self.assertContains(r, "wrap wrap-wide")
         self.assertNotContains(r, "DANIEL")
 
     def test_staff_de_outro_sistema_nao_e_gestor_nem_loga(self):
@@ -862,4 +863,55 @@ class MascaraEmailTests(TestCase):
             n = notificar_mascaras_por_email(ticket)
         self.assertEqual(n, 0)
         send.assert_not_called()
+
+
+class ContatoCargoTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.gestor = User.objects.create_superuser("gestor", "g@x.com", "x")
+        PerfilStaff.objects.create(user=self.gestor, papel=PerfilStaff.Papel.GESTOR)
+        self.pdv = Parceiro.objects.create(codigo_pdv="100", nome="PDV")
+        self.client.force_login(self.gestor)
+        self.storages = override_settings(
+            STORAGES={
+                "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+                "staticfiles": {
+                    "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+                },
+            }
+        )
+
+    def test_novo_contato_cargo_e_lista_empresario_backoffice(self):
+        from .models import ContatoParceiro
+
+        with self.storages:
+            r = self.client.get(reverse("parceiro_editar", args=[self.pdv.pk]))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Novo contato")
+        self.assertContains(r, "Empresário")
+        self.assertContains(r, "Backoffice")
+        form = r.context["contato_form"]
+        valores = {c[0] for c in form.fields["cargo"].choices}
+        self.assertIn(ContatoParceiro.Cargo.EMPRESARIO, valores)
+        self.assertIn(ContatoParceiro.Cargo.BACKOFFICE, valores)
+
+    def test_adiciona_contato_empresario(self):
+        from .models import ContatoParceiro
+
+        with self.storages:
+            r = self.client.post(
+                reverse("parceiro_editar", args=[self.pdv.pk]),
+                {
+                    "action": "add_contato",
+                    "nome": "João Dono",
+                    "email": "joao@x.com",
+                    "telefone": "21988887777",
+                    "cargo": ContatoParceiro.Cargo.EMPRESARIO,
+                    "ativo": "on",
+                },
+            )
+        self.assertEqual(r.status_code, 302)
+        contato = ContatoParceiro.objects.get(parceiro=self.pdv, nome="João Dono")
+        self.assertEqual(contato.cargo, "Empresário")
+        self.assertTrue(contato.eh_empresario())
 

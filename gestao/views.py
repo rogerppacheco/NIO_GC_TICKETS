@@ -9,7 +9,15 @@ from django.contrib import messages
 from django.db.models import Count, Max, Q
 from django.urls import reverse
 
-from tickets.acesso import eh_gestor, escopo_gestao, gestor_required, parceiros_gestao, parceiros_visiveis, tem_acesso_interno
+from tickets.acesso import (
+    eh_gestor,
+    escopo_gestao,
+    gestor_required,
+    parceiros_gestao,
+    parceiros_gestao_ambos,
+    tem_acesso_interno,
+    ve_relatorios_sem_pdv,
+)
 from tickets.models import Parceiro
 
 from .forms import (
@@ -64,6 +72,7 @@ from .models import (
     RelatorioVendaIndevida,
     VendaOSAB,
 )
+from .destinatarios_especialista import sincronizar_destinatarios_especialistas
 from .parceiros import classificar_parceiros_osab, sincronizar_parceiros_osab
 from .periodo import periodo_ativo, salvar_periodo
 from .pipelines.churn import processar_churn
@@ -143,6 +152,19 @@ def _parceiros(request):
     return parceiros_gestao(request.user, escopo_gestao(request))
 
 
+def _filtro_relatorios(request):
+    visiveis = _parceiros(request)
+    filtro = Q(parceiro__in=visiveis)
+    if ve_relatorios_sem_pdv(request.user):
+        filtro |= Q(parceiro__isnull=True)
+    return visiveis, filtro
+
+
+def _relatorio_escopo(request, model, pk):
+    _, filtro = _filtro_relatorios(request)
+    return get_object_or_404(model.objects.filter(filtro), pk=pk)
+
+
 def _voltar(request, nome: str, extra: str = "") -> HttpResponse:
     qs = f"escopo={escopo_gestao(request)}"
     if extra:
@@ -213,10 +235,19 @@ def hub(request: HttpRequest) -> HttpResponse:
     else:
         form = PeriodoForm(initial={"ano": ano, "mes": mes})
 
-    ultima_osab = VendaOSAB.objects.aggregate(n=Count("id"), dt=Max("data_importacao"))
-    ultima_sysmap = CadastroTerceiro.objects.aggregate(n=Count("id"), dt=Max("data_atualizacao"))
-    ultima_fpd = RelatorioFPD.objects.aggregate(n=Count("id"), dt=Max("criado_em"))
-    ultima_churn = HistoricoChurn.objects.aggregate(n=Count("id"), dt=Max("data_analise"))
+    visiveis = _parceiros(request)
+    ultima_osab = VendaOSAB.objects.filter(parceiro__in=visiveis).aggregate(
+        n=Count("id"), dt=Max("data_importacao")
+    )
+    ultima_sysmap = CadastroTerceiro.objects.filter(parceiro__in=visiveis).aggregate(
+        n=Count("id"), dt=Max("data_atualizacao")
+    )
+    ultima_fpd = RelatorioFPD.objects.filter(parceiro__in=visiveis).aggregate(
+        n=Count("id"), dt=Max("criado_em")
+    )
+    ultima_churn = HistoricoChurn.objects.filter(parceiro__in=visiveis).aggregate(
+        n=Count("id"), dt=Max("data_analise")
+    )
     lotes = LoteImportacao.objects.all()[:8]
     return render(
         request,
@@ -256,7 +287,7 @@ def importar_sysmap_view(request: HttpRequest) -> HttpResponse:
                 messages.error(request, f"Falha ao importar Sysmap: {exc}")
     visiveis_ids = set(_parceiros(request).values_list("id", flat=True))
     filtro = Q(parceiro_id__in=visiveis_ids)
-    if escopo_gestao(request) == "outros":
+    if ve_relatorios_sem_pdv(request.user):
         filtro |= Q(parceiro__isnull=True)
     terceiros = (
         CadastroTerceiro.objects.select_related("parceiro", "parceiro__especialista")
@@ -269,9 +300,11 @@ def importar_sysmap_view(request: HttpRequest) -> HttpResponse:
         {
             "form": form,
             "terceiros": terceiros,
-            "total": CadastroTerceiro.objects.count(),
-            "ativos": CadastroTerceiro.objects.filter(ativo=True).count(),
-            "vinculados": CadastroTerceiro.objects.filter(parceiro__isnull=False).count(),
+            "total": CadastroTerceiro.objects.filter(filtro).count(),
+            "ativos": CadastroTerceiro.objects.filter(filtro, ativo=True).count(),
+            "vinculados": CadastroTerceiro.objects.filter(
+                filtro, parceiro__isnull=False
+            ).count(),
         },
     )
 
@@ -359,7 +392,9 @@ def capilaridade_view(request: HttpRequest) -> HttpResponse:
 def osab_view(request: HttpRequest) -> HttpResponse:
     ano, mes = periodo_ativo()
     visiveis = _parceiros(request)
-    historico = relatorios_osab_atuais(visiveis)
+    historico = relatorios_osab_atuais(
+        visiveis, incluir_sem_pdv=ve_relatorios_sem_pdv(request.user)
+    )
     if request.method == "POST":
         action = request.POST.get("action") or ""
         if action == "recalcular" and eh_gestor(request.user):
@@ -412,7 +447,7 @@ def osab_view(request: HttpRequest) -> HttpResponse:
             "form": UploadBaseForm() if eh_gestor(request.user) else None,
             "ano": ano,
             "mes": mes,
-            "total_vendas": VendaOSAB.objects.count(),
+            "total_vendas": VendaOSAB.objects.filter(parceiro__in=visiveis).count(),
             "historico": historico,
             "cadastro_osab": classificar_parceiros_osab() if eh_gestor(request.user) else None,
             "pode_importar": eh_gestor(request.user),
@@ -737,7 +772,9 @@ def importar_comissionamento_view(request: HttpRequest) -> HttpResponse:
                 _flash_resumo(
                     request,
                     "Envio comissionamento",
-                    enviar_comissionamento_lote(lote.id, request.user),
+                    enviar_comissionamento_lote(
+                        lote.id, request.user, parceiros=_parceiros(request)
+                    ),
                 )
             return _voltar(request, "gestao_comissionamento")
         except Exception as exc:
@@ -764,7 +801,9 @@ def comissionamento_view(request: HttpRequest) -> HttpResponse:
                 _flash_resumo(
                     request,
                     "Comissionamento (lote)",
-                    enviar_comissionamento_lote(int(lote_id), request.user),
+                    enviar_comissionamento_lote(
+                        int(lote_id), request.user, parceiros=_parceiros(request)
+                    ),
                 )
             return _voltar(request, "gestao_comissionamento")
         if eh_gestor(request.user) and request.FILES:
@@ -814,7 +853,13 @@ def importar_tarefas_view(request: HttpRequest) -> HttpResponse:
                 f"Tarefas ({resumo.get('indicador')}): {resumo.get('relatorios', 0)} relatório(s).",
             )
             if enviar and resumo.get("relatorios"):
-                _flash_resumo(request, "Envio tarefas", enviar_tarefas_lote(lote.id, request.user))
+                _flash_resumo(
+                    request,
+                    "Envio tarefas",
+                    enviar_tarefas_lote(
+                        lote.id, request.user, parceiros=_parceiros(request)
+                    ),
+                )
             return _voltar(request, "gestao_tarefas")
         except Exception as exc:
             lote.ok = False
@@ -829,14 +874,18 @@ def tarefas_view(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         action = request.POST.get("action") or ""
         if action == "enviar" and request.POST.get("relatorio") and _pode_enviar(request):
-            rel = get_object_or_404(RelatorioTarefa, pk=request.POST.get("relatorio"))
+            rel = _relatorio_escopo(request, RelatorioTarefa, request.POST.get("relatorio"))
             _flash_resumo(request, "Tarefas", enviar_tarefa(rel, request.user))
             return _voltar(request, "gestao_tarefas")
         if action == "enviar_lote" and request.POST.get("lote") and _pode_enviar(request):
             _flash_resumo(
                 request,
                 "Tarefas (lote)",
-                enviar_tarefas_lote(int(request.POST.get("lote")), request.user),
+                enviar_tarefas_lote(
+                    int(request.POST.get("lote")),
+                    request.user,
+                    parceiros=_parceiros(request),
+                ),
             )
             return _voltar(request, "gestao_tarefas")
         if action == "enviar_todos" and _pode_enviar(request):
@@ -852,9 +901,9 @@ def tarefas_view(request: HttpRequest) -> HttpResponse:
 
 
 def _render_tarefas(request, form):
-    visiveis = _parceiros(request)
+    visiveis, filtro = _filtro_relatorios(request)
     relatorios = RelatorioTarefa.objects.select_related("parceiro__especialista", "lote").filter(
-        Q(parceiro__isnull=True) | Q(parceiro__in=visiveis)
+        filtro
     )[:80]
     lotes = LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.TAREFAS, ok=True)[:15]
     return render(
@@ -890,7 +939,7 @@ def importar_venda_indevida_view(request: HttpRequest) -> HttpResponse:
                 _flash_resumo(
                     request,
                     "Envio VI",
-                    enviar_venda_indevida_lote(lote.id, request.user),
+                    enviar_venda_indevida_lote(lote.id, request.user, parceiros=_parceiros(request)),
                 )
             return _voltar(request, "gestao_venda_indevida")
         except Exception as exc:
@@ -906,14 +955,20 @@ def venda_indevida_view(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         action = request.POST.get("action") or ""
         if action == "enviar" and request.POST.get("relatorio") and _pode_enviar(request):
-            rel = get_object_or_404(RelatorioVendaIndevida, pk=request.POST.get("relatorio"))
+            rel = _relatorio_escopo(
+                request, RelatorioVendaIndevida, request.POST.get("relatorio")
+            )
             _flash_resumo(request, "Venda indevida", enviar_venda_indevida(rel, request.user))
             return _voltar(request, "gestao_venda_indevida")
         if action == "enviar_lote" and request.POST.get("lote") and _pode_enviar(request):
             _flash_resumo(
                 request,
                 "VI (lote)",
-                enviar_venda_indevida_lote(int(request.POST.get("lote")), request.user),
+                enviar_venda_indevida_lote(
+                    int(request.POST.get("lote")),
+                    request.user,
+                    parceiros=_parceiros(request),
+                ),
             )
             return _voltar(request, "gestao_venda_indevida")
         if eh_gestor(request.user) and request.FILES:
@@ -924,9 +979,9 @@ def venda_indevida_view(request: HttpRequest) -> HttpResponse:
 
 
 def _render_venda_indevida(request, form):
-    visiveis = _parceiros(request)
+    visiveis, filtro = _filtro_relatorios(request)
     relatorios = RelatorioVendaIndevida.objects.select_related("parceiro__especialista", "lote").filter(
-        Q(parceiro__isnull=True) | Q(parceiro__in=visiveis)
+        filtro
     )[:80]
     lotes = LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.VENDA_INDEVIDA, ok=True)[:15]
     return render(
@@ -959,7 +1014,13 @@ def importar_recompra_view(request: HttpRequest) -> HttpResponse:
                 f"Recompra: {resumo['pdvs']} PDV(s), {resumo['total_linhas']} linha(s).",
             )
             if enviar:
-                _flash_resumo(request, "Envio recompra", enviar_recompra_lote(lote.id, request.user))
+                _flash_resumo(
+                    request,
+                    "Envio recompra",
+                    enviar_recompra_lote(
+                        lote.id, request.user, parceiros=_parceiros(request)
+                    ),
+                )
             return _voltar(request, "gestao_recompra")
         except Exception as exc:
             lote.ok = False
@@ -974,14 +1035,18 @@ def recompra_view(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         action = request.POST.get("action") or ""
         if action == "enviar" and request.POST.get("relatorio") and _pode_enviar(request):
-            rel = get_object_or_404(RelatorioRecompra, pk=request.POST.get("relatorio"))
+            rel = _relatorio_escopo(request, RelatorioRecompra, request.POST.get("relatorio"))
             _flash_resumo(request, "Recompra", enviar_recompra(rel, request.user))
             return _voltar(request, "gestao_recompra")
         if action == "enviar_lote" and request.POST.get("lote") and _pode_enviar(request):
             _flash_resumo(
                 request,
                 "Recompra (lote)",
-                enviar_recompra_lote(int(request.POST.get("lote")), request.user),
+                enviar_recompra_lote(
+                    int(request.POST.get("lote")),
+                    request.user,
+                    parceiros=_parceiros(request),
+                ),
             )
             return _voltar(request, "gestao_recompra")
         if eh_gestor(request.user) and request.FILES:
@@ -990,9 +1055,9 @@ def recompra_view(request: HttpRequest) -> HttpResponse:
 
 
 def _render_recompra(request, form):
-    visiveis = _parceiros(request)
+    visiveis, filtro = _filtro_relatorios(request)
     relatorios = RelatorioRecompra.objects.select_related("parceiro__especialista", "lote").filter(
-        Q(parceiro__isnull=True) | Q(parceiro__in=visiveis)
+        filtro
     )[:80]
     lotes = LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.RECOMPRA, ok=True)[:15]
     return render(
@@ -1198,12 +1263,42 @@ def _flash_resumo(request, titulo: str, resumo) -> None:
 
 @gestor_required
 def destinatarios_view(request: HttpRequest) -> HttpResponse:
+    visiveis = parceiros_gestao_ambos(request.user)
+    if request.method == "POST" and request.POST.get("action") == "sincronizar_especialistas":
+        cad = sincronizar_destinatarios_especialistas(visiveis)
+        partes = [
+            f"{len(cad['criados'])} criado(s)",
+            f"{len(cad['atualizados'])} atualizado(s)",
+        ]
+        if cad.get("removidos"):
+            partes.append(
+                f"{len(cad['removidos'])} removido(s) dos PDVs do admin (número próprio)"
+            )
+        extra = ""
+        if cad["sem_whatsapp"]:
+            extra += (
+                f" Sem WhatsApp no cadastro: {', '.join(cad['sem_whatsapp'][:8])}"
+                f"{'…' if len(cad['sem_whatsapp']) > 8 else ''}."
+            )
+        if cad["sem_especialista"]:
+            extra += f" Sem especialista: {len(cad['sem_especialista'])} PDV(s)."
+        messages.success(
+            request,
+            "Destinatários com o WhatsApp do especialista: "
+            + "; ".join(partes)
+            + "."
+            + extra,
+        )
+        return _voltar(request, "gestao_destinatarios")
     form = DestinatarioForm(request.POST or None)
+    form.fields["parceiro"].queryset = visiveis
     if request.method == "POST" and form.is_valid():
         form.save()
         messages.success(request, "Destinatário salvo.")
         return _voltar(request, "gestao_destinatarios")
-    lista = Destinatario.objects.select_related("parceiro").all()
+    lista = Destinatario.objects.select_related("parceiro", "parceiro__especialista").filter(
+        parceiro__in=visiveis
+    )
     grupos = None
     if request.GET.get("grupos") == "1" and syncwa_configurado():
         grupos = listar_grupos()
@@ -1218,7 +1313,7 @@ def destinatarios_view(request: HttpRequest) -> HttpResponse:
             "syncwa_ok": syncwa_configurado(),
             "modo_teste": modo_teste_ativo(),
             "grupos": grupos,
-            "parceiros": Parceiro.objects.filter(ativo=True).order_by("nome"),
+            "parceiros": visiveis,
         },
     )
 
@@ -1346,19 +1441,24 @@ def envios_view(request: HttpRequest) -> HttpResponse:
                 )
             return _voltar(request, "gestao_envios")
         if action == "tarefas":
-            # último relatório do PDV (abertas) ou consolidado se sem PDV
             if parceiro:
                 rel = (
                     RelatorioTarefa.objects.filter(parceiro=parceiro)
                     .order_by("-criado_em")
                     .first()
                 )
-            else:
+            elif ve_relatorios_sem_pdv(request.user):
                 rel = (
                     RelatorioTarefa.objects.filter(parceiro__isnull=True)
                     .order_by("-criado_em")
                     .first()
                 )
+            else:
+                messages.error(
+                    request,
+                    "Escolha o PDV. O consolidado de tarefas mistura gerências.",
+                )
+                return _voltar(request, "gestao_envios")
             if not rel:
                 messages.error(request, "Nenhum relatório de tarefas para enviar.")
             else:
@@ -1371,12 +1471,18 @@ def envios_view(request: HttpRequest) -> HttpResponse:
                     .order_by("-criado_em")
                     .first()
                 )
-            else:
+            elif ve_relatorios_sem_pdv(request.user):
                 rel = (
                     RelatorioVendaIndevida.objects.filter(consolidado=True)
                     .order_by("-criado_em")
                     .first()
                 )
+            else:
+                messages.error(
+                    request,
+                    "Escolha o PDV. O consolidado de venda indevida mistura gerências.",
+                )
+                return _voltar(request, "gestao_envios")
             if not rel:
                 messages.error(request, "Nenhum relatório de venda indevida para enviar.")
             else:
@@ -1389,12 +1495,18 @@ def envios_view(request: HttpRequest) -> HttpResponse:
                     .order_by("-criado_em")
                     .first()
                 )
-            else:
+            elif ve_relatorios_sem_pdv(request.user):
                 rel = (
                     RelatorioRecompra.objects.filter(consolidado=True)
                     .order_by("-criado_em")
                     .first()
                 )
+            else:
+                messages.error(
+                    request,
+                    "Escolha o PDV. O consolidado de recompra mistura gerências.",
+                )
+                return _voltar(request, "gestao_envios")
             if not rel:
                 messages.error(request, "Nenhum relatório de recompra para enviar.")
             else:
@@ -1402,7 +1514,10 @@ def envios_view(request: HttpRequest) -> HttpResponse:
             return _voltar(request, "gestao_envios")
 
     health = healthcheck() if syncwa_configurado() else {"ok": False, "error": "não configurado"}
-    logs = EnvioWhatsApp.objects.select_related("parceiro__especialista", "destinatario")
+    _, filtro_logs = _filtro_relatorios(request)
+    logs = EnvioWhatsApp.objects.select_related("parceiro__especialista", "destinatario").filter(
+        filtro_logs
+    )
     if not eh_gestor(request.user):
         logs = logs.filter(criado_por=request.user)
     logs = logs[:60]
