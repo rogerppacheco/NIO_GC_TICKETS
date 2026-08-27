@@ -101,6 +101,14 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
         "PACOTE",
         "DESCRICAO_OFERTA",
     ])
+    col_gerencia = resolver_coluna(trabalho, [
+        "GERENCIA",
+        "GERÊNCIA",
+        "NM_GERENCIA",
+        "NM_GERÊNCIA",
+        "GESTAO",
+        "GESTÃO",
+    ])
     col_pgto = resolver_coluna(trabalho, [
         "MEIO_PAGAMENTO",
         "meio_pagamento",
@@ -137,6 +145,8 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
             dados["municipio"] = texto(row.get(col_mun), 120)
         if col_oferta:
             dados["oferta"] = texto(row.get(col_oferta), 200)
+        if col_gerencia:
+            dados["gerencia"] = texto(row.get(col_gerencia), 120)
         if pedido in existentes:
             reg = existentes[pedido]
             mudou_meta = False
@@ -152,13 +162,20 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
             if dados.get("oferta") and dados["oferta"] != (reg.oferta or ""):
                 reg.oferta = dados["oferta"]
                 mudou_meta = True
+            if dados.get("gerencia") and dados["gerencia"] != (reg.gerencia or ""):
+                reg.gerencia = dados["gerencia"]
+                mudou_meta = True
             if reg.dt_ref is None or dt_ref > reg.dt_ref:
                 for k, v in dados.items():
                     setattr(reg, k, v)
                 reg.save()
                 atualizados += 1
             elif mudou_meta:
-                campos = [c for c in ("pdv_sap", "nm_gc", "municipio", "oferta") if dados.get(c)]
+                campos = [
+                    c
+                    for c in ("pdv_sap", "nm_gc", "municipio", "oferta", "gerencia")
+                    if dados.get(c)
+                ]
                 reg.save(update_fields=campos)
                 ignorados += 1
             else:

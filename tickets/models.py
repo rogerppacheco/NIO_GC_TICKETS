@@ -485,6 +485,13 @@ class PerfilStaff(models.Model):
         blank=True,
         help_text="Número com DDI para receber as máscaras (especialista). Ex.: 5531999999999.",
     )
+    gerencia = models.CharField(
+        "Gerência",
+        max_length=120,
+        blank=True,
+        db_index=True,
+        help_text="Mesmo valor da coluna GERENCIA da OSAB. Meus/Outros só mostram PDVs desta gerência.",
+    )
 
     class Meta:
         verbose_name = "Perfil interno"

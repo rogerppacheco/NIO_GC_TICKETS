@@ -138,12 +138,31 @@ class EspecialistaAcessoTests(TestCase):
         self.assertEqual(u.perfil_staff.papel, PerfilStaff.Papel.ESPECIALISTA)
         self.assertEqual(u.perfil_staff.fte, Decimal("1.00"))
 
+    def test_criar_especialista_com_gerencia(self):
+        self.client.force_login(self.gestor)
+        r = self.client.post(
+            reverse("especialista_novo"),
+            {
+                "first_name": "Elisa",
+                "username": "elisa",
+                "email": "e@x.com",
+                "password": "SenhaForte123",
+                "is_active": "on",
+                "gerencia": "MG INTERIOR",
+            },
+        )
+        self.assertEqual(r.status_code, 302)
+        User = get_user_model()
+        u = User.objects.get(username="elisa")
+        self.assertEqual(u.perfil_staff.gerencia, "MG INTERIOR")
+
     def test_form_especialista_mostra_whatsapp(self):
         from tickets.forms import EspecialistaForm
 
         form = EspecialistaForm()
         self.assertIn("whatsapp", form.fields)
         self.assertIn("DDI", form.fields["whatsapp"].help_text)
+        self.assertIn("gerencia", form.fields)
 
     def test_criar_especialista_com_fte_meio_periodo(self):
         self.client.force_login(self.gestor)

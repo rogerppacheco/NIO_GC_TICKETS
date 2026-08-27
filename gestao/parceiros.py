@@ -162,7 +162,60 @@ def _username_de_nome(nome: str, usados: set[str]) -> str:
     return base
 
 
-def resolver_ou_criar_especialista(nm_gc: str, cache: dict | None = None):
+def mapa_gerencia_por_gc() -> dict[str, str]:
+    """nm_gc normalizado → GERENCIA mais frequente na OSAB."""
+    from django.db.models import Count
+
+    from .models import VendaOSAB
+
+    mapa: dict[str, str] = {}
+    rows = (
+        VendaOSAB.objects.exclude(nm_gc="")
+        .exclude(gerencia="")
+        .values("nm_gc", "gerencia")
+        .annotate(n=Count("id"))
+        .order_by("nm_gc", "-n")
+    )
+    for row in rows:
+        chave = normalizar_pdv(formatar_nome_pessoa(row["nm_gc"]))
+        gerencia = _nome_osab_ok(row["gerencia"])[:120]
+        if not chave or not gerencia:
+            continue
+        mapa.setdefault(chave, gerencia)
+    return mapa
+
+
+def _aplicar_gerencia_perfil(user, gerencia: str) -> bool:
+    gerencia = _nome_osab_ok(gerencia)[:120]
+    if not user or not gerencia:
+        return False
+    perfil = getattr(user, "perfil_staff", None)
+    if perfil is None:
+        return False
+    if (perfil.gerencia or "") == gerencia:
+        return False
+    perfil.gerencia = gerencia
+    perfil.save(update_fields=["gerencia"])
+    return True
+
+
+def aplicar_gerencias_osab() -> dict:
+    """Preenche a gerência dos especialistas já cadastrados com o GERENCIA da OSAB."""
+    from tickets.acesso import qs_equipe
+
+    mapa = mapa_gerencia_por_gc()
+    preenchidos: list[str] = []
+    for user in qs_equipe():
+        display = (user.get_full_name() or "").strip() or user.first_name
+        gerencia = mapa.get(normalizar_pdv(display), "") or mapa.get(
+            normalizar_pdv(user.first_name), ""
+        )
+        if _aplicar_gerencia_perfil(user, gerencia):
+            preenchidos.append(user.first_name or user.username)
+    return {"preenchidos": preenchidos, "mapa": mapa}
+
+
+def resolver_ou_criar_especialista(nm_gc: str, cache: dict | None = None, gerencia: str = ""):
     """Encontra o especialista da equipe pelo nome ou cria com senha bloqueada."""
     from django.contrib.auth import get_user_model
 
@@ -174,13 +227,16 @@ def resolver_ou_criar_especialista(nm_gc: str, cache: dict | None = None):
         return None, False
     cache = cache if cache is not None else {}
     chave = normalizar_pdv(nome)
+    gerencia = _nome_osab_ok(gerencia)[:120]
     if chave in cache:
+        _aplicar_gerencia_perfil(cache[chave], gerencia)
         return cache[chave], False
 
     for user in qs_equipe():
         display = (user.get_full_name() or "").strip() or user.first_name
         if normalizar_pdv(display) == chave or normalizar_pdv(user.first_name) == chave:
             cache[chave] = user
+            _aplicar_gerencia_perfil(user, gerencia)
             return user, False
 
     User = get_user_model()
@@ -193,7 +249,9 @@ def resolver_ou_criar_especialista(nm_gc: str, cache: dict | None = None):
     )
     user.set_unusable_password()
     user.save()
-    PerfilStaff.objects.create(user=user, papel=PerfilStaff.Papel.ESPECIALISTA)
+    PerfilStaff.objects.create(
+        user=user, papel=PerfilStaff.Papel.ESPECIALISTA, gerencia=gerencia
+    )
     cache[chave] = user
     return user, True
 
@@ -322,11 +380,22 @@ def _atualizar_placeholders_sap(usados: set[str]) -> tuple[list[str], list[str]]
     return atualizados, colisoes
 
 
-def _preencher_especialista_vazio(gcs: dict[str, str], cache_esp: dict) -> tuple[list[str], list[str]]:
+def _gerencia_do_gc(nm_gc: str, mapa: dict[str, str] | None = None) -> str:
+    mapa = mapa if mapa is not None else mapa_gerencia_por_gc()
+    return mapa.get(normalizar_pdv(formatar_nome_pessoa(nm_gc)), "")
+
+
+def _preencher_especialista_vazio(
+    gcs: dict[str, str], cache_esp: dict, gerencias: dict[str, str] | None = None
+) -> tuple[list[str], list[str]]:
     preenchidos: list[str] = []
     especialistas_novos: list[str] = []
+    gerencias = gerencias if gerencias is not None else mapa_gerencia_por_gc()
     for p in Parceiro.objects.filter(especialista__isnull=True):
-        user, criado_esp = resolver_ou_criar_especialista(gcs.get(p.nome.casefold(), ""), cache_esp)
+        nm_gc = gcs.get(p.nome.casefold(), "")
+        user, criado_esp = resolver_ou_criar_especialista(
+            nm_gc, cache_esp, gerencia=_gerencia_do_gc(nm_gc, gerencias)
+        )
         if not user:
             continue
         if criado_esp:
@@ -347,9 +416,13 @@ def sincronizar_parceiros_osab(nomes: list[str] | None = None) -> dict:
     especialistas_novos: list[str] = []
     gcs = mapa_gc_por_pdv()
     saps = mapa_sap_por_pdv()
+    gerencias = mapa_gerencia_por_gc()
     cache_esp: dict = {}
     for nome in classif["faltando"]:
-        user, criado_esp = resolver_ou_criar_especialista(gcs.get(nome.casefold(), ""), cache_esp)
+        nm_gc = gcs.get(nome.casefold(), "")
+        user, criado_esp = resolver_ou_criar_especialista(
+            nm_gc, cache_esp, gerencia=_gerencia_do_gc(nm_gc, gerencias)
+        )
         if criado_esp and user:
             especialistas_novos.append(user.first_name)
         parceiro = Parceiro.objects.create(
@@ -363,12 +436,16 @@ def sincronizar_parceiros_osab(nomes: list[str] | None = None) -> dict:
             parceiro_id=parceiro.id
         )
     sap_atualizados, sap_colisoes = _atualizar_placeholders_sap(usados)
-    esp_preenchidos, esp_novos_existentes = _preencher_especialista_vazio(gcs, cache_esp)
+    esp_preenchidos, esp_novos_existentes = _preencher_especialista_vazio(
+        gcs, cache_esp, gerencias
+    )
     especialistas_novos.extend(esp_novos_existentes)
+    gerencias_aplicadas = aplicar_gerencias_osab()
     classif["criados"] = criados
     classif["especialistas_novos"] = especialistas_novos
     classif["codigos_sap"] = sap_atualizados
     classif["sap_colisoes"] = sap_colisoes
     classif["especialistas_preenchidos"] = esp_preenchidos
     classif["gcs"] = gcs
+    classif["gerencias"] = gerencias_aplicadas.get("preenchidos", [])
     return classif

@@ -89,8 +89,8 @@ admin.site.register(Anexo)
 
 @admin.register(PerfilStaff)
 class PerfilStaffAdmin(admin.ModelAdmin):
-    list_display = ("user", "papel", "fte")
-    list_filter = ("papel",)
+    list_display = ("user", "papel", "fte", "gerencia")
+    list_filter = ("papel", "gerencia")
 
 
 @admin.register(ConfigRespostaTipo)

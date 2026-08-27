@@ -4,7 +4,7 @@
 <div class="hero">
   <div>
     <h1>Especialistas</h1>
-    <p>Equipe deste sistema. Marque <strong>Admin</strong> no cadastro para a pessoa ver todos os tickets. Sem isso, ela vê só os PDVs em que é especialista. O campo <strong>WhatsApp</strong> é o celular que recebe as máscaras quando ela clica em Enviar (não vão para os grupos dos PDVs). Para nome, e-mail ou senha do seu login, use <a href="{% url 'meu_perfil' %}">Meu perfil</a>.</p>
+    <p>Equipe deste sistema. Marque <strong>Admin</strong> no cadastro para a pessoa ver todos os tickets. Sem isso, ela vê só os PDVs em que é especialista. A <strong>Gerência</strong> (OSAB) restringe Gestão às bases da mesma gerência. O campo <strong>WhatsApp</strong> é o celular que recebe as máscaras quando ela clica em Enviar (não vão para os grupos dos PDVs). Para nome, e-mail ou senha do seu login, use <a href="{% url 'meu_perfil' %}">Meu perfil</a>.</p>
   </div>
   <a class="btn btn-primary" href="{% url 'especialista_novo' %}">Novo especialista</a>
 </div>
@@ -19,6 +19,7 @@
           <th>FTE</th>
           <th>E-mail</th>
           <th>WhatsApp</th>
+          <th>Gerência</th>
           <th>PDVs</th>
           <th>Situação</th>
           <th></th>
@@ -39,6 +40,7 @@
           <td class="mono">{{ u.perfil_staff.fte|floatformat:2 }}</td>
           <td>{{ u.email|default:"—" }}</td>
           <td class="mono">{{ u.perfil_staff.whatsapp|default:"—" }}</td>
+          <td>{{ u.perfil_staff.gerencia|default:"—" }}</td>
           <td>{{ u.qtd_parceiros }}</td>
           <td>
             {% if u.is_active %}
@@ -63,7 +65,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="9">Ninguém na equipe ainda. Crie um especialista e vincule no cadastro do parceiro.</td></tr>
+        <tr><td colspan="10">Ninguém na equipe ainda. Crie um especialista e vincule no cadastro do parceiro.</td></tr>
         {% endfor %}
       </tbody>
     </table>

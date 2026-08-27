@@ -297,11 +297,16 @@ class CadastroParceirosOsabTests(TestCase):
         self.assertEqual(formatar_nome_pessoa("ANA PAULA"), "Ana Paula")
         agora = timezone.now()
         VendaOSAB.objects.create(
-            pedido="C", pdv_nome="PDV GC", nm_gc="MARIA FERNANDA", data_abertura=agora
+            pedido="C",
+            pdv_nome="PDV GC",
+            nm_gc="MARIA FERNANDA",
+            gerencia="MG INTERIOR",
+            data_abertura=agora,
         )
         cad = sincronizar_parceiros_osab()
         pdv = Parceiro.objects.get(nome="PDV GC")
         self.assertEqual(pdv.especialista.first_name, "Maria Fernanda")
+        self.assertEqual(pdv.especialista.perfil_staff.gerencia, "MG INTERIOR")
         self.assertIn("Maria Fernanda", cad["especialistas_novos"])
         cad2 = sincronizar_parceiros_osab()
         self.assertEqual(cad2["criados"], [])
@@ -311,6 +316,31 @@ class CadastroParceirosOsabTests(TestCase):
         sincronizar_parceiros_osab()
         pdv2 = Parceiro.objects.get(nome="PDV GC 2")
         self.assertEqual(pdv2.especialista_id, pdv.especialista_id)
+
+    def test_preenche_gerencia_de_especialista_existente(self):
+        from gestao.parceiros import aplicar_gerencias_osab, sincronizar_parceiros_osab
+
+        User = get_user_model()
+        user = User.objects.create_user(
+            "maria.fernanda", "mf@x.com", "x", is_staff=True, first_name="Maria Fernanda"
+        )
+        PerfilStaff.objects.create(user=user, papel=PerfilStaff.Papel.ESPECIALISTA)
+        agora = timezone.now()
+        VendaOSAB.objects.create(
+            pedido="GER1",
+            pdv_nome="PDV GER",
+            nm_gc="MARIA FERNANDA",
+            gerencia="MG INTERIOR",
+            data_abertura=agora,
+        )
+        sincronizar_parceiros_osab()
+        user.perfil_staff.refresh_from_db()
+        self.assertEqual(user.perfil_staff.gerencia, "MG INTERIOR")
+        pdv = Parceiro.objects.get(nome="PDV GER")
+        self.assertEqual(pdv.especialista_id, user.id)
+        aplicar_gerencias_osab()
+        user.perfil_staff.refresh_from_db()
+        self.assertEqual(user.perfil_staff.gerencia, "MG INTERIOR")
 
     def test_grafia_nao_cria_duplicata(self):
         from gestao.parceiros import sincronizar_parceiros_osab
@@ -444,6 +474,46 @@ class CadastroParceirosOsabTests(TestCase):
         processar_osab(arquivo, "OSAB.xlsx", hoje.year, hoje.month)
         self.assertEqual(VendaOSAB.objects.get(pedido="P-SAP").pdv_sap, "1071234")
         self.assertEqual(Parceiro.objects.get(nome="AMAZONTECH").codigo_pdv, "1071234")
+
+    def test_import_osab_grava_gerencia_no_especialista(self):
+        hoje = timezone.localdate()
+        abertura = datetime(hoje.year, hoje.month, 1, 10, 0)
+        arquivo = _xlsx(
+            [
+                [
+                    "P-GER",
+                    abertura,
+                    "TT1",
+                    "JOAO",
+                    "PDV GERENCIA",
+                    abertura,
+                    abertura,
+                    "Concluído",
+                    "500",
+                    "MARIA FERNANDA",
+                    "MG INTERIOR",
+                ]
+            ],
+            [
+                "PEDIDO",
+                "DT_REF",
+                "MATRICULA_VENDEDOR",
+                "NOME_VENDEDOR",
+                "DESCRICAO",
+                "DATA_ABERTURA",
+                "DATA_FECHAMENTO",
+                "SITUACAO",
+                "VELOCIDADE",
+                "NM_GC",
+                "GERENCIA",
+            ],
+        )
+        processar_osab(arquivo, "OSAB.xlsx", hoje.year, hoje.month)
+        venda = VendaOSAB.objects.get(pedido="P-GER")
+        self.assertEqual(venda.gerencia, "MG INTERIOR")
+        pdv = Parceiro.objects.get(nome="PDV GERENCIA")
+        self.assertEqual(pdv.especialista.first_name, "Maria Fernanda")
+        self.assertEqual(pdv.especialista.perfil_staff.gerencia, "MG INTERIOR")
 
 
 class FpdChurnTests(TestCase):
@@ -1332,6 +1402,39 @@ class GestaoEscopoTests(TestCase):
         self.assertContains(outros, "PDV Carla")
         self.assertContains(outros, "PDV Diego")
         self.assertContains(outros, "Carla")
+
+    def test_especialista_nao_ve_outra_gerencia(self):
+        self.spec.perfil_staff.gerencia = "MG INTERIOR"
+        self.spec.perfil_staff.save(update_fields=["gerencia"])
+        self.outro.perfil_staff.gerencia = "MG METROPOLITANA"
+        self.outro.perfil_staff.save(update_fields=["gerencia"])
+        self.client.force_login(self.spec)
+        outros = self.client.get(reverse("gestao_capilaridade") + "?escopo=outros")
+        self.assertNotContains(outros, "PDV Diego")
+        meus = self.client.get(reverse("gestao_capilaridade") + "?escopo=meus")
+        self.assertContains(meus, "PDV Carla")
+        self.assertNotContains(meus, "PDV Diego")
+
+    def test_mesma_gerencia_aparece_em_outros(self):
+        self.spec.perfil_staff.gerencia = "MG INTERIOR"
+        self.spec.perfil_staff.save(update_fields=["gerencia"])
+        self.outro.perfil_staff.gerencia = "MG INTERIOR"
+        self.outro.perfil_staff.save(update_fields=["gerencia"])
+        self.client.force_login(self.spec)
+        outros = self.client.get(reverse("gestao_capilaridade") + "?escopo=outros")
+        self.assertContains(outros, "PDV Diego")
+
+    def test_gestor_com_gerencia_so_ve_a_sua(self):
+        self.spec.perfil_staff.gerencia = "MG INTERIOR"
+        self.spec.perfil_staff.save(update_fields=["gerencia"])
+        self.outro.perfil_staff.gerencia = "MG METROPOLITANA"
+        self.outro.perfil_staff.save(update_fields=["gerencia"])
+        self.gestor.perfil_staff.gerencia = "MG INTERIOR"
+        self.gestor.perfil_staff.save(update_fields=["gerencia"])
+        self.client.force_login(self.gestor)
+        outros = self.client.get(reverse("gestao_capilaridade") + "?escopo=outros")
+        self.assertContains(outros, "PDV Carla")
+        self.assertNotContains(outros, "PDV Diego")
 
     def test_fila_nao_muda_com_escopo_gestao(self):
         from tickets.acesso import tickets_visiveis

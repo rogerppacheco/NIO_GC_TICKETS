@@ -63,9 +63,19 @@ def escopo_gestao(request) -> str:
     return valor if valor in {"meus", "outros"} else "meus"
 
 
+def gerencia_de(user) -> str:
+    perfil = perfil_de(user)
+    return (perfil.gerencia or "").strip() if perfil else ""
+
+
 def parceiros_gestao(user, escopo: str = "meus"):
-    """Abas de Gestão: meus PDVs vs PDVs de outros especialistas. Vale para admin e especialista."""
-    qs = Parceiro.objects.filter(ativo=True).select_related("especialista")
+    """Abas de Gestão: meus PDVs vs PDVs de outros especialistas da mesma gerência."""
+    qs = Parceiro.objects.filter(ativo=True).select_related(
+        "especialista", "especialista__perfil_staff"
+    )
+    gerencia = gerencia_de(user)
+    if gerencia:
+        qs = qs.filter(especialista__perfil_staff__gerencia__iexact=gerencia)
     if escopo == "outros":
         return qs.exclude(especialista=user).order_by("nome")
     return qs.filter(especialista=user).order_by("nome")

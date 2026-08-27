@@ -109,6 +109,7 @@ class VendaOSAB(models.Model):
     oferta = models.CharField(max_length=200, blank=True)
     meio_pagamento = models.CharField(max_length=100, blank=True)
     municipio = models.CharField("Município / praça", max_length=120, blank=True, db_index=True)
+    gerencia = models.CharField("Gerência (OSAB)", max_length=120, blank=True, db_index=True)
     data_importacao = models.DateTimeField(auto_now_add=True)
 
     class Meta:

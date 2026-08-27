@@ -182,6 +182,9 @@ def _msg_cadastro_osab(cad: dict) -> str:
     specs = cad.get("especialistas_novos") or []
     if specs:
         extra += f" Especialistas criados: {', '.join(specs)} (defina a senha em Equipe)."
+    gerencias = cad.get("gerencias") or []
+    if gerencias:
+        extra += f" Gerência OSAB preenchida em {len(gerencias)} especialista(s)."
     return "Parceiros da OSAB: " + "; ".join(partes) + "." + extra
 
 

@@ -4,6 +4,6 @@
   <a href="?escopo=outros" class="{% if escopo == 'outros' %}is-on{% endif %}">Outros especialistas <span class="help">({{ gestao_qtd_outros|default:0 }})</span></a>
 </div>
 {% if escopo == "outros" %}
-  <p class="help" style="margin:-0.4rem 0 1rem">PDVs de outros especialistas. O envio WhatsApp segue a regra de sempre: admin → Destinatários; especialista → o próprio número.</p>
+  <p class="help" style="margin:-0.4rem 0 1rem">PDVs de outros especialistas da mesma gerência (campo GERENCIA da OSAB). O envio WhatsApp segue a regra de sempre: admin → Destinatários; especialista → o próprio número.</p>
 {% endif %}
 {% endwith %}

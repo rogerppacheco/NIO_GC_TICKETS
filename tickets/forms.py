@@ -145,6 +145,16 @@ class EspecialistaForm(forms.Form):
         ),
         widget=forms.TextInput(attrs={"placeholder": "5531999999999"}),
     )
+    gerencia = forms.CharField(
+        label="Gerência (OSAB)",
+        max_length=120,
+        required=False,
+        help_text=(
+            "Mesmo valor da coluna GERENCIA da OSAB. Em Gestão, Meus parceiros e "
+            "Outros especialistas só mostram PDVs desta gerência."
+        ),
+        widget=forms.TextInput(attrs={"placeholder": "Ex.: MG INTERIOR"}),
+    )
 
     def __init__(self, *args, instance=None, **kwargs):
         self.instance = instance
@@ -160,6 +170,7 @@ class EspecialistaForm(forms.Form):
                 ),
                 "fte": perfil.fte if perfil else Decimal("1.00"),
                 "whatsapp": perfil.whatsapp if perfil else "",
+                "gerencia": perfil.gerencia if perfil else "",
             }
         super().__init__(*args, **kwargs)
         if instance is None:
@@ -241,6 +252,7 @@ class EspecialistaForm(forms.Form):
                 "papel": papel,
                 "fte": dados.get("fte") or Decimal("1.00"),
                 "whatsapp": (dados.get("whatsapp") or "").strip(),
+                "gerencia": (dados.get("gerencia") or "").strip()[:120],
             },
         )
         user.perfil_staff = perfil
