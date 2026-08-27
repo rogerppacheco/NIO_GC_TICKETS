@@ -110,22 +110,35 @@ def destinos_para_envio(
 
 
 def destinos_osab(user: AbstractBaseUser | None, parceiro: Parceiro) -> list[DestinoEnvio]:
-    """OSAB vai só para o empresário do PDV e para o especialista (não grupos)."""
+    """OSAB: empresário e especialista. Sem empresário, usa o grupo cadastrado em Destinatários."""
     from ..destinatarios_especialista import jid_individual
 
     destinos: list[DestinoEnvio] = []
     vistos: set[str] = set()
 
-    def add(jid: str, nome: str) -> None:
-        chave = jid_individual(jid)
+    def add(jid: str, nome: str, *, grupo: bool = False) -> None:
+        chave = (jid or "").strip() if grupo else jid_individual(jid)
         if not chave or chave in vistos:
             return
         vistos.add(chave)
         destinos.append(DestinoEnvio(jid=chave, nome=nome, parceiro=parceiro))
 
+    n_empresario = 0
     for contato in parceiro.contatos.filter(ativo=True):
         if contato.eh_empresario():
+            antes = len(destinos)
             add(contato.telefone, contato.nome or "Empresário")
+            if len(destinos) > antes:
+                n_empresario += 1
+
+    if n_empresario == 0:
+        for dest in Destinatario.objects.filter(
+            parceiro=parceiro,
+            ativo=True,
+            tipo=Destinatario.TipoDestino.GRUPO,
+            envio_osab=True,
+        ):
+            add(dest.jid, dest.nome, grupo=True)
 
     spec = parceiro.especialista
     if spec and not (user is not None and spec.id == user.id):

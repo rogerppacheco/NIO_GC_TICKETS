@@ -16,7 +16,9 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .acesso import (
     eh_gestor,
+    escopo_gestao,
     gestor_required,
+    parceiros_gestao,
     parceiros_visiveis,
     qs_equipe,
     ticket_para_usuario,
@@ -678,19 +680,22 @@ def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
 
 @login_required
 def parceiros_lista(request: HttpRequest) -> HttpResponse:
+    escopo = escopo_gestao(request)
     parceiros = (
-        parceiros_visiveis(request.user)
+        parceiros_gestao(request.user, escopo)
         .select_related("especialista")
-        .annotate(
-            qtd_tickets=Count("tickets"),
-            qtd_contatos=Count("contatos"),
-        )
+        .prefetch_related("contatos")
+        .annotate(qtd_tickets=Count("tickets"))
         .order_by("nome")
     )
+    for p in parceiros:
+        contatos = list(p.contatos.all())
+        p.qtd_contatos = len(contatos)
+        p.empresarios = [c for c in contatos if c.ativo and c.eh_empresario()]
     return render(
         request,
         "tickets/parceiros.html",
-        {"parceiros": parceiros},
+        {"parceiros": parceiros, "gestao_escopo": escopo},
     )
 
 

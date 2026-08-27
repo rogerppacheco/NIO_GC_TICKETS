@@ -1106,6 +1106,23 @@ class DestinatarioEnvioTests(TestCase):
         destinos = destinos_para_envio(self.gestor, "envio_osab", self.pdv)
         self.assertEqual([d.jid for d in destinos], ["5511999998888"])
 
+    def test_destinos_osab_sem_empresario_usa_grupo(self):
+        from gestao.messaging.envio import destinos_para_envio
+        from gestao.models import Destinatario
+
+        self.pdv.especialista = self.gestor
+        self.pdv.save(update_fields=["especialista"])
+        Destinatario.objects.create(
+            parceiro=self.pdv,
+            nome="GERÊNCIA VISION",
+            jid="120363424950507669@g.us",
+            tipo=Destinatario.TipoDestino.GRUPO,
+            envio_osab=True,
+        )
+        destinos = destinos_para_envio(self.gestor, "envio_osab", self.pdv)
+        self.assertEqual([d.jid for d in destinos], ["120363424950507669@g.us"])
+        self.assertEqual(destinos[0].nome, "GERÊNCIA VISION")
+
     def test_enviar_capilaridade_registra_log(self):
         from unittest.mock import MagicMock, patch
 

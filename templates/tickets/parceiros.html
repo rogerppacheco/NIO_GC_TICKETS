@@ -1,10 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Parceiros · NIO GC Tickets{% endblock %}
 {% block content %}
+{% with escopo=gestao_escopo|default:"meus" %}
+<div class="gestao-escopo" role="tablist" aria-label="Parceiros">
+  <a href="?escopo=meus" class="{% if escopo == 'meus' %}is-on{% endif %}">Meus parceiros <span class="help">({{ gestao_qtd_meus|default:0 }})</span></a>
+  <a href="?escopo=outros" class="{% if escopo == 'outros' %}is-on{% endif %}">Outros especialistas <span class="help">({{ gestao_qtd_outros|default:0 }})</span></a>
+</div>
+{% endwith %}
 <div class="hero">
   <div>
     <h1>Parceiros</h1>
-    <p>Com demandas no PDV: use <strong>Inativar</strong>. Sem demandas: pode <strong>Excluir</strong>.</p>
+    <p>Com demandas no PDV: use <strong>Inativar</strong>. Sem demandas: pode <strong>Excluir</strong>. A OSAB vai para o <strong>Empresário</strong> (ou para o grupo em Destinatários, se não houver empresário).</p>
   </div>
   <a class="btn btn-primary" href="{% url 'parceiro_novo' %}">Novo parceiro</a>
 </div>
@@ -16,6 +22,7 @@
           <th>Código</th>
           <th>Nome</th>
           <th>Especialista</th>
+          <th>Empresários</th>
           <th>Contatos</th>
           <th>Demandas</th>
           <th>Situação</th>
@@ -33,6 +40,13 @@
             {% else %}
               —
             {% endif %}
+          </td>
+          <td>
+            {% for c in p.empresarios %}
+              {{ c.nome }}{% if c.telefone %} <span class="help">{{ c.telefone }}</span>{% endif %}{% if not forloop.last %}<br>{% endif %}
+            {% empty %}
+              —
+            {% endfor %}
           </td>
           <td>{{ p.qtd_contatos }}</td>
           <td>{{ p.qtd_tickets }}</td>
@@ -69,7 +83,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="7">Nenhum parceiro. Rode: <code>python manage.py seed_nio</code></td></tr>
+        <tr><td colspan="8">Nenhum parceiro neste escopo.</td></tr>
         {% endfor %}
       </tbody>
     </table>

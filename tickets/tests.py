@@ -253,6 +253,26 @@ class EspecialistaAcessoTests(TestCase):
         self.assertContains(r, "wrap wrap-wide")
         self.assertNotContains(r, "DANIEL")
 
+    @override_settings(
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    )
+    def test_lista_parceiros_tem_meus_e_outros(self):
+        self.client.force_login(self.gestor)
+        r = self.client.get(reverse("parceiros"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Meus parceiros")
+        self.assertContains(r, "Outros especialistas")
+        self.assertContains(r, "Empresários")
+        meus = self.client.get(reverse("parceiros"), {"escopo": "meus"})
+        self.assertNotContains(meus, "PDV Ana")
+        outros = self.client.get(reverse("parceiros"), {"escopo": "outros"})
+        self.assertContains(outros, "PDV Ana")
+
     def test_staff_de_outro_sistema_nao_e_gestor_nem_loga(self):
         User = get_user_model()
         externo = User.objects.create_user("DANIEL", "d@x.com", "x", is_staff=True)
