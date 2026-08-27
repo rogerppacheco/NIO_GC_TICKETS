@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 
 import pandas as pd
 from dateutil.relativedelta import relativedelta
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.utils import timezone
 
 from ..excel import as_aware, converter_data_robusto, resolver_coluna, texto
@@ -36,7 +36,7 @@ from ..terceiros import (
 )
 from tickets.models import Parceiro
 
-from .comissao import ROTULOS_PLANO, receita_mix
+from .comissao import receita_mix
 
 ALIASES_PEDIDO = ["PEDIDO", "NUMERO_PEDIDO", "PEDIDO_ID", "NUMERO_ORDEM"]
 ALIASES_DT_REF = ["DT_REF", "DATA_REF", "DT_REFERENCIA", "DATA_REFERENCIA"]
@@ -70,8 +70,6 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
     trabalho = df.rename(columns={col_pedido: "PEDIDO", col_dt_ref: "DT_REF"}).copy()
     if "NOME_VENDEDOR" not in trabalho.columns and "MATRICULA_VENDEDOR" in trabalho.columns:
         trabalho["NOME_VENDEDOR"] = trabalho["MATRICULA_VENDEDOR"].astype(str)
-    if "meio_pagamento" not in trabalho.columns:
-        trabalho["meio_pagamento"] = None
     for col in ("DATA_ABERTURA", "DATA_FECHAMENTO", "DT_REF"):
         if col in trabalho.columns:
             trabalho[col] = converter_data_robusto(trabalho[col])
@@ -103,6 +101,13 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
         "PACOTE",
         "DESCRICAO_OFERTA",
     ])
+    col_pgto = resolver_coluna(trabalho, [
+        "MEIO_PAGAMENTO",
+        "meio_pagamento",
+        "FORMA_PAGAMENTO",
+        "FORMA_PGTO",
+        "PAGAMENTO",
+    ])
     existentes = {v.pedido: v for v in VendaOSAB.objects.filter(pedido__isnull=False)}
     inseridos = atualizados = ignorados = 0
     for _, row in trabalho.iterrows():
@@ -122,7 +127,7 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
             "data_fechamento": as_aware(row.get("DATA_FECHAMENTO")),
             "situacao": texto(row.get("SITUACAO"), 200),
             "velocidade": texto(row.get("VELOCIDADE"), 100),
-            "meio_pagamento": texto(row.get("meio_pagamento"), 100),
+            "meio_pagamento": texto(row.get(col_pgto), 100) if col_pgto else "",
         }
         if col_gc:
             dados["nm_gc"] = texto(row.get(col_gc), 120)
@@ -375,6 +380,142 @@ def _projecao_linear(realizado: float, hoje_ref: date, ano: int, mes: int) -> fl
     return (realizado / base) * dias_totais
 
 
+PLANOS_LOW = {"400", "500", "600"}
+PLANOS_HIGH = {"800", "1000", "1000_mesh"}
+
+
+def _brl(valor: float) -> str:
+    return "R$ " + f"{float(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _pct(valor: float, casas: int = 2) -> str:
+    return f"{float(valor):.{casas}f}%".replace(".", ",")
+
+
+def _eh_cartao(meio: str) -> bool:
+    txt = (meio or "").upper()
+    if "DEBIT" in txt or "DÉBIT" in txt or "DACC" in txt:
+        return False
+    return "CART" in txt or "CRÉDIT" in txt or "CREDIT" in txt
+
+
+def _contar_cartao(vendas: list) -> int:
+    return sum(1 for v in vendas if _eh_cartao(getattr(v, "meio_pagamento", "") or ""))
+
+
+def relatorios_osab_atuais(parceiros, limite: int = 80):
+    """Um relatório por PDV: o mais recente. Evita misturar o snapshot de ontem com o de hoje."""
+    qs = (
+        HistoricoOSAB.objects.select_related("parceiro", "parceiro__especialista")
+        .filter(Q(parceiro__in=parceiros) | Q(parceiro__isnull=True))
+        .order_by("-data_processamento")
+    )
+    vistos: set = set()
+    out = []
+    for h in qs:
+        chave = h.parceiro_id if h.parceiro_id else f"nome:{h.descricao_pdv}"
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        out.append(h)
+        if len(out) >= limite:
+            break
+    return out
+
+
+def montar_mensagem_osab(
+    pdv_nome: str,
+    hoje_ref: date,
+    ano: int,
+    mes: int,
+    realizado_vl: int,
+    realizado_gross: int,
+    config,
+    proj_vl: float,
+    proj_gross: float,
+    atingimento_vl: float,
+    atingimento_gross: float,
+    mix: dict,
+    cartao_vl: int,
+    cartao_gross: int,
+    comissao_base: float,
+    bonus: float,
+    comissao_base_proj: float,
+    bonus_proj: float,
+    comissao_proj: float,
+    capilaridade: dict | None,
+) -> str:
+    mes_label = f"{mes:02d}/{ano}"
+    fechados = _dias_civis_fechados(hoje_ref, ano, mes)
+    if fechados <= 0:
+        ate = hoje_ref
+    else:
+        ate = date(ano, mes, min(fechados, monthrange(ano, mes)[1]))
+    ticket = (comissao_proj / proj_gross) if proj_gross else 0.0
+    meta_gross_rs = (config.meta_gross * ticket) if config.meta_gross else 0.0
+    gap = comissao_proj - meta_gross_rs
+    aproveitamento = (realizado_gross / realizado_vl * 100) if realizado_vl else 0.0
+    low = sum(int(mix.get(k, 0) or 0) for k in PLANOS_LOW)
+    high = sum(int(mix.get(k, 0) or 0) for k in PLANOS_HIGH)
+    outros = int(mix.get("outros", 0) or 0)
+    total_mix = max(1, realizado_gross)
+    pct_cartao_vl = (cartao_vl / realizado_vl * 100) if realizado_vl else 0.0
+    pct_cartao_gr = (cartao_gross / realizado_gross * 100) if realizado_gross else 0.0
+
+    partes = [
+        f"🤖 *Relatório financeiro e desempenho - {pdv_nome}*",
+        f"📊 *Meta VL (Mês {mes_label}):* {config.meta_vl}",
+        f"   - Realizado: *{realizado_vl}* (Vendas Válidas)",
+        f"   - Projetado: *{proj_vl:.0f}*",
+        f"   - Atingimento: *{_pct(atingimento_vl)}*",
+        f"📊 *Meta Gross (Mês {mes_label}):* {config.meta_gross} ({_brl(meta_gross_rs)})",
+        f"📈 *Desempenho Gross (Até {ate.strftime('%d/%m')}):*",
+        f"   - Realizado: *{realizado_gross}*",
+        f"   - Projetado: *{proj_gross:.0f}*",
+        f"   - Atingimento: *{_pct(atingimento_gross)}*",
+        f"   - Aproveitamento: *{_pct(aproveitamento, 1)}*",
+    ]
+    if capilaridade:
+        partes.extend(
+            [
+                f"📊 *Resumo de Capilaridade - {hoje_ref.strftime('%d/%m/%Y')}*",
+                f"🎯 *Meta de Vendedores Ativos:* {capilaridade['meta']}",
+                f"🟢 *Vendedores Ativos (≤ 7 dias):* {capilaridade['ativos']}",
+                f"🔴 *Vendedores Inativos (≥ 8 dias):* {capilaridade['inativos']}",
+                f"📈 *Atingimento da Meta de vendedores:* {_pct(capilaridade['atingimento'])}",
+            ]
+        )
+    partes.extend(
+        [
+            "🚀 *Mix de Velocidades (Vendas Concluídas):*",
+            f"   - Total: *{realizado_gross}*",
+            f"   - Low (400/500/600Mbps): *{low} vendas ({_pct(low / total_mix * 100)})*",
+            f"   - High (800/1000Mbps): *{high} vendas ({_pct(high / total_mix * 100)})*",
+        ]
+    )
+    if outros:
+        partes.append(f"   - Outros: *{outros} vendas ({_pct(outros / total_mix * 100)})*")
+    partes.extend(
+        [
+            "💸 *Mix de Pagamentos:*",
+            f"   - Total de Vendas no Mês: *{realizado_vl}*",
+            f"   - % Cartão de Crédito s/ VLs: *{_pct(pct_cartao_vl)} ({cartao_vl} vendas)*",
+            f"   - % Cartão de Crédito s/ Gross: *{_pct(pct_cartao_gr)} ({cartao_gross} vendas)*",
+            f"💰 *Comissão Realizada (Até {ate.strftime('%d/%m')}):*",
+            f"   - Básica: {_brl(comissao_base)}",
+            f"   - Bônus: {_brl(bonus)}",
+            f"   - *Total Realizado: {_brl(comissao_base + bonus)}*",
+            "💰 *Comissão Projetada (Final do Mês):*",
+            f"   - Básica: {_brl(comissao_base_proj)}",
+            f"   - Bônus: {_brl(bonus_proj)}",
+            f"   - *Total Projetado: {_brl(comissao_proj)} (Ticket Médio: {_brl(ticket)})*",
+            f"   - *GAP Financeiro: {_brl(gap)}*",
+            "_Valores de comissão apenas simulados, não devem ser considerados para validação de ciclo de pagamento._",
+        ]
+    )
+    return "\n".join(partes)
+
+
 def _resolver_pesos(config, ano: int, mes: int) -> tuple[dict, dict, float, float]:
     pesos_vl = json.loads(config.pesos_diarios_vl) if config.pesos_diarios_vl else {}
     pesos_gr = json.loads(config.pesos_diarios_gross) if config.pesos_diarios_gross else {}
@@ -398,7 +539,6 @@ def _resolver_pesos(config, ano: int, mes: int) -> tuple[dict, dict, float, floa
 def calcular_osab(ano: int, mes: int) -> dict:
     hoje_ref = hoje()
     agora = timezone.now()
-    HistoricoOSAB.objects.filter(data_processamento__date=hoje_ref).delete()
 
     vendas = list(
         VendaOSAB.objects.filter(
@@ -421,6 +561,9 @@ def calcular_osab(ano: int, mes: int) -> dict:
         gross_por_pdv.setdefault(v.pdv_nome, []).append(v)
 
     nomes = sorted(set(por_pdv) | set(gross_por_pdv), key=lambda n: -len(por_pdv.get(n, [])))
+    HistoricoOSAB.objects.filter(
+        Q(descricao_pdv__in=nomes) | Q(data_processamento__date=hoje_ref)
+    ).delete()
     indice = indice_parceiros()
     gerados = 0
     sem_parceiro = []
@@ -459,16 +602,30 @@ def calcular_osab(ano: int, mes: int) -> dict:
             "total_vl": realizado_vl,
             "total_gross": realizado_gross,
         }
-        mensagem_partes = [
-            f"🤖 *OSAB {pdv_nome}* · {hoje_ref.strftime('%d/%m/%Y')}",
-            f"📊 VL: {realizado_vl} | Gross: {realizado_gross}",
-        ]
         status = "Ok"
         atingimento_vl = atingimento_gross = comissao_proj = None
+        capilaridade = None
+        meta_cap = MetaCapilaridade.objects.filter(parceiro=parceiro, ano=ano, mes=mes).first()
+        if meta_cap and meta_cap.meta_vendedores:
+            linhas = linhas_capilaridade_pdv(parceiro)
+            ativos = contar_ativos_pdv(parceiro, linhas)
+            inativos = sum(1 for l in linhas if l["status"] == "Inativo")
+            pct = (ativos / meta_cap.meta_vendedores * 100) if meta_cap.meta_vendedores else 0
+            capilaridade = {
+                "meta": meta_cap.meta_vendedores,
+                "ativos": ativos,
+                "inativos": inativos,
+                "atingimento": pct,
+            }
+            detalhes["capilaridade"] = capilaridade
 
         if not config:
             status = "Sem metas"
-            mensagem_partes.append("_Cadastre as metas OSAB deste PDV para ver atingimento e comissão._")
+            mensagem = (
+                f"🤖 *OSAB {pdv_nome}* · {hoje_ref.strftime('%d/%m/%Y')}\n"
+                f"📊 VL: {realizado_vl} | Gross: {realizado_gross}\n"
+                "_Cadastre as metas OSAB deste PDV para ver atingimento e comissão._"
+            )
         else:
             if is_mes_passado:
                 proj_vl, proj_gross = float(realizado_vl), float(realizado_gross)
@@ -512,6 +669,8 @@ def calcular_osab(ano: int, mes: int) -> dict:
                 bonus_proj = 0
             comissao_proj = comissao_base_proj + bonus_proj
             mix = receita["mix"]
+            cartao_vl = _contar_cartao(vls)
+            cartao_gross = _contar_cartao(concluidos)
             detalhes.update(
                 {
                     "meta_vl": config.meta_vl,
@@ -529,44 +688,37 @@ def calcular_osab(ano: int, mes: int) -> dict:
                     "mix_1000_mesh": mix["1000_mesh"],
                     "mix_outros": mix["outros"],
                     "mix_btu": receita["mix_btu"],
+                    "cartao_vl": cartao_vl,
+                    "cartao_gross": cartao_gross,
+                    "comissao_basica": comissao_base,
+                    "comissao_bonus": bonus,
                     "comissao_realizada": comissao_base + bonus,
                     "comissao_projetada": comissao_proj,
                 }
             )
             if bonus_m10:
                 detalhes["bonus_m10"] = bonus_m10
-            mensagem_partes.append(
-                f"🎯 Meta VL: {config.meta_vl} ({atingimento_vl:.1f}%) | "
-                f"Meta Gross: {config.meta_gross} ({atingimento_gross:.1f}%)"
-            )
-            mix_txt = " · ".join(
-                f"{ROTULOS_PLANO[k]} {mix[k]}"
-                for k in ROTULOS_PLANO
-                if mix[k]
-            )
-            if mix["outros"]:
-                mix_txt = (mix_txt + " · " if mix_txt else "") + f"outros {mix['outros']}"
-            if mix_txt:
-                mensagem_partes.append(f"📦 Mix: {mix_txt}")
-            mensagem_partes.append(
-                "💰 Receita gerada (projetada): R$ "
-                + f"{comissao_proj:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            )
-
-        meta_cap = MetaCapilaridade.objects.filter(parceiro=parceiro, ano=ano, mes=mes).first()
-        if meta_cap and meta_cap.meta_vendedores:
-            linhas = linhas_capilaridade_pdv(parceiro)
-            ativos = contar_ativos_pdv(parceiro, linhas)
-            inativos = sum(1 for l in linhas if l["status"] == "Inativo")
-            pct = (ativos / meta_cap.meta_vendedores * 100) if meta_cap.meta_vendedores else 0
-            detalhes["capilaridade"] = {
-                "meta": meta_cap.meta_vendedores,
-                "ativos": ativos,
-                "inativos": inativos,
-                "atingimento": pct,
-            }
-            mensagem_partes.append(
-                f"📈 Capilaridade: {ativos}/{meta_cap.meta_vendedores} ativos ({pct:.1f}%) · inativos {inativos}"
+            mensagem = montar_mensagem_osab(
+                pdv_nome,
+                hoje_ref,
+                ano,
+                mes,
+                realizado_vl,
+                realizado_gross,
+                config,
+                proj_vl,
+                proj_gross,
+                atingimento_vl,
+                atingimento_gross,
+                mix,
+                cartao_vl,
+                cartao_gross,
+                comissao_base,
+                bonus,
+                comissao_base_proj,
+                bonus_proj,
+                comissao_proj,
+                capilaridade,
             )
 
         HistoricoOSAB.objects.create(
@@ -579,7 +731,7 @@ def calcular_osab(ano: int, mes: int) -> dict:
             realizado_gross=realizado_gross,
             atingimento_gross=atingimento_gross,
             comissao_total_projetada=comissao_proj,
-            mensagem="\n".join(mensagem_partes),
+            mensagem=mensagem,
         )
         gerados += 1
 

@@ -596,6 +596,30 @@ class GestaoViewsTests(TestCase):
         self.assertEqual(r.status_code, 302)
         self.assertTrue(Parceiro.objects.filter(nome="PDV NOVO OSAB").exists())
 
+    def test_osab_lista_um_relatorio_por_pdv(self):
+        from gestao.models import HistoricoOSAB
+
+        pdv = Parceiro.objects.create(
+            codigo_pdv="dup1", nome="ALLVO TELECOM", especialista=self.gestor
+        )
+        HistoricoOSAB.objects.create(
+            parceiro=pdv,
+            descricao_pdv="ALLVO TELECOM",
+            status="Sem metas",
+            mensagem="snapshot ontem",
+        )
+        HistoricoOSAB.objects.create(
+            parceiro=pdv,
+            descricao_pdv="ALLVO TELECOM",
+            status="Ok",
+            mensagem="Relatório financeiro e desempenho",
+        )
+        self.client.force_login(self.gestor)
+        html = self.client.get(reverse("gestao_osab")).content.decode()
+        self.assertEqual(html.count('class="mask-card"'), 1)
+        self.assertIn("Relatório financeiro e desempenho", html)
+        self.assertNotIn("snapshot ontem", html)
+
     def test_paginas_especialista_sem_whatsapp_qr(self):
         User = get_user_model()
         spec = User.objects.create_user("specg", "sg@x.com", "x", is_staff=True)
@@ -1873,8 +1897,10 @@ class ComissaoPapTests(TestCase):
         )
         processar_osab(arquivo, "OSAB.xlsx", hoje.year, hoje.month)
         hist = HistoricoOSAB.objects.get(parceiro=pdv)
-        self.assertIn("Receita gerada", hist.mensagem)
-        self.assertIn("800 Mb", hist.mensagem)
+        self.assertIn("Relatório financeiro e desempenho", hist.mensagem)
+        self.assertIn("Comissão Projetada", hist.mensagem)
+        self.assertIn("Mix de Pagamentos", hist.mensagem)
+        self.assertIn("GAP Financeiro", hist.mensagem)
         self.assertEqual(hist.detalhes.get("mix_800"), 1)
 
     def test_salvar_politica_na_tela(self):

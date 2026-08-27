@@ -83,7 +83,7 @@ from .pipelines.calendario import (
     salvar_lote as salvar_calendario_lote,
     totais_mes,
 )
-from .pipelines.osab import calcular_osab, persistir_capilaridade, processar_osab
+from .pipelines.osab import calcular_osab, persistir_capilaridade, processar_osab, relatorios_osab_atuais
 from .pipelines.recompra import processar_recompra
 from .pipelines.resultados import (
     cadastrar_praca_btu,
@@ -356,11 +356,7 @@ def capilaridade_view(request: HttpRequest) -> HttpResponse:
 def osab_view(request: HttpRequest) -> HttpResponse:
     ano, mes = periodo_ativo()
     visiveis = _parceiros(request)
-    historico = (
-        HistoricoOSAB.objects.select_related("parceiro", "parceiro__especialista")
-        .filter(Q(parceiro__in=visiveis) | Q(parceiro__isnull=True))
-        .order_by("-data_processamento")[:80]
-    )
+    historico = relatorios_osab_atuais(visiveis)
     if request.method == "POST":
         action = request.POST.get("action") or ""
         if action == "recalcular" and eh_gestor(request.user):
