@@ -106,6 +106,7 @@ class VendaOSAB(models.Model):
     data_fechamento = models.DateTimeField(null=True, blank=True)
     situacao = models.CharField(max_length=200, blank=True)
     velocidade = models.CharField(max_length=100, blank=True)
+    oferta = models.CharField(max_length=200, blank=True)
     meio_pagamento = models.CharField(max_length=100, blank=True)
     municipio = models.CharField("Município / praça", max_length=120, blank=True, db_index=True)
     data_importacao = models.DateTimeField(auto_now_add=True)
@@ -226,6 +227,51 @@ class ConfiguracaoOSAB(models.Model):
         ]
         verbose_name = "Configuração OSAB"
         verbose_name_plural = "Configurações OSAB"
+
+
+class PoliticaComissao(models.Model):
+    """Anexo II PAP (13/08/2026): comissão nominal por plano, BTU e SVAs."""
+
+    vigencia = models.DateField(default="2026-08-13")
+    canal = models.CharField(max_length=20, default="PAP")
+    comissao_400 = models.IntegerField(default=120)
+    comissao_400_btu = models.IntegerField(default=0)
+    comissao_500 = models.IntegerField(default=350)
+    comissao_500_btu = models.IntegerField(default=0)
+    comissao_600 = models.IntegerField(default=350)
+    comissao_600_btu = models.IntegerField(default=245)
+    comissao_800 = models.IntegerField(default=450)
+    comissao_800_btu = models.IntegerField(default=450)
+    comissao_1000 = models.IntegerField(default=550)
+    comissao_1000_btu = models.IntegerField(default=550)
+    comissao_1000_mesh = models.IntegerField(default=385)
+    comissao_1000_mesh_btu = models.IntegerField(default=385)
+    comissao_fixo = models.IntegerField(default=30)
+    comissao_globoplay_anuncios = models.IntegerField(default=23)
+    comissao_globoplay_premium = models.IntegerField(default=40)
+    comissao_max = models.IntegerField(default=40)
+    comissao_paramount = models.IntegerField(default=28)
+    nmei_400 = models.IntegerField(default=120)
+    nmei_500 = models.IntegerField(default=100)
+    nmei_600 = models.IntegerField(default=100)
+    nmei_800 = models.IntegerField(default=150)
+    nmei_1000 = models.IntegerField(default=150)
+    bonus_m10 = models.IntegerField(default=150)
+    faixa_m10_alta = models.IntegerField(default=70)
+    faixa_m10_media = models.IntegerField(default=50)
+    faixa_m10_baixa = models.IntegerField(default=30)
+
+    class Meta:
+        verbose_name = "Política de comissão PAP"
+        verbose_name_plural = "Políticas de comissão PAP"
+
+    def __str__(self) -> str:
+        return f"{self.canal} {self.vigencia}"
+
+    @classmethod
+    def vigente(cls) -> "PoliticaComissao":
+        obj, _criado = cls.objects.get_or_create(pk=1)
+        return obj
 
 
 class HistoricoOSAB(models.Model):

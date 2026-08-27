@@ -11,6 +11,7 @@ from .models import (
     HistoricoOSAB,
     LoteImportacao,
     MetaCapilaridade,
+    PoliticaComissao,
     RelatorioComissionamento,
     RelatorioFPD,
     RelatorioRecompra,
@@ -93,6 +94,7 @@ class EnvioAdmin(admin.ModelAdmin):
 admin.site.register(AnaliseCapilaridade)
 admin.site.register(MetaCapilaridade)
 admin.site.register(ConfiguracaoOSAB)
+admin.site.register(PoliticaComissao)
 admin.site.register(HistoricoOSAB)
 admin.site.register(GrossMensal)
 admin.site.register(HistoricoChurn)

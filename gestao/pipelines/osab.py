@@ -17,6 +17,7 @@ from ..models import (
     HistoricoChurn,
     HistoricoOSAB,
     MetaCapilaridade,
+    PoliticaComissao,
     VendaOSAB,
 )
 from ..parceiros import indice_parceiros, resolver_parceiro_id, sincronizar_parceiros_osab
@@ -34,6 +35,8 @@ from ..terceiros import (
     terceiro_elegivel_capilaridade,
 )
 from tickets.models import Parceiro
+
+from .comissao import ROTULOS_PLANO, receita_mix
 
 ALIASES_PEDIDO = ["PEDIDO", "NUMERO_PEDIDO", "PEDIDO_ID", "NUMERO_ORDEM"]
 ALIASES_DT_REF = ["DT_REF", "DATA_REF", "DT_REFERENCIA", "DATA_REFERENCIA"]
@@ -91,6 +94,15 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
         "PRAÇA",
         "NM_PRACA",
     ])
+    col_oferta = resolver_coluna(trabalho, [
+        "OFERTA",
+        "PRODUTO",
+        "PLANO",
+        "NOME_OFERTA",
+        "NOME_PLANO",
+        "PACOTE",
+        "DESCRICAO_OFERTA",
+    ])
     existentes = {v.pedido: v for v in VendaOSAB.objects.filter(pedido__isnull=False)}
     inseridos = atualizados = ignorados = 0
     for _, row in trabalho.iterrows():
@@ -118,6 +130,8 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
             dados["pdv_sap"] = texto(row.get(col_sap), 32)
         if col_mun:
             dados["municipio"] = texto(row.get(col_mun), 120)
+        if col_oferta:
+            dados["oferta"] = texto(row.get(col_oferta), 200)
         if pedido in existentes:
             reg = existentes[pedido]
             mudou_meta = False
@@ -130,13 +144,16 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
             if dados.get("municipio") and dados["municipio"] != (reg.municipio or ""):
                 reg.municipio = dados["municipio"]
                 mudou_meta = True
+            if dados.get("oferta") and dados["oferta"] != (reg.oferta or ""):
+                reg.oferta = dados["oferta"]
+                mudou_meta = True
             if reg.dt_ref is None or dt_ref > reg.dt_ref:
                 for k, v in dados.items():
                     setattr(reg, k, v)
                 reg.save()
                 atualizados += 1
             elif mudou_meta:
-                campos = [c for c in ("pdv_sap", "nm_gc", "municipio") if dados.get(c)]
+                campos = [c for c in ("pdv_sap", "nm_gc", "municipio", "oferta") if dados.get(c)]
                 reg.save(update_fields=campos)
                 ignorados += 1
             else:
@@ -315,7 +332,7 @@ def persistir_capilaridade(ano: int, mes: int) -> dict:
     return {"linhas": total, "ativos": ativos, "ano": ano, "mes": mes}
 
 
-def _bonus_m10(parceiro_id: int, ano: int, mes: int) -> dict:
+def _bonus_m10(parceiro_id: int, ano: int, mes: int, valor_unitario: int | None = None) -> dict:
     ref = date(int(ano), int(mes), 1) - relativedelta(months=BONUS_M10_MESES)
     anomes_safra = anomes(ref.year, ref.month)
     ultima = HistoricoChurn.objects.filter(parceiro_id=parceiro_id).order_by("-data_analise").first()
@@ -335,12 +352,13 @@ def _bonus_m10(parceiro_id: int, ano: int, mes: int) -> dict:
         gross = max(0, int(g.gross)) if g else 0
         churn = 0
         remanescentes = gross
+    unitario = int(valor_unitario) if valor_unitario is not None else BONUS_M10_VALOR
     return {
         "safra_label": f"{ref.month:02d}/{ref.year}",
         "gross": gross,
         "churn": churn,
         "remanescentes": remanescentes,
-        "bonus_total": float(remanescentes * BONUS_M10_VALOR),
+        "bonus_total": float(remanescentes * unitario),
     }
 
 
@@ -455,29 +473,18 @@ def calcular_osab(ano: int, mes: int) -> dict:
             atingimento_vl = (proj_vl / config.meta_vl * 100) if config.meta_vl > 0 else 0
             atingimento_gross = (proj_gross / config.meta_gross * 100) if config.meta_gross > 0 else 0
 
-            c500 = sum(1 for v in concluidos if "500" in (v.velocidade or ""))
-            c700 = sum(1 for v in concluidos if "700" in (v.velocidade or "") or "600" in (v.velocidade or ""))
-            c1000 = sum(
-                1
-                for v in concluidos
-                if "1000" in (v.velocidade or "") or "1gb" in (v.velocidade or "").lower().replace(" ", "")
-            )
-            base = realizado_gross or 1
-            comissao_base = c500 * config.comissao_500 + c700 * config.comissao_700 + c1000 * config.comissao_1000
+            politica = PoliticaComissao.vigente()
+            receita = receita_mix(concluidos, politica, proj_gross)
+            comissao_base = receita["comissao_realizada"]
             bonus_m10 = None
             if config.tem_bonus_m10:
-                bonus_m10 = _bonus_m10(parceiro.id, ano, mes)
+                bonus_m10 = _bonus_m10(parceiro.id, ano, mes, politica.bonus_m10)
                 bonus = bonus_m10["bonus_total"]
             elif config.tem_bonus:
                 bonus = realizado_gross * config.comissao_bonus
             else:
                 bonus = 0
-            perc500, perc700, perc1000 = c500 / base, c700 / base, c1000 / base
-            comissao_base_proj = (
-                proj_gross * perc500 * config.comissao_500
-                + proj_gross * perc700 * config.comissao_700
-                + proj_gross * perc1000 * config.comissao_1000
-            )
+            comissao_base_proj = receita["comissao_projetada"]
             if config.tem_bonus_m10 and bonus_m10:
                 bonus_proj = bonus_m10["bonus_total"]
             elif config.tem_bonus:
@@ -485,6 +492,7 @@ def calcular_osab(ano: int, mes: int) -> dict:
             else:
                 bonus_proj = 0
             comissao_proj = comissao_base_proj + bonus_proj
+            mix = receita["mix"]
             detalhes.update(
                 {
                     "meta_vl": config.meta_vl,
@@ -493,9 +501,15 @@ def calcular_osab(ano: int, mes: int) -> dict:
                     "atingimento_gross": atingimento_gross,
                     "proj_vl": proj_vl,
                     "proj_gross": proj_gross,
-                    "mix_500": c500,
-                    "mix_700": c700,
-                    "mix_1000": c1000,
+                    "mix_400": mix["400"],
+                    "mix_500": mix["500"],
+                    "mix_600": mix["600"],
+                    "mix_700": mix["800"],
+                    "mix_800": mix["800"],
+                    "mix_1000": mix["1000"],
+                    "mix_1000_mesh": mix["1000_mesh"],
+                    "mix_outros": mix["outros"],
+                    "mix_btu": receita["mix_btu"],
                     "comissao_realizada": comissao_base + bonus,
                     "comissao_projetada": comissao_proj,
                 }
@@ -506,8 +520,17 @@ def calcular_osab(ano: int, mes: int) -> dict:
                 f"🎯 Meta VL: {config.meta_vl} ({atingimento_vl:.1f}%) | "
                 f"Meta Gross: {config.meta_gross} ({atingimento_gross:.1f}%)"
             )
+            mix_txt = " · ".join(
+                f"{ROTULOS_PLANO[k]} {mix[k]}"
+                for k in ROTULOS_PLANO
+                if mix[k]
+            )
+            if mix["outros"]:
+                mix_txt = (mix_txt + " · " if mix_txt else "") + f"outros {mix['outros']}"
+            if mix_txt:
+                mensagem_partes.append(f"📦 Mix: {mix_txt}")
             mensagem_partes.append(
-                "💰 Comissão projetada: R$ "
+                "💰 Receita gerada (projetada): R$ "
                 + f"{comissao_proj:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             )
 

@@ -53,6 +53,7 @@ from .models import (
     HistoricoOSAB,
     LoteImportacao,
     MetaCapilaridade,
+    PoliticaComissao,
     PracaBTU,
     RelatorioComissionamento,
     RelatorioFPD,
@@ -68,6 +69,7 @@ from .pipelines.comissionamento import mapa_pdv_razoes, processar_comissionament
 from .pipelines.fpd import processar_fpd
 from .pipelines.gdp import processar_gdp
 from .pipelines.metas import processar_metas
+from .pipelines.comissao import aplicar_politica_nos_pdvs
 from .pipelines.osab import calcular_osab, persistir_capilaridade, processar_osab
 from .pipelines.recompra import processar_recompra
 from .pipelines.resultados import (
@@ -1035,6 +1037,38 @@ def configs_view(request: HttpRequest) -> HttpResponse:
             else:
                 messages.error(request, "Selecione o acompanhamento semanal (.xlsb ou .xlsx).")
             return _voltar(request, "gestao_configs")
+        if action == "salvar_politica":
+            politica = PoliticaComissao.vigente()
+            campos = [
+                "comissao_400",
+                "comissao_400_btu",
+                "comissao_500",
+                "comissao_500_btu",
+                "comissao_600",
+                "comissao_600_btu",
+                "comissao_800",
+                "comissao_800_btu",
+                "comissao_1000",
+                "comissao_1000_btu",
+                "comissao_1000_mesh",
+                "comissao_1000_mesh_btu",
+                "comissao_fixo",
+                "comissao_globoplay_anuncios",
+                "comissao_globoplay_premium",
+                "comissao_max",
+                "comissao_paramount",
+                "bonus_m10",
+            ]
+            for campo in campos:
+                if campo in request.POST:
+                    setattr(politica, campo, int(request.POST.get(campo) or 0))
+            politica.save()
+            n = aplicar_politica_nos_pdvs(politica, ano, mes)
+            messages.success(
+                request,
+                f"Política PAP salva. Comissões 500/800/1Gb copiadas para {n} PDV(s) do período.",
+            )
+            return _voltar(request, "gestao_configs")
         for p in parceiros:
             prefix = f"p{p.id}_"
             meta_v = int(request.POST.get(prefix + "meta_vendedores") or 0)
@@ -1050,9 +1084,6 @@ def configs_view(request: HttpRequest) -> HttpResponse:
                     "du_vl": float(request.POST.get(prefix + "du_vl") or 0),
                     "meta_gross": int(request.POST.get(prefix + "meta_gross") or 0),
                     "du_gross": float(request.POST.get(prefix + "du_gross") or 0),
-                    "comissao_500": int(request.POST.get(prefix + "comissao_500") or 0),
-                    "comissao_700": int(request.POST.get(prefix + "comissao_700") or 0),
-                    "comissao_1000": int(request.POST.get(prefix + "comissao_1000") or 0),
                     "tem_bonus": prefix + "tem_bonus" in request.POST,
                     "comissao_bonus": int(request.POST.get(prefix + "comissao_bonus") or 0),
                     "tem_bonus_m10": prefix + "tem_bonus_m10" in request.POST,
@@ -1069,7 +1100,7 @@ def configs_view(request: HttpRequest) -> HttpResponse:
     return render(
         request,
         "gestao/configs.html",
-        {"ano": ano, "mes": mes, "linhas": linhas, "pode_editar": eh_gestor(request.user), "form_import": form_import},
+        {"ano": ano, "mes": mes, "linhas": linhas, "pode_editar": eh_gestor(request.user), "form_import": form_import, "politica": PoliticaComissao.vigente()},
     )
 
 

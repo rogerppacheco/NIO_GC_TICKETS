@@ -1654,6 +1654,9 @@ class MetasAcompanhamentoTests(TestCase):
         self.assertContains(r, "Importar acompanhamento semanal")
         self.assertContains(r, "orçado mensal")
         self.assertContains(r, "BASE_FISICOS")
+        self.assertContains(r, "Comissão PAP")
+        self.assertContains(r, "Super 800 Mb")
+        self.assertContains(r, "Ultra 1 Gb com mesh")
 
     def test_importa_vl_gross_cap_e_du(self):
         from gestao.models import ConfiguracaoOSAB, MetaCapilaridade
@@ -1757,6 +1760,116 @@ class MetasAcompanhamentoTests(TestCase):
         self.assertAlmostEqual(osab.du_vl, 23.1855, places=3)
         cap = MetaCapilaridade.objects.get(parceiro=self.pdv, ano=2026, mes=8)
         self.assertEqual(cap.meta_vendedores, 8)
+
+
+class ComissaoPapTests(TestCase):
+    def test_classifica_planos_novos(self):
+        from gestao.pipelines.comissao import classificar_plano
+
+        self.assertEqual(classificar_plano("400 MEGA"), "400")
+        self.assertEqual(classificar_plano("500 MEGA"), "500")
+        self.assertEqual(classificar_plano("600 MEGA"), "600")
+        self.assertEqual(classificar_plano("700 MEGA"), "800")
+        self.assertEqual(classificar_plano("800 MEGA"), "800")
+        self.assertEqual(classificar_plano("1000 MEGA"), "1000")
+        self.assertEqual(classificar_plano("1 GB"), "1000")
+        self.assertEqual(classificar_plano("1000 MEGA", "ULTRA 1GB COM MESH"), "1000_mesh")
+        self.assertIsNone(classificar_plano("900 MEGA"))
+
+    def test_receita_regular_btu_e_mesh(self):
+        from gestao.models import PoliticaComissao, PracaBTU, VendaOSAB
+        from gestao.pipelines.comissao import receita_mix
+
+        pdv = Parceiro.objects.create(codigo_pdv="c1", nome="INOVA MG")
+        PoliticaComissao.objects.get_or_create(pk=1)
+        PracaBTU.objects.create(nome="Ipatinga", nome_norm="IPATINGA", uf="MG", ativo=True)
+        vendas = [
+            VendaOSAB(velocidade="500 MEGA", municipio="Belo Horizonte"),
+            VendaOSAB(velocidade="700 MEGA", municipio="Contagem"),
+            VendaOSAB(velocidade="1000 MEGA", oferta="ULTRA COM MESH", municipio="Betim"),
+            VendaOSAB(velocidade="600 MEGA", municipio="Ipatinga"),
+            VendaOSAB(velocidade="400 MEGA", municipio="Contagem"),
+        ]
+        for i, v in enumerate(vendas, start=1):
+            v.pedido = f"C{i}"
+            v.pdv_nome = pdv.nome
+            v.situacao = "Concluído"
+        rec = receita_mix(vendas, PoliticaComissao.vigente(), proj_gross=5)
+        self.assertEqual(rec["mix"]["500"], 1)
+        self.assertEqual(rec["mix"]["800"], 1)
+        self.assertEqual(rec["mix"]["1000_mesh"], 1)
+        self.assertEqual(rec["mix"]["600"], 1)
+        self.assertEqual(rec["mix"]["400"], 1)
+        self.assertEqual(rec["mix_btu"], 1)
+        self.assertEqual(rec["comissao_realizada"], 350 + 450 + 385 + 245 + 120)
+
+    def test_osab_usa_receita_gerada(self):
+        from gestao.models import ConfiguracaoOSAB, HistoricoOSAB, PoliticaComissao
+
+        pdv = Parceiro.objects.create(codigo_pdv="c2", nome="RECORD")
+        PoliticaComissao.objects.get_or_create(pk=1)
+        hoje = timezone.localdate()
+        ConfiguracaoOSAB.objects.create(
+            parceiro=pdv,
+            ano=hoje.year,
+            mes=hoje.month,
+            meta_vl=10,
+            meta_gross=10,
+            du_vl=20,
+            du_gross=20,
+        )
+        abertura = datetime(hoje.year, hoje.month, 1, 10, 0)
+        arquivo = _xlsx(
+            [
+                [
+                    "P80",
+                    abertura,
+                    "TT1",
+                    "JOAO",
+                    "RECORD",
+                    abertura,
+                    abertura,
+                    "Concluído",
+                    "800 MEGA",
+                ]
+            ],
+            [
+                "PEDIDO",
+                "DT_REF",
+                "MATRICULA_VENDEDOR",
+                "NOME_VENDEDOR",
+                "DESCRICAO",
+                "DATA_ABERTURA",
+                "DATA_FECHAMENTO",
+                "SITUACAO",
+                "VELOCIDADE",
+            ],
+        )
+        processar_osab(arquivo, "OSAB.xlsx", hoje.year, hoje.month)
+        hist = HistoricoOSAB.objects.get(parceiro=pdv)
+        self.assertIn("Receita gerada", hist.mensagem)
+        self.assertIn("800 Mb", hist.mensagem)
+        self.assertEqual(hist.detalhes.get("mix_800"), 1)
+
+    def test_salvar_politica_na_tela(self):
+        from gestao.models import ConfiguracaoOSAB, PoliticaComissao
+
+        User = get_user_model()
+        gestor = User.objects.create_superuser("gpap", "gp@x.com", "x")
+        PerfilStaff.objects.create(user=gestor, papel=PerfilStaff.Papel.GESTOR)
+        pdv = Parceiro.objects.create(codigo_pdv="c3", nome="VISION")
+        ConfiguracaoOSAB.objects.create(parceiro=pdv, ano=2026, mes=8, meta_vl=1)
+        salvar_periodo(2026, 8)
+        self.client.force_login(gestor)
+        r = self.client.post(
+            reverse("gestao_configs"),
+            {"action": "salvar_politica", "comissao_800": "450", "comissao_500": "350"},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(PoliticaComissao.vigente().comissao_800, 450)
+        self.assertEqual(
+            ConfiguracaoOSAB.objects.get(parceiro=pdv, ano=2026, mes=8).comissao_700, 450
+        )
 
 
 

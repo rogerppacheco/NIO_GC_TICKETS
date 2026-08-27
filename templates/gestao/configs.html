@@ -22,6 +22,88 @@
   </div>
 </div>
 {% endif %}
+{% if pode_editar %}
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-h"><h2>Comissão PAP · vigência 13/08/2026</h2></div>
+  <div class="panel-b">
+    <form method="post">
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+      <input type="hidden" name="action" value="salvar_politica">
+      <p class="help">Anexo II da política comercial. A receita gerada da OSAB usa esta tabela (Regular ou BTU conforme a praça do GDP). 700 Mb legado conta como 800. 400 Mb é oferta empresarial (GDP B2B); em praça BTU 400 e 500 não têm especial. 1 Gb com MESH na OSAB entra na coluna mesh (R$ 385); sem MESH entra em 1 Gb (R$ 550). SVAs só entram na receita se a OSAB trouxer a oferta. NMEI e faixa M-10 (70/50/30) ficam cadastrados aqui, mas a mensagem ainda não soma NMEI (precisa classificar o CNPJ).</p>
+      <div class="table-scroll">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Plano</th>
+              <th>Regular (R$)</th>
+              <th>Especial / BTU (R$)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Essencial 400 Mb (empresarial)</td>
+              <td><input type="number" name="comissao_400" min="0" value="{{ politica.comissao_400 }}"></td>
+              <td><input type="number" name="comissao_400_btu" min="0" value="{{ politica.comissao_400_btu }}"></td>
+            </tr>
+            <tr>
+              <td>Essencial 500 Mb</td>
+              <td><input type="number" name="comissao_500" min="0" value="{{ politica.comissao_500 }}"></td>
+              <td><input type="number" name="comissao_500_btu" min="0" value="{{ politica.comissao_500_btu }}"></td>
+            </tr>
+            <tr>
+              <td>Essencial 600 Mb</td>
+              <td><input type="number" name="comissao_600" min="0" value="{{ politica.comissao_600 }}"></td>
+              <td><input type="number" name="comissao_600_btu" min="0" value="{{ politica.comissao_600_btu }}"></td>
+            </tr>
+            <tr>
+              <td>Super 800 Mb (substitui 700)</td>
+              <td><input type="number" name="comissao_800" min="0" value="{{ politica.comissao_800 }}"></td>
+              <td><input type="number" name="comissao_800_btu" min="0" value="{{ politica.comissao_800_btu }}"></td>
+            </tr>
+            <tr>
+              <td>Ultra 1 Gb sem mesh</td>
+              <td><input type="number" name="comissao_1000" min="0" value="{{ politica.comissao_1000 }}"></td>
+              <td><input type="number" name="comissao_1000_btu" min="0" value="{{ politica.comissao_1000_btu }}"></td>
+            </tr>
+            <tr>
+              <td>Ultra 1 Gb com mesh</td>
+              <td><input type="number" name="comissao_1000_mesh" min="0" value="{{ politica.comissao_1000_mesh }}"></td>
+              <td><input type="number" name="comissao_1000_mesh_btu" min="0" value="{{ politica.comissao_1000_mesh_btu }}"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:0.8rem"><strong>Serviços adicionais (varejo)</strong></p>
+      <div class="table-scroll">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Fixo</th>
+              <th>Globoplay anúncios</th>
+              <th>Globoplay Premium</th>
+              <th>Max</th>
+              <th>Paramount</th>
+              <th>Bônus M-10 / venda</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><input type="number" name="comissao_fixo" min="0" value="{{ politica.comissao_fixo }}"></td>
+              <td><input type="number" name="comissao_globoplay_anuncios" min="0" value="{{ politica.comissao_globoplay_anuncios }}"></td>
+              <td><input type="number" name="comissao_globoplay_premium" min="0" value="{{ politica.comissao_globoplay_premium }}"></td>
+              <td><input type="number" name="comissao_max" min="0" value="{{ politica.comissao_max }}"></td>
+              <td><input type="number" name="comissao_paramount" min="0" value="{{ politica.comissao_paramount }}"></td>
+              <td><input type="number" name="bonus_m10" min="0" value="{{ politica.bonus_m10 }}"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="help" style="margin-top:0.6rem">NMEI (não cumulativo, safra Gross jun/26): 400 R$ 120 · 500/600 R$ 100 · 800/1 Gb R$ 150. Faixa transição M-10 no gross do mês: ≥400 → R$ {{ politica.faixa_m10_alta }} · 150–399 → R$ {{ politica.faixa_m10_media }} · &lt;150 → R$ {{ politica.faixa_m10_baixa }}. O M-10 de R$ {{ politica.bonus_m10 }} por remanescente continua no checkbox por PDV.</p>
+      <button class="btn btn-primary" type="submit" style="margin-top:0.7rem">Salvar comissões PAP</button>
+    </form>
+  </div>
+</div>
+{% endif %}
 <form method="post">
   {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
   <input type="hidden" name="action" value="salvar">
@@ -36,9 +118,6 @@
             <th>DU VL</th>
             <th>Meta Gross</th>
             <th>DU Gross</th>
-            <th>R$ 500</th>
-            <th>R$ 700</th>
-            <th>R$ 1000</th>
             <th>Bônus</th>
             <th>R$ bônus</th>
             <th>M10</th>
@@ -56,9 +135,6 @@
             <td><input type="number" step="0.1" name="p{{ linha.parceiro.id }}_du_vl" min="0" value="{{ linha.osab.du_vl|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
             <td><input type="number" name="p{{ linha.parceiro.id }}_meta_gross" min="0" value="{{ linha.osab.meta_gross|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
             <td><input type="number" step="0.1" name="p{{ linha.parceiro.id }}_du_gross" min="0" value="{{ linha.osab.du_gross|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
-            <td><input type="number" name="p{{ linha.parceiro.id }}_comissao_500" min="0" value="{{ linha.osab.comissao_500|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
-            <td><input type="number" name="p{{ linha.parceiro.id }}_comissao_700" min="0" value="{{ linha.osab.comissao_700|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
-            <td><input type="number" name="p{{ linha.parceiro.id }}_comissao_1000" min="0" value="{{ linha.osab.comissao_1000|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
             <td><input type="checkbox" name="p{{ linha.parceiro.id }}_tem_bonus" {% if linha.osab.tem_bonus %}checked{% endif %} {% if not pode_editar %}disabled{% endif %}></td>
             <td><input type="number" name="p{{ linha.parceiro.id }}_comissao_bonus" min="0" value="{{ linha.osab.comissao_bonus|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
             <td><input type="checkbox" name="p{{ linha.parceiro.id }}_tem_bonus_m10" {% if linha.osab.tem_bonus_m10 %}checked{% endif %} {% if not pode_editar %}disabled{% endif %}></td>
