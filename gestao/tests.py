@@ -1371,11 +1371,32 @@ class TarefasTests(TestCase):
         )
         resumo = processar_tarefas(self._xlsx_abertas(hoje()), "t.xlsx", lote)
         self.assertEqual(resumo["modo"], "abertas")
-        self.assertEqual(resumo["relatorios"], 1)
-        rel = RelatorioTarefa.objects.get()
-        self.assertEqual(rel.parceiro_id, self.pdv.id)
+        self.assertEqual(resumo["relatorios"], 2)
+        self.assertEqual(resumo["total_hoje"], 3)
+        rel = RelatorioTarefa.objects.get(parceiro=self.pdv)
         self.assertEqual(rel.total, 2)
         self.assertIn("Resumo de Tarefas", rel.mensagem)
+        self.assertNotIn("(MG) -", rel.mensagem)
+        self.assertIn("BH (MG)", rel.mensagem)
+        outro = RelatorioTarefa.objects.get(pdv_nome="OUTRO")
+        self.assertEqual(outro.total, 1)
+        self.assertIn("SP (SP)", outro.mensagem)
+        self.assertIsNone(outro.parceiro_id)
+
+    def test_abertas_inclui_todas_as_ufs(self):
+        from gestao.models import LoteImportacao, RelatorioTarefa
+        from gestao.periodo import hoje
+        from gestao.pipelines.tarefas import processar_tarefas
+
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.TAREFAS, arquivo_nome="t.xlsx", ok=True
+        )
+        processar_tarefas(self._xlsx_abertas(hoje()), "t.xlsx", lote)
+        totais = {
+            r.pdv_nome: r.total for r in RelatorioTarefa.objects.all()
+        }
+        self.assertEqual(totais["INOVA MG"], 2)
+        self.assertEqual(totais["OUTRO"], 1)
 
     def test_fechadas_consolidado(self):
         from gestao.models import LoteImportacao, RelatorioTarefa
@@ -1386,6 +1407,7 @@ class TarefasTests(TestCase):
         ws = wb.active
         ws.append(["sg_uf", "nm_municipio", "INDICADOR", "dt_fim_execucao_real"])
         ws.append(["MG", "BH", "TAREFAS FECHADAS", hoje().isoformat()])
+        ws.append(["RJ", "Rio de Janeiro", "TAREFAS FECHADAS", hoje().isoformat()])
         buf = BytesIO()
         wb.save(buf)
         buf.seek(0)
@@ -1397,7 +1419,10 @@ class TarefasTests(TestCase):
         self.assertEqual(resumo["modo"], "fechadas")
         rel = RelatorioTarefa.objects.get()
         self.assertIsNone(rel.parceiro_id)
-        self.assertEqual(rel.total, 1)
+        self.assertEqual(rel.total, 2)
+        self.assertIn("RJ", rel.mensagem)
+        self.assertIn("Rio de Janeiro (RJ)", rel.mensagem)
+        self.assertNotIn("(MG) -", rel.mensagem)
 
     def test_enviar_lote_acumula_resumo(self):
         from unittest.mock import patch

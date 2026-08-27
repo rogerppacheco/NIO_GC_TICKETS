@@ -79,14 +79,55 @@ def _colunas_anexo(df: pd.DataFrame) -> list[str]:
     return [c for c in LISTA_COLUNAS if c in df.columns] or list(df.columns)
 
 
+def _normalizar_geo(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    if "sg_uf" in out.columns:
+        out["sg_uf"] = out["sg_uf"].astype(str).str.strip().str.upper()
+        out.loc[out["sg_uf"].isin({"NAN", "NONE", ""}), "sg_uf"] = "—"
+    if "nm_municipio" in out.columns:
+        out["nm_municipio"] = out["nm_municipio"].astype(str).str.strip()
+        out.loc[out["nm_municipio"].str.lower().isin({"nan", "none", ""}), "nm_municipio"] = "—"
+    return out
+
+
+def _resumo_geo(df: pd.DataFrame) -> tuple[str, dict]:
+    """Texto WhatsApp e totais por UF/cidade (todas as UFs da base)."""
+    linhas: list[str] = []
+    ufs: dict[str, int] = {}
+    cidades: dict[str, int] = {}
+    if "sg_uf" in df.columns:
+        linhas.append("*Resumo por UF:*")
+        for uf, qtd in df["sg_uf"].value_counts().items():
+            ufs[str(uf)] = int(qtd)
+            linhas.append(f"- {uf}: {qtd}")
+        linhas.append("")
+    if "nm_municipio" in df.columns:
+        linhas.append("*Resumo por Cidade:*")
+        if "sg_uf" in df.columns:
+            grp = (
+                df.groupby(["sg_uf", "nm_municipio"], dropna=False)
+                .size()
+                .sort_values(ascending=False)
+            )
+            for (uf, cidade), qtd in grp.items():
+                chave = f"{cidade} ({uf})"
+                cidades[chave] = int(qtd)
+                linhas.append(f"- {chave}: {qtd} tarefas")
+        else:
+            for cidade, qtd in df["nm_municipio"].value_counts().items():
+                cidades[str(cidade)] = int(qtd)
+                linhas.append(f"- {cidade}: {qtd} tarefas")
+    return "\n".join(linhas).rstrip(), {"ufs": ufs, "cidades": cidades}
+
+
 def _processar_abertas(df: pd.DataFrame, lote: LoteImportacao, data_ref: date) -> dict:
     for col in ("sg_uf", "nm_municipio", "DT_AGENDAMENTO", "nm_pdv_rel", "INDICADOR"):
         if col not in df.columns:
             raise ValueError(f"Coluna essencial ausente para TAREFAS ABERTAS: {col}")
 
-    filtrado = df[(df["sg_uf"] == "MG") & (df["INDICADOR"] == "TAREFAS ABERTAS")].copy()
+    filtrado = _normalizar_geo(df[df["INDICADOR"] == "TAREFAS ABERTAS"].copy())
     if filtrado.empty:
-        return {"modo": "abertas", "relatorios": 0, "motivo": "sem_tarefas_mg"}
+        return {"modo": "abertas", "relatorios": 0, "motivo": "sem_tarefas"}
 
     filtrado["DT_AGENDAMENTO"] = pd.to_datetime(filtrado["DT_AGENDAMENTO"], errors="coerce")
     filtrado["DT_AGENDAMENTO"] = filtrado["DT_AGENDAMENTO"].dt.tz_localize(None)
@@ -102,16 +143,14 @@ def _processar_abertas(df: pd.DataFrame, lote: LoteImportacao, data_ref: date) -
 
     for pdv_nome, df_pdv in hoje_df.groupby("nm_pdv_rel"):
         total_pdv = len(df_pdv)
-        resumo_cidades = df_pdv["nm_municipio"].value_counts()
+        bloco_geo, detalhes = _resumo_geo(df_pdv)
         mensagem = (
-            f"📊 *Resumo de Tarefas em Aberto (MG) - {hoje_str}*\n"
+            f"📊 *Resumo de Tarefas em Aberto - {hoje_str}*\n"
             f"🏬 *PDV:* {pdv_nome}\n\n"
             f"Total de tarefas com agendamento para hoje: *{total_pdv}*\n\n"
-            f"*Resumo por Cidade (Tarefas de Hoje):*\n"
+            f"{bloco_geo}\n"
+            f"\n_O anexo contém o relatório detalhado das tarefas de hoje._"
         )
-        for cidade, qtd in resumo_cidades.items():
-            mensagem += f"- {cidade}: {qtd} tarefas\n"
-        mensagem += "\n_O anexo contém o relatório detalhado das tarefas de hoje._"
 
         parceiro_id = resolver_parceiro_id(str(pdv_nome), indice)
         if parceiro_id is None:
@@ -127,7 +166,7 @@ def _processar_abertas(df: pd.DataFrame, lote: LoteImportacao, data_ref: date) -
             mensagem=mensagem,
             df_anexo=df_pdv[cols],
             nome_arquivo=f"Tarefas_Abertas_{tag}_{data_ref.isoformat()}.xlsx",
-            detalhes={"cidades": {str(k): int(v) for k, v in resumo_cidades.items()}},
+            detalhes=detalhes,
         )
         gerados += 1
 
@@ -144,7 +183,7 @@ def _processar_fechadas(df: pd.DataFrame, lote: LoteImportacao, data_ref: date) 
         if col not in df.columns:
             raise ValueError(f"Coluna essencial ausente para TAREFAS FECHADAS: {col}")
 
-    filtrado = df[df["sg_uf"] == "MG"].copy()
+    filtrado = _normalizar_geo(df.copy())
     filtrado["dt_fim_execucao_real"] = pd.to_datetime(filtrado["dt_fim_execucao_real"], errors="coerce")
     filtrado["dt_fim_execucao_real"] = filtrado["dt_fim_execucao_real"].dt.tz_localize(None)
     fechadas = filtrado[filtrado["dt_fim_execucao_real"].dt.date == data_ref].copy()
@@ -153,9 +192,11 @@ def _processar_fechadas(df: pd.DataFrame, lote: LoteImportacao, data_ref: date) 
 
     hoje_str = data_ref.strftime("%d/%m/%Y")
     total = len(fechadas)
+    bloco_geo, detalhes = _resumo_geo(fechadas)
     mensagem = (
-        f"✅ *Relatório de Tarefas Fechadas (MG) - {hoje_str}*\n\n"
-        f"Total fechadas hoje: *{total}*"
+        f"✅ *Relatório de Tarefas Fechadas - {hoje_str}*\n\n"
+        f"Total fechadas hoje: *{total}*\n\n"
+        f"{bloco_geo}"
     )
     _salvar_relatorio(
         lote=lote,
@@ -167,6 +208,7 @@ def _processar_fechadas(df: pd.DataFrame, lote: LoteImportacao, data_ref: date) 
         mensagem=mensagem,
         df_anexo=fechadas[_colunas_anexo(fechadas)],
         nome_arquivo=f"Tarefas_Fechadas_HOJE_{data_ref.isoformat()}.xlsx",
+        detalhes=detalhes,
     )
     return {"modo": "fechadas", "relatorios": 1, "total": total}
 
@@ -176,7 +218,7 @@ def _processar_futuros(df: pd.DataFrame, lote: LoteImportacao, data_ref: date) -
         if col not in df.columns:
             raise ValueError(f"Coluna essencial ausente para AGENDAMENTO-FUTUROS: {col}")
 
-    filtrado = df[df["sg_uf"] == "MG"].copy()
+    filtrado = _normalizar_geo(df.copy())
     filtrado["DT_AGENDAMENTO"] = pd.to_datetime(filtrado["DT_AGENDAMENTO"], errors="coerce")
     filtrado["DT_AGENDAMENTO"] = filtrado["DT_AGENDAMENTO"].dt.tz_localize(None)
     futuros = filtrado[filtrado["DT_AGENDAMENTO"].dt.date > data_ref].copy()
@@ -185,9 +227,11 @@ def _processar_futuros(df: pd.DataFrame, lote: LoteImportacao, data_ref: date) -
 
     hoje_str = data_ref.strftime("%d/%m/%Y")
     total = len(futuros)
+    bloco_geo, detalhes = _resumo_geo(futuros)
     mensagem = (
-        f"🗓️ *Relatório de Agendamentos Futuros (MG) - {hoje_str}*\n\n"
-        f"Total de agendamentos futuros: *{total}*"
+        f"🗓️ *Relatório de Agendamentos Futuros - {hoje_str}*\n\n"
+        f"Total de agendamentos futuros: *{total}*\n\n"
+        f"{bloco_geo}"
     )
     _salvar_relatorio(
         lote=lote,
@@ -199,12 +243,13 @@ def _processar_futuros(df: pd.DataFrame, lote: LoteImportacao, data_ref: date) -
         mensagem=mensagem,
         df_anexo=futuros[_colunas_anexo(futuros)],
         nome_arquivo=f"Agendamentos_Futuros_{data_ref.isoformat()}.xlsx",
+        detalhes=detalhes,
     )
     return {"modo": "futuros", "relatorios": 1, "total": total}
 
 
 def processar_tarefas(arquivo, nome: str, lote: LoteImportacao, data_referencia: date | None = None) -> dict:
-    """Roteia por INDICADOR: abertas (por PDV), fechadas ou futuros (consolidado MG)."""
+    """Roteia por INDICADOR: abertas (por PDV), fechadas ou futuros — todas as UFs."""
     data_ref = data_referencia or hoje()
     # ler_planilha lê a 1ª aba; tarefas vêm em arquivo único
     caminho = None
