@@ -5,6 +5,7 @@ from .models import (
     CadastroTerceiro,
     ConfiguracaoOSAB,
     Destinatario,
+    DiaFiscal,
     EnvioWhatsApp,
     GrossMensal,
     HistoricoChurn,
@@ -95,6 +96,7 @@ admin.site.register(AnaliseCapilaridade)
 admin.site.register(MetaCapilaridade)
 admin.site.register(ConfiguracaoOSAB)
 admin.site.register(PoliticaComissao)
+admin.site.register(DiaFiscal)
 admin.site.register(HistoricoOSAB)
 admin.site.register(GrossMensal)
 admin.site.register(HistoricoChurn)

@@ -1657,6 +1657,8 @@ class MetasAcompanhamentoTests(TestCase):
         self.assertContains(r, "Comissão PAP")
         self.assertContains(r, "Super 800 Mb")
         self.assertContains(r, "Ultra 1 Gb com mesh")
+        self.assertContains(r, "calendário de pesos")
+        self.assertContains(r, "DU VL")
 
     def test_importa_vl_gross_cap_e_du(self):
         from gestao.models import ConfiguracaoOSAB, MetaCapilaridade
@@ -1870,6 +1872,65 @@ class ComissaoPapTests(TestCase):
         self.assertEqual(
             ConfiguracaoOSAB.objects.get(parceiro=pdv, ano=2026, mes=8).comissao_700, 450
         )
+
+
+class CalendarioDuTests(TestCase):
+    def test_garante_mes_com_padrao_e_feriado(self):
+        from datetime import date as d
+
+        from gestao.models import DiaFiscal
+        from gestao.pipelines.calendario import garantir_mes, marcar_feriado, totais_mes
+
+        dias = garantir_mes(2026, 8)
+        self.assertEqual(len(dias), 31)
+        sab = DiaFiscal.objects.get(data=d(2026, 8, 1))
+        self.assertEqual(sab.peso_vl, 0.5)
+        self.assertEqual(sab.peso_gross, 0.0)
+        marcar_feriado(d(2026, 8, 15), "Padroeira")
+        fer = DiaFiscal.objects.get(data=d(2026, 8, 15))
+        self.assertTrue(fer.feriado)
+        self.assertEqual(fer.peso_vl, 0.0)
+        tot = totais_mes(2026, 8)
+        self.assertGreater(tot["du_vl"], 0)
+        self.assertGreater(tot["du_gross"], 0)
+
+    def test_aplica_du_no_pdv_e_osab_usa_calendario(self):
+        from gestao.models import ConfiguracaoOSAB
+        from gestao.pipelines.calendario import aplicar_nos_pdvs, garantir_mes
+
+        pdv = Parceiro.objects.create(codigo_pdv="gm", nome="GM TELECOM")
+        garantir_mes(2026, 8)
+        ConfiguracaoOSAB.objects.create(
+            parceiro=pdv, ano=2026, mes=8, meta_vl=100, meta_gross=80
+        )
+        n = aplicar_nos_pdvs(2026, 8)
+        self.assertEqual(n, 1)
+        cfg = ConfiguracaoOSAB.objects.get(parceiro=pdv, ano=2026, mes=8)
+        self.assertGreater(cfg.du_vl, 0)
+        self.assertGreater(cfg.du_gross, 0)
+        self.assertTrue(cfg.pesos_diarios_vl)
+        from gestao.pipelines.osab import _resolver_pesos
+
+        pesos_vl, _pesos_gr, du_vl, du_gr = _resolver_pesos(cfg, 2026, 8)
+        self.assertGreater(du_vl, 0)
+        self.assertGreater(du_gr, 0)
+        self.assertTrue(pesos_vl)
+
+    def test_import_grava_dia_fiscal(self):
+        from datetime import date as d
+
+        from gestao.models import DiaFiscal
+        from gestao.pipelines.metas import processar_metas
+
+        pdv = Parceiro.objects.create(codigo_pdv="m2", nome="INOVA MG")
+        arquivo = _acompanhamento_xlsx(
+            [["META", "VL", 10, 202608, "S1", "INOVA MG"]],
+            [[datetime(2026, 8, 3), 202608, 1.0, 1.2]],
+        )
+        processar_metas(arquivo, "a.xlsx", 2026, 8)
+        dia = DiaFiscal.objects.get(data=d(2026, 8, 3))
+        self.assertEqual(dia.peso_vl, 1.0)
+        self.assertEqual(dia.peso_gross, 1.2)
 
 
 

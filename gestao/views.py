@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -70,6 +72,17 @@ from .pipelines.fpd import processar_fpd
 from .pipelines.gdp import processar_gdp
 from .pipelines.metas import processar_metas
 from .pipelines.comissao import aplicar_politica_nos_pdvs
+from .pipelines.calendario import (
+    aplicar_nos_pdvs as aplicar_du_pdvs,
+    defaults_osab,
+    desmarcar_feriado,
+    estrutura_calendario,
+    feriados_do_mes,
+    marcar_feriado,
+    navegacao,
+    salvar_lote as salvar_calendario_lote,
+    totais_mes,
+)
 from .pipelines.osab import calcular_osab, persistir_capilaridade, processar_osab
 from .pipelines.recompra import processar_recompra
 from .pipelines.resultados import (
@@ -1069,25 +1082,77 @@ def configs_view(request: HttpRequest) -> HttpResponse:
                 f"Política PAP salva. Comissões 500/800/1Gb copiadas para {n} PDV(s) do período.",
             )
             return _voltar(request, "gestao_configs")
+        if action == "salvar_calendario":
+            salvar_calendario_lote(
+                request.POST.getlist("dia_id"),
+                request.POST.getlist("peso_vl"),
+                request.POST.getlist("peso_gross"),
+                request.POST.getlist("observacao_dia"),
+            )
+            n = aplicar_du_pdvs(ano, mes)
+            tot = totais_mes(ano, mes)
+            messages.success(
+                request,
+                f"Calendário DU {mes:02d}/{ano}: VL {tot['du_vl']:.2f} · Gross {tot['du_gross']:.2f}. "
+                f"Aplicado em {n} PDV(s).",
+            )
+            return _voltar(request, "gestao_configs")
+        if action == "add_feriado":
+            raw = (request.POST.get("feriado_data") or "").strip()
+            desc = (request.POST.get("feriado_desc") or "Feriado").strip()
+            try:
+                partes = raw.replace("/", "-").split("-")
+                if len(partes) == 3 and len(partes[0]) == 4:
+                    dia = date(int(partes[0]), int(partes[1]), int(partes[2]))
+                else:
+                    dia = date(int(partes[2]), int(partes[1]), int(partes[0]))
+                marcar_feriado(dia, desc)
+                aplicar_du_pdvs(ano, mes)
+                messages.success(request, f"Feriado {dia.strftime('%d/%m/%Y')} com peso 0.")
+            except (TypeError, ValueError, IndexError):
+                messages.error(request, "Informe a data do feriado (dd/mm/aaaa).")
+            return _voltar(request, "gestao_configs")
+        if action == "del_feriado":
+            try:
+                desmarcar_feriado(int(request.POST.get("feriado_id") or 0))
+                aplicar_du_pdvs(ano, mes)
+                messages.success(request, "Feriado removido e o dia voltou ao peso padrão.")
+            except (TypeError, ValueError):
+                messages.error(request, "Não foi possível remover o feriado.")
+            return _voltar(request, "gestao_configs")
+        du_padrao = defaults_osab(ano, mes)
         for p in parceiros:
             prefix = f"p{p.id}_"
             meta_v = int(request.POST.get(prefix + "meta_vendedores") or 0)
             MetaCapilaridade.objects.update_or_create(
                 parceiro=p, ano=ano, mes=mes, defaults={"meta_vendedores": meta_v}
             )
+            du_vl = float(request.POST.get(prefix + "du_vl") or 0)
+            du_gross = float(request.POST.get(prefix + "du_gross") or 0)
+            osab_defaults = {
+                "meta_vl": int(request.POST.get(prefix + "meta_vl") or 0),
+                "du_vl": du_vl,
+                "meta_gross": int(request.POST.get(prefix + "meta_gross") or 0),
+                "du_gross": du_gross,
+                "tem_bonus": prefix + "tem_bonus" in request.POST,
+                "comissao_bonus": int(request.POST.get(prefix + "comissao_bonus") or 0),
+                "tem_bonus_m10": prefix + "tem_bonus_m10" in request.POST,
+            }
+            if du_padrao:
+                if du_vl <= 0:
+                    osab_defaults["du_vl"] = du_padrao["du_vl"]
+                    osab_defaults["pesos_diarios_vl"] = du_padrao["pesos_diarios_vl"]
+                if du_gross <= 0:
+                    osab_defaults["du_gross"] = du_padrao["du_gross"]
+                    osab_defaults["pesos_diarios_gross"] = du_padrao["pesos_diarios_gross"]
+                if du_vl <= 0 or du_gross <= 0:
+                    osab_defaults.setdefault("pesos_diarios_vl", du_padrao["pesos_diarios_vl"])
+                    osab_defaults.setdefault("pesos_diarios_gross", du_padrao["pesos_diarios_gross"])
             ConfiguracaoOSAB.objects.update_or_create(
                 parceiro=p,
                 ano=ano,
                 mes=mes,
-                defaults={
-                    "meta_vl": int(request.POST.get(prefix + "meta_vl") or 0),
-                    "du_vl": float(request.POST.get(prefix + "du_vl") or 0),
-                    "meta_gross": int(request.POST.get(prefix + "meta_gross") or 0),
-                    "du_gross": float(request.POST.get(prefix + "du_gross") or 0),
-                    "tem_bonus": prefix + "tem_bonus" in request.POST,
-                    "comissao_bonus": int(request.POST.get(prefix + "comissao_bonus") or 0),
-                    "tem_bonus_m10": prefix + "tem_bonus_m10" in request.POST,
-                },
+                defaults=osab_defaults,
             )
         messages.success(request, f"Metas salvas para {mes:02d}/{ano}.")
         return _voltar(request, "gestao_configs")
@@ -1097,10 +1162,23 @@ def configs_view(request: HttpRequest) -> HttpResponse:
     linhas = []
     for p in parceiros:
         linhas.append({"parceiro": p, "meta": metas.get(p.id), "osab": configs.get(p.id)})
+    nav = navegacao(ano, mes)
+    tot_cal = totais_mes(ano, mes)
     return render(
         request,
         "gestao/configs.html",
-        {"ano": ano, "mes": mes, "linhas": linhas, "pode_editar": eh_gestor(request.user), "form_import": form_import, "politica": PoliticaComissao.vigente()},
+        {
+            "ano": ano,
+            "mes": mes,
+            "linhas": linhas,
+            "pode_editar": eh_gestor(request.user),
+            "form_import": form_import,
+            "politica": PoliticaComissao.vigente(),
+            "calendario": estrutura_calendario(ano, mes),
+            "calendario_totais": tot_cal,
+            "feriados": feriados_do_mes(ano, mes),
+            "cal_nav": nav,
+        },
     )
 
 

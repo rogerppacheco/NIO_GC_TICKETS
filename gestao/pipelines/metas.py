@@ -201,6 +201,10 @@ def processar_metas(arquivo, nome_arquivo: str, ano: int, mes: int) -> dict:
     if aba_cal:
         df_cal = ler_planilha(arquivo, nome_arquivo, sheet_name=aba_cal)
         du = extrair_du_calendario(df_cal, ano, mes)
+        if du:
+            from .calendario import persistir_de_acompanhamento
+
+            persistir_de_acompanhamento(ano, mes, du)
     resumo = persistir_metas(linhas, ano, mes, du)
     resumo.update({"aba": aba_base, "aba_calendario": aba_cal or "", "ano": ano, "mes": mes})
     return resumo

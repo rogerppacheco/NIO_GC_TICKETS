@@ -375,6 +375,26 @@ def _projecao_linear(realizado: float, hoje_ref: date, ano: int, mes: int) -> fl
     return (realizado / base) * dias_totais
 
 
+def _resolver_pesos(config, ano: int, mes: int) -> tuple[dict, dict, float, float]:
+    pesos_vl = json.loads(config.pesos_diarios_vl) if config.pesos_diarios_vl else {}
+    pesos_gr = json.loads(config.pesos_diarios_gross) if config.pesos_diarios_gross else {}
+    du_vl = float(config.du_vl or 0)
+    du_gr = float(config.du_gross or 0)
+    if pesos_vl and du_vl > 0:
+        return pesos_vl, pesos_gr, du_vl, du_gr
+    from .calendario import pesos_do_mes
+
+    cal = pesos_do_mes(ano, mes)
+    if not cal:
+        return pesos_vl, pesos_gr, du_vl, du_gr
+    return (
+        cal["vl"],
+        cal["gross"],
+        du_vl or cal["du_vl"],
+        du_gr or cal["du_gross"],
+    )
+
+
 def calcular_osab(ano: int, mes: int) -> dict:
     hoje_ref = hoje()
     agora = timezone.now()
@@ -453,18 +473,17 @@ def calcular_osab(ano: int, mes: int) -> dict:
             if is_mes_passado:
                 proj_vl, proj_gross = float(realizado_vl), float(realizado_gross)
             else:
-                pesos_vl = json.loads(config.pesos_diarios_vl) if config.pesos_diarios_vl else {}
-                pesos_gross = json.loads(config.pesos_diarios_gross) if config.pesos_diarios_gross else {}
+                pesos_vl, pesos_gross, du_vl, du_gross = _resolver_pesos(config, ano, mes)
                 d_max = _dias_civis_fechados(hoje_ref, ano, mes)
                 acc_vl = sum(float(pesos_vl.get(str(d), 0)) for d in range(1, d_max + 1))
                 acc_g = sum(float(pesos_gross.get(str(d), 0)) for d in range(1, d_max + 1))
                 eps = 1e-9
-                rest_vl = config.du_vl - acc_vl
+                rest_vl = du_vl - acc_vl
                 if abs(acc_vl) > eps and rest_vl > eps:
                     proj_vl = realizado_vl + rest_vl * (realizado_vl / acc_vl)
                 else:
                     proj_vl = _projecao_linear(float(realizado_vl), hoje_ref, ano, mes)
-                rest_g = config.du_gross - acc_g
+                rest_g = du_gross - acc_g
                 if abs(acc_g) > eps and rest_g > eps:
                     proj_gross = realizado_gross + rest_g * (realizado_gross / acc_g)
                 else:

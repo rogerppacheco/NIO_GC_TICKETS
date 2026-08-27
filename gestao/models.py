@@ -274,6 +274,22 @@ class PoliticaComissao(models.Model):
         return obj
 
 
+class DiaFiscal(models.Model):
+    data = models.DateField(unique=True, db_index=True)
+    peso_vl = models.FloatField(default=1.0)
+    peso_gross = models.FloatField(default=1.0)
+    feriado = models.BooleanField(default=False)
+    observacao = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        ordering = ["data"]
+        verbose_name = "Dia fiscal (DU)"
+        verbose_name_plural = "Calendário de pesos DU"
+
+    def __str__(self) -> str:
+        return f"{self.data:%d/%m/%Y} VL {self.peso_vl} · Gross {self.peso_gross}"
+
+
 class HistoricoOSAB(models.Model):
     data_processamento = models.DateTimeField(auto_now_add=True, db_index=True)
     parceiro = models.ForeignKey(
