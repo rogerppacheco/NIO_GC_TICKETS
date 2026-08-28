@@ -10,7 +10,7 @@
 <div class="hero">
   <div>
     <h1>Parceiros</h1>
-    <p>Com demandas no PDV: use <strong>Inativar</strong>. Sem demandas: pode <strong>Excluir</strong>. O admin vê <strong>todas as gerências</strong> em Outros especialistas. A OSAB vai para o <strong>Empresário</strong> (ou para o grupo em Destinatários, se não houver empresário).</p>
+    <p>Com demandas no PDV: use <strong>Inativar</strong>. Sem demandas: pode <strong>Excluir</strong>. Cadastre a <strong>razão social</strong> (Sysmap/comissionamento) em cada PDV. O admin vê <strong>todas as gerências</strong> em Outros especialistas. A OSAB vai para o <strong>Empresário</strong> (ou para o grupo em Destinatários, se não houver empresário).</p>
   </div>
   <a class="btn btn-primary" href="{% url 'parceiro_novo' %}">Novo parceiro</a>
 </div>
@@ -21,6 +21,7 @@
         <tr>
           <th>Código</th>
           <th>Nome</th>
+          <th>Razão social</th>
           <th>Especialista</th>
           <th>Gerência</th>
           <th>Empresários</th>
@@ -35,6 +36,7 @@
         <tr {% if not p.ativo %}style="opacity:0.65"{% endif %}>
           <td>{{ p.codigo_pdv }}</td>
           <td>{{ p.nome }}</td>
+          <td>{{ p.razao_social|default:"—" }}</td>
           <td>
             {% if p.especialista %}
               {{ p.especialista.get_full_name|default:p.especialista.username }}
@@ -89,7 +91,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="9">Nenhum parceiro neste escopo.</td></tr>
+        <tr><td colspan="10">Nenhum parceiro neste escopo.</td></tr>
         {% endfor %}
       </tbody>
     </table>

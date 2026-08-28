@@ -10,6 +10,8 @@ import pandas as pd
 from django.core.files.base import ContentFile
 
 from ..models import Destinatario, LoteImportacao, RelatorioComissionamento
+from ..parceiros import normalizar_razao
+from tickets.models import Parceiro
 
 
 def _norm_texto(v) -> str:
@@ -28,25 +30,32 @@ def extrair_razoes_sociais(texto: str) -> list[str]:
 
 
 def mapa_pdv_razoes() -> dict[int, dict]:
-    """parceiro_id → {pdv_nome, razoes} a partir dos destinatários com flag + razões."""
+    """parceiro_id → {pdv_nome, razoes} a partir do cadastro do PDV (+ legado destinatários)."""
     mapa: dict[int, dict] = {}
+    for parceiro in Parceiro.objects.filter(ativo=True).exclude(razao_social=""):
+        mapa[parceiro.id] = {
+            "pdv_nome": parceiro.nome,
+            "razoes": [parceiro.razao_social.strip()],
+        }
     qs = (
         Destinatario.objects.filter(ativo=True, envio_comissionamento=True)
         .exclude(razoes_sociais_comissionamento="")
         .select_related("parceiro")
     )
     for dest in qs:
-        razoes = extrair_razoes_sociais(dest.razoes_sociais_comissionamento)
-        if not razoes:
+        extras = extrair_razoes_sociais(dest.razoes_sociais_comissionamento)
+        if not extras:
             continue
         info = mapa.setdefault(
             dest.parceiro_id,
-            {"pdv_nome": dest.parceiro.nome, "razoes": set()},
+            {"pdv_nome": dest.parceiro.nome, "razoes": []},
         )
-        info["razoes"].update(razoes)
+        for razao in extras:
+            if razao not in info["razoes"]:
+                info["razoes"].append(razao)
     for info in mapa.values():
         info["razoes"] = sorted(info["razoes"])
-    return mapa
+    return {pid: info for pid, info in mapa.items() if info["razoes"]}
 
 
 def _resolver_aba(nome_alvo: str, abas) -> str | None:
@@ -199,7 +208,8 @@ def processar_comissionamento(arquivo, nome: str, lote: LoteImportacao) -> dict:
     mapa = mapa_pdv_razoes()
     if not mapa:
         raise ValueError(
-            "Nenhum PDV com destinatário ativo de comissionamento e razões sociais cadastradas."
+            "Nenhum PDV com razão social cadastrada em Parceiros "
+            "(ou em Destinatários, legado)."
         )
 
     caminho = _salvar_bytes_temporario(arquivo, nome)
@@ -236,9 +246,13 @@ def processar_comissionamento(arquivo, nome: str, lote: LoteImportacao) -> dict:
 
         for parceiro_id, info in mapa.items():
             pdv_nome = info["pdv_nome"]
-            razoes_norm = {_norm_texto(r) for r in info["razoes"]}
-            mask_pedido = df_pedido[col_razao_pedido].apply(_norm_texto).isin(razoes_norm)
-            mask_linha = df_linha[col_razao_linha].apply(_norm_texto).isin(razoes_norm)
+            razoes_norm = {normalizar_razao(r) for r in info["razoes"]}
+            mask_pedido = df_pedido[col_razao_pedido].apply(lambda v: normalizar_razao(str(v))).isin(
+                razoes_norm
+            )
+            mask_linha = df_linha[col_razao_linha].apply(lambda v: normalizar_razao(str(v))).isin(
+                razoes_norm
+            )
             pedido_pdv = df_pedido[mask_pedido].copy()
             linha_pdv = df_linha[mask_linha].copy()
             if pedido_pdv.empty and linha_pdv.empty:

@@ -25,7 +25,7 @@ COLUNAS_ALVO = {
     "chave_acesso": r"chave\s*de\s*acesso",
     "vinculo": r"v.*nculo",
     "cargo_funcao": r"cargo.*fun",
-    "situacao_empresa": r"situa.*terceiro.*empresa",
+    "situacao_empresa": r"(?:situa.*terceiro.*empresa|^status$)",
     "situacao_funcional": r"situa.*funcional",
     "situacao_contrato": r"situa.*terceiro.*contrato",
     "data_alocacao": r"data\s*aloca",
@@ -63,8 +63,14 @@ def _funcional_elegivel(situacao_funcional) -> bool:
     return funcional in {"ativo", "recontratação", "recontratacao"}
 
 
+def _situacao_desativada(valor) -> bool:
+    return str(valor or "").strip().lower() == "desativado"
+
+
 def terceiro_elegivel_capilaridade(situacao_empresa, situacao_funcional, situacao_contrato) -> bool:
     empresa = str(situacao_empresa or "").strip().lower()
+    if _situacao_desativada(empresa):
+        return False
     contrato = str(situacao_contrato or "").strip().lower()
     return empresa == "ativo" and _funcional_elegivel(situacao_funcional) and contrato == "alocado"
 
@@ -204,17 +210,17 @@ def _limpar_texto(valor) -> str:
 
 
 def _score_linha(linha: pd.Series, mapa: dict[str, str]) -> tuple:
-    empresa = _limpar_texto(linha.get(mapa["situacao_empresa"]))
-    funcional = _limpar_texto(linha.get(mapa["situacao_funcional"]))
-    contrato = _limpar_texto(linha.get(mapa["situacao_contrato"]))
-    elegivel = terceiro_elegivel_capilaridade(empresa, funcional, contrato)
+    """Linha mais recente vence (inativação > desalocação > alocação)."""
+    inativ = _parse_data(linha.get(mapa["data_inativacao"]))
+    desaloc = _parse_data(linha.get(mapa["data_desalocacao"]))
     aloc = _parse_data(linha.get(mapa["data_alocacao"]))
-    return (
-        1 if elegivel else 0,
-        1 if contrato.lower() == "alocado" else 0,
-        1 if empresa.lower() == "ativo" and _funcional_elegivel(funcional) else 0,
-        aloc.toordinal() if aloc else 0,
-    )
+    if inativ:
+        return (3, inativ.toordinal())
+    if desaloc:
+        return (2, desaloc.toordinal())
+    if aloc:
+        return (1, aloc.toordinal())
+    return (0, 0)
 
 
 def _consolidar(df: pd.DataFrame, mapa: dict[str, str]) -> tuple[pd.DataFrame, int]:

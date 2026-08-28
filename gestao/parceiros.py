@@ -28,14 +28,20 @@ def normalizar_pdv(nome: str) -> str:
     return normalizar_razao(nome)
 
 
-def indice_parceiros() -> list[tuple[int, str, str]]:
+def indice_parceiros() -> list[tuple[int, str, str, str]]:
+    """id, nome, nome_norm, razao_norm (cadastro Sym/comissionamento)."""
     return [
-        (p.id, p.nome, normalizar_pdv(p.nome))
+        (
+            p.id,
+            p.nome,
+            normalizar_pdv(p.nome),
+            normalizar_razao(p.razao_social),
+        )
         for p in Parceiro.objects.filter(ativo=True).order_by("nome")
     ]
 
 
-def resolver_parceiro_id(nome: str, indice: list[tuple[int, str, str]] | None = None) -> int | None:
+def resolver_parceiro_id(nome: str, indice: list[tuple[int, str, str, str]] | None = None) -> int | None:
     """Resolve nome/razão social da planilha para o Parceiro do NIO."""
     if indice is None:
         indice = indice_parceiros()
@@ -43,13 +49,17 @@ def resolver_parceiro_id(nome: str, indice: list[tuple[int, str, str]] | None = 
     if not bruto:
         return None
 
-    for pid, nome_cad, _ in indice:
+    for pid, nome_cad, _, _ in indice:
         if nome_cad.casefold() == bruto.casefold():
             return pid
 
     razao_norm = normalizar_razao(bruto)
     if not razao_norm:
         return None
+
+    for pid, _, _, razao_cad in indice:
+        if razao_cad and razao_norm == razao_cad:
+            return pid
 
     alvo = RAZAO_ALIASES_PDV.get(razao_norm)
     if not alvo:
@@ -59,13 +69,13 @@ def resolver_parceiro_id(nome: str, indice: list[tuple[int, str, str]] | None = 
                 break
     if alvo:
         alvo_norm = normalizar_pdv(alvo)
-        for pid, _, pdv_norm in indice:
+        for pid, _, pdv_norm, _ in indice:
             if pdv_norm == alvo_norm:
                 return pid
 
     melhor_id = None
     melhor_score = 0
-    for pid, _, pdv_norm in indice:
+    for pid, _, pdv_norm, _ in indice:
         if not pdv_norm:
             continue
         if razao_norm == pdv_norm:

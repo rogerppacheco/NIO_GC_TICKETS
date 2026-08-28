@@ -554,7 +554,10 @@ class Destinatario(models.Model):
     razoes_sociais_comissionamento = models.TextField(
         "Razões sociais (comissionamento)",
         blank=True,
-        help_text="Uma por linha (ou separadas por ;). Filtra as abas PEDIDO / LINHA_A_LINHA.",
+        help_text=(
+            "Legado: razões extras além do cadastro em Parceiros. "
+            "Prefira cadastrar a razão social na aba Parceiros."
+        ),
     )
     email = models.EmailField(
         "E-mail",

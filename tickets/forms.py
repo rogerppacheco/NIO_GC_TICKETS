@@ -72,11 +72,16 @@ class ParceiroForm(forms.ModelForm):
         fields = [
             "codigo_pdv",
             "nome",
+            "razao_social",
             "ativo",
             "especialista",
             "token_acesso",
         ]
         help_texts = {
+            "razao_social": (
+                "Igual à coluna Razão Social do Sysmap/Supply e do comissionamento. "
+                "Usada para vincular terceiros e filtrar o ciclo de comissões."
+            ),
             "token_acesso": "Um único token para todos os contatos deste PDV (opcional).",
             "especialista": "Quem trata as demandas deste PDV.",
         }

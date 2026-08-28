@@ -12,6 +12,15 @@ from django.utils import timezone
 class Parceiro(models.Model):
     codigo_pdv = models.CharField("Código PDV", max_length=32, unique=True)
     nome = models.CharField("Nome", max_length=120)
+    razao_social = models.CharField(
+        "Razão social",
+        max_length=200,
+        blank=True,
+        help_text=(
+            "Igual à coluna Razão Social do Sysmap/Supply (gestão de terceiros) "
+            "e do comissionamento (PEDIDO / LINHA_A_LINHA)."
+        ),
+    )
     contato_nome = models.CharField(
         "Contato principal (legado)",
         max_length=120,

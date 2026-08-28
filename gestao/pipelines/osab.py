@@ -209,6 +209,24 @@ def ultimas_vendas_pdv(pdv_nome: str) -> dict[str, datetime]:
     return mapa
 
 
+def listar_terceiros_capilaridade_pdv(parceiro: Parceiro) -> list:
+    """Terceiros do PDV: razão social (Sysmap) + TT com venda OSAB no PDV."""
+    vistos: set[int] = set()
+    resultado = []
+    for terceiro in listar_terceiros_do_parceiro(parceiro.id):
+        if terceiro.id in vistos:
+            continue
+        vistos.add(terceiro.id)
+        resultado.append(terceiro)
+    mapa = mapa_terceiros_por_chave()
+    for chave in ultimas_vendas_pdv(parceiro.nome):
+        terceiro = mapa.get(chave)
+        if terceiro and terceiro.id not in vistos:
+            vistos.add(terceiro.id)
+            resultado.append(terceiro)
+    return resultado
+
+
 def _terceiro_passa_filtro(terceiro, filtros: dict | None) -> bool:
     filtros = filtros or {}
     tt = (filtros.get("tt") or "").strip().upper()
@@ -245,7 +263,7 @@ def linhas_capilaridade_pdv(parceiro: Parceiro, filtros: dict | None = None) -> 
     vistos: set[str] = set()
     cargo_filtro = (filtros or {}).get("cargo") or ""
     situacao_filtro = (filtros or {}).get("situacao") or ""
-    for terceiro in listar_terceiros_do_parceiro(parceiro.id):
+    for terceiro in listar_terceiros_capilaridade_pdv(parceiro):
         if not _terceiro_passa_filtro(terceiro, filtros):
             continue
         if not situacao_filtro and not terceiro_elegivel_capilaridade(

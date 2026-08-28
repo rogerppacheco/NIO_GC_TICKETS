@@ -13,9 +13,9 @@ class ContatoParceiroInline(admin.TabularInline):
 
 @admin.register(Parceiro)
 class ParceiroAdmin(admin.ModelAdmin):
-    list_display = ("codigo_pdv", "nome", "especialista", "ativo")
+    list_display = ("codigo_pdv", "nome", "razao_social", "especialista", "ativo")
     list_filter = ("ativo",)
-    search_fields = ("codigo_pdv", "nome")
+    search_fields = ("codigo_pdv", "nome", "razao_social")
     inlines = [ContatoParceiroInline]
 
 

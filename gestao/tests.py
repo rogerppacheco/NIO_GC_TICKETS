@@ -68,6 +68,17 @@ class ParceiroMatchTests(TestCase):
     def test_nome_exato(self):
         self.assertEqual(resolver_parceiro_id("INOVA MG"), self.pdv.id)
 
+    def test_razao_social_cadastrada_no_parceiro(self):
+        pdv = Parceiro.objects.create(
+            codigo_pdv="kk",
+            nome="K&K",
+            razao_social="KEK TELECOM INTERMEDIACAO LTDA",
+        )
+        self.assertEqual(
+            resolver_parceiro_id("KEK TELECOM INTERMEDIACAO LTDA"),
+            pdv.id,
+        )
+
 
 class SysmapImportTests(TestCase):
     def setUp(self):
@@ -114,6 +125,89 @@ class SysmapImportTests(TestCase):
         self.assertTrue(t.ativo)
         self.assertEqual(t.parceiro_id, self.pdv.id)
         self.assertEqual(t.cargo_funcao, "VENDEDOR")
+
+    def test_desativado_nao_elegivel_capilaridade(self):
+        from gestao.terceiros import terceiro_elegivel_capilaridade
+
+        self.assertFalse(
+            terceiro_elegivel_capilaridade("Desativado", "Desativado", "Desalocado")
+        )
+        self.assertFalse(
+            terceiro_elegivel_capilaridade("Desativado", "Ativo", "Alocado")
+        )
+
+    def test_consolidacao_prefere_linha_desativada_recente(self):
+        arquivo = _xlsx(
+            [
+                [
+                    "LUISA SERVICOS DE TELEFONIA MOVEL",
+                    "JOAO",
+                    "123",
+                    "a@x.com",
+                    "TT774192",
+                    "CLT",
+                    "VENDEDOR",
+                    "Ativo",
+                    "Ativo",
+                    "Alocado",
+                    "01/01/2024",
+                    "",
+                    "",
+                ],
+                [
+                    "LUISA SERVICOS DE TELEFONIA MOVEL",
+                    "JOAO",
+                    "123",
+                    "a@x.com",
+                    "TT774192",
+                    "CLT",
+                    "VENDEDOR",
+                    "Desativado",
+                    "Desativado",
+                    "Desalocado",
+                    "01/01/2024",
+                    "15/08/2025",
+                    "15/08/2025",
+                ],
+            ],
+            [
+                "Razão Social",
+                "Terceiro",
+                "CPF",
+                "Email",
+                "Chave de Acesso",
+                "Vínculo",
+                "Cargo/Função",
+                "Situação Terceiro Empresa",
+                "Situação Funcional",
+                "Situação Terceiro Contrato",
+                "Data Alocação",
+                "Data Desalocação",
+                "Data Inativação",
+            ],
+        )
+        importar_sysmap(arquivo, "terceiros.xlsx")
+        t = CadastroTerceiro.objects.get(chave_acesso="TT774192")
+        self.assertEqual(t.situacao_empresa, "Desativado")
+        self.assertFalse(t.ativo)
+
+    def test_desativado_nao_entra_na_capilaridade(self):
+        from gestao.pipelines.osab import linhas_capilaridade_pdv
+
+        pdv = Parceiro.objects.create(codigo_pdv="2", nome="RECORD")
+        CadastroTerceiro.objects.create(
+            chave_acesso="TT816374",
+            nome_terceiro="MARIA",
+            razao_social="RECORD",
+            parceiro=pdv,
+            cargo_funcao="VENDEDOR",
+            situacao_empresa="Desativado",
+            situacao_funcional="Desativado",
+            situacao_contrato="Desalocado",
+            ativo=False,
+        )
+        chaves = {l["matricula_vendedor"] for l in linhas_capilaridade_pdv(pdv)}
+        self.assertNotIn("TT816374", chaves)
 
 
 class OsabCapilaridadeTests(TestCase):
@@ -184,6 +278,74 @@ class OsabCapilaridadeTests(TestCase):
         chaves = {l["matricula_vendedor"] for l in linhas}
         self.assertIn("TT99", chaves)
         self.assertIn("TT100", chaves)
+
+    def test_vendedor_vinculado_por_osab_sem_razao_social(self):
+        from gestao.pipelines.osab import linhas_capilaridade_pdv
+
+        pdv_kk = Parceiro.objects.create(codigo_pdv="kk", nome="K&K")
+        CadastroTerceiro.objects.create(
+            chave_acesso="TT815070",
+            nome_terceiro="VENDEDOR KK",
+            razao_social="KEK TELECOM INTERMEDIACAO LTDA",
+            parceiro=None,
+            cargo_funcao="VENDEDOR",
+            situacao_empresa="Ativo",
+            situacao_funcional="Ativo",
+            situacao_contrato="Alocado",
+            ativo=True,
+        )
+        VendaOSAB.objects.create(
+            pedido="P-KK-1",
+            pdv_nome="K&K",
+            matricula_vendedor="TT815070",
+            nome_vendedor="VENDEDOR KK",
+            data_abertura=timezone.now(),
+            situacao="Concluído",
+        )
+        chaves = {l["matricula_vendedor"] for l in linhas_capilaridade_pdv(pdv_kk)}
+        self.assertIn("TT815070", chaves)
+
+    def test_vendedor_sem_osab_continua_por_razao_social(self):
+        from gestao.pipelines.osab import linhas_capilaridade_pdv
+
+        pdv = Parceiro.objects.create(codigo_pdv="3", nome="INOVA MG")
+        CadastroTerceiro.objects.create(
+            chave_acesso="TT300",
+            nome_terceiro="ANA NOVA",
+            razao_social="LUISA SERVICOS DE TELEFONIA MOVEL LTDA",
+            parceiro=None,
+            cargo_funcao="VENDEDOR",
+            situacao_empresa="Ativo",
+            situacao_funcional="Ativo",
+            situacao_contrato="Alocado",
+            ativo=True,
+        )
+        chaves = {l["matricula_vendedor"] for l in linhas_capilaridade_pdv(pdv)}
+        self.assertIn("TT300", chaves)
+
+    def test_desativado_nao_entra_mesmo_com_osab(self):
+        from gestao.pipelines.osab import linhas_capilaridade_pdv
+
+        pdv_kk = Parceiro.objects.create(codigo_pdv="kk2", nome="K&K 2")
+        CadastroTerceiro.objects.create(
+            chave_acesso="TT816374",
+            nome_terceiro="MARIA OFF",
+            razao_social="KEK TELECOM INTERMEDIACAO LTDA",
+            parceiro=None,
+            cargo_funcao="VENDEDOR",
+            situacao_empresa="Desativado",
+            situacao_funcional="Desativado",
+            situacao_contrato="Desalocado",
+            ativo=False,
+        )
+        VendaOSAB.objects.create(
+            pedido="P-KK-2",
+            pdv_nome="K&K 2",
+            matricula_vendedor="TT816374",
+            data_abertura=timezone.now(),
+        )
+        chaves = {l["matricula_vendedor"] for l in linhas_capilaridade_pdv(pdv_kk)}
+        self.assertNotIn("TT816374", chaves)
 
     def test_filtro_tt_nome_cargo(self):
         from gestao.pipelines.osab import linhas_capilaridade_pdv
@@ -1354,16 +1516,10 @@ class DestinatarioEnvioTests(TestCase):
 
 class ComissionamentoTests(TestCase):
     def setUp(self):
-        self.pdv = Parceiro.objects.create(codigo_pdv="31", nome="INOVA MG")
-        from gestao.models import Destinatario
-
-        Destinatario.objects.create(
-            parceiro=self.pdv,
-            nome="Grupo Comis",
-            jid="120363abc@g.us",
-            tipo=Destinatario.TipoDestino.GRUPO,
-            envio_comissionamento=True,
-            razoes_sociais_comissionamento="LUISA SERVICOS DE TELEFONIA MOVEL LTDA",
+        self.pdv = Parceiro.objects.create(
+            codigo_pdv="31",
+            nome="INOVA MG",
+            razao_social="LUISA SERVICOS DE TELEFONIA MOVEL LTDA",
         )
 
     def _ciclo_xlsx(self):
@@ -1438,10 +1594,11 @@ class ComissionamentoTests(TestCase):
         self.assertIn("Comissionamento", rel.mensagem)
 
     def test_exige_razoes_configuradas(self):
-        from gestao.models import Destinatario, LoteImportacao
+        from gestao.models import LoteImportacao
         from gestao.pipelines.comissionamento import processar_comissionamento
 
-        Destinatario.objects.all().delete()
+        self.pdv.razao_social = ""
+        self.pdv.save(update_fields=["razao_social"])
         lote = LoteImportacao.objects.create(
             tipo=LoteImportacao.Tipo.COMISSIONAMENTO,
             arquivo_nome="ciclo.xlsx",
