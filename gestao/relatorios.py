@@ -90,7 +90,14 @@ def resumir_auditoria(parceiro: Parceiro, ano: int, mes: int) -> dict:
         if ultima is not None:
             ultima_dia = ultima.date() if hasattr(ultima, "date") else ultima
             dias = (data_ref.date() - ultima_dia).days
-        buckets[bucket].append({"chave": chave, "dias": dias if dias is not None else "?", "ultima": ultima})
+        buckets[bucket].append(
+            {
+                "chave": chave,
+                "nome": (terceiro.nome_terceiro if terceiro else "") or "",
+                "dias": dias if dias is not None else "?",
+                "ultima": ultima,
+            }
+        )
         vistos[bucket].add(chave)
     for chave in buckets:
         buckets[chave] = sorted(buckets[chave], key=lambda x: x["chave"])
@@ -139,7 +146,7 @@ def montar_mascara_pdv(
         else:
             recentes.append(txt)
     if inativos:
-        partes.append(f"🆘 *Inativos a recuperar: {len(inativos)}*\n" + "\n".join(inativos))
+        partes.append(f"🆘 *Recuperar: {len(inativos)}*\n" + "\n".join(inativos))
     if avencer:
         partes.append(f"⚠️ *A vencer: {len(avencer)}*\n" + "\n".join(avencer))
     if recentes:
@@ -160,7 +167,9 @@ def montar_mascara_pdv(
         for item in itens:
             dias = item["dias"]
             dias_n = dias if isinstance(dias, int) else None
-            linhas_txt.append(_linha_tt(item["chave"], dias_n, item["ultima"]))
+            linhas_txt.append(
+                _linha_tt(item["chave"], dias_n, item["ultima"], item.get("nome") or "")
+            )
         partes.append("\n".join(linhas_txt))
     return "\n\n".join(partes)
 

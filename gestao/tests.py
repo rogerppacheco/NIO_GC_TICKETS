@@ -220,6 +220,35 @@ class OsabCapilaridadeTests(TestCase):
         self.assertIn("JOAO DIAS", linha)
         self.assertNotIn("VITOR", linha)
 
+    def test_mascara_auditoria_usa_nome_sysmap_e_titulo_recuperar(self):
+        from gestao.relatorios import montar_mascara_pdv
+        from gestao.terceiros import CARGO_OPERADOR_VENDA_INTERNA
+
+        CadastroTerceiro.objects.create(
+            chave_acesso="TT822566",
+            nome_terceiro="MARIA SILVA SANTOS",
+            razao_social="RECORD",
+            parceiro=self.pdv,
+            cargo_funcao=CARGO_OPERADOR_VENDA_INTERNA,
+            situacao_empresa="Ativo",
+            situacao_funcional="Ativo",
+            situacao_contrato="Alocado",
+            ativo=True,
+        )
+        agora = timezone.now()
+        VendaOSAB.objects.create(
+            pedido="OP1",
+            pdv_nome="RECORD",
+            matricula_vendedor="TT822566",
+            data_abertura=agora,
+            parceiro=self.pdv,
+        )
+        mascara = montar_mascara_pdv(self.pdv, agora.year, agora.month)
+        self.assertIn("*Recuperar:", mascara)
+        self.assertNotIn("Inativos a recuperar", mascara)
+        self.assertIn("Vendas Operador de Vendas interna", mascara)
+        self.assertIn("TT822566 · MARIA SANTOS", mascara)
+
     def test_planilha_capilaridade_aceita_datetime_com_fuso(self):
         from gestao.planilhas import planilha_capilaridade
 
