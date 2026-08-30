@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Consulta CDOE · NIO GC Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>CDOE — endereços por código CDO</h1>
+    <p>Fluxo igual ao bot: código → UF → cidade (se houver) → rua → números.</p>
+    <p class="help">Cobertura: {{ cobertura }}.</p>
+  </div>
+  <a class="btn btn-secondary" href="{% url 'consultas_hub' %}">Voltar</a>
+</div>
+
+{% if erro %}
+  <div class="panel" style="margin-bottom:1rem">
+    <div class="panel-b"><p class="help err" style="margin:0">{{ erro }}</p></div>
+  </div>
+{% endif %}
+
+{% if passo == "codigo" %}
+<div class="panel">
+  <div class="panel-h"><h2>1. Código CDOE</h2></div>
+  <div class="panel-b">
+    <form method="post">
+      {% csrf_token %}
+      <div style="margin-bottom:0.85rem">
+        <label for="codigo">Código</label>
+        <input type="text" name="codigo" id="codigo" class="mono" value="{{ codigo }}"
+               placeholder="28005 ou CDOE-28005" required autocomplete="off"
+               {% if not dfv_enabled %}disabled{% endif %}>
+      </div>
+      <button class="btn btn-primary" type="submit" {% if not dfv_enabled %}disabled{% endif %}>
+        Continuar
+      </button>
+    </form>
+  </div>
+</div>
+
+{% elif passo == "uf" %}
+<div class="panel">
+  <div class="panel-h"><h2>2. Estado (UF) — código {{ codigo }}</h2></div>
+  <div class="panel-b">
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="codigo" value="{{ codigo }}">
+      <p class="help">Escolha o estado da consulta:</p>
+      <div class="cdoe-uf-grid">
+        {% for uf_item in cdoe_ufs %}
+          <button type="submit" name="uf" value="{{ uf_item }}" class="btn btn-secondary cdoe-uf-btn">
+            {{ uf_item }}
+          </button>
+        {% endfor %}
+      </div>
+    </form>
+    <p style="margin-top:0.85rem"><a href="{% url 'consulta_cdoe' %}?reset=1">Recomeçar</a></p>
+  </div>
+</div>
+
+{% elif passo == "cidade" %}
+<div class="panel">
+  <div class="panel-h"><h2>3. Cidade — {{ codigo }} / {{ uf }}</h2></div>
+  <div class="panel-b">
+    <p class="help">Encontramos {{ cidades|length }} cidades. Escolha uma:</p>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="codigo" value="{{ codigo }}">
+      <input type="hidden" name="uf" value="{{ uf }}">
+      <div class="cdoe-lista">
+        {% for c in cidades %}
+          <button type="submit" name="cidade" value="{{ c }}" class="cdoe-lista-item">
+            <span class="cdoe-lista-num">{{ forloop.counter }}</span>
+            <span>{{ c }}</span>
+          </button>
+        {% endfor %}
+      </div>
+    </form>
+    <p style="margin-top:0.85rem"><a href="{% url 'consulta_cdoe' %}?reset=1">Recomeçar</a></p>
+  </div>
+</div>
+
+{% elif passo == "rua" %}
+<div class="panel">
+  <div class="panel-h"><h2>4. Rua — {{ codigo }} / {{ uf }} / {{ cidade }}</h2></div>
+  <div class="panel-b">
+    <p class="help">Ruas/CEPs encontrados: {{ grupos|length }}. Escolha a rua:</p>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="codigo" value="{{ codigo }}">
+      <input type="hidden" name="uf" value="{{ uf }}">
+      <input type="hidden" name="cidade" value="{{ cidade }}">
+      <div class="cdoe-lista">
+        {% for g in grupos %}
+          <button type="submit" name="rua_idx" value="{{ forloop.counter }}" class="cdoe-lista-item">
+            <span class="cdoe-lista-num">{{ forloop.counter }}</span>
+            <span>
+              <strong>{{ g.logradouro }}</strong>
+              — CEP {{ g.cep_fmt }} — {{ g.bairro }}
+              ({{ g.linhas|length }} fachada{{ g.linhas|length|pluralize }})
+            </span>
+          </button>
+        {% endfor %}
+      </div>
+    </form>
+    <p style="margin-top:0.85rem"><a href="{% url 'consulta_cdoe' %}?reset=1">Recomeçar</a></p>
+  </div>
+</div>
+
+{% elif passo == "resultado" %}
+<div class="grid-2">
+  {% include "tickets/consultas/_preview_wpp.html" with titulo="Números da rua (como no WhatsApp)" %}
+  <div class="panel">
+    <div class="panel-h"><h2>Nova consulta</h2></div>
+    <div class="panel-b">
+      <p class="help" style="margin-top:0">
+        Código <strong>{{ codigo }}</strong> · UF <strong>{{ uf }}</strong>
+        {% if cidade %} · {{ cidade }}{% endif %}
+      </p>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.85rem">
+        <a class="btn btn-primary" href="{% url 'consulta_cdoe' %}?reset=1">Nova CDOE</a>
+        <a class="btn btn-secondary" href="{% url 'consulta_dfv' %}">Consultar DFV (CEP)</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

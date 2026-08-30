@@ -1,0 +1,16 @@
+{% if mensagens_html %}
+<div class="panel consulta-wpp-panel">
+  <div class="panel-h">
+    <h2>{{ titulo|default:"Resposta (como no WhatsApp)" }}</h2>
+    {% if mensagens_wpp %}
+      <button type="button" class="btn btn-ghost btn-sm"
+              data-copy-text="{{ mensagens_wpp.0|escape }}">Copiar texto</button>
+    {% endif %}
+  </div>
+  <div class="panel-b">
+    {% for msg in mensagens_html %}
+      <div class="wpp-bubble">{{ msg|safe }}</div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}

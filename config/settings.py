@@ -157,6 +157,32 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 
+# --- Consultas DFV/CDOE (Power BI ao vivo — mesmo serviço do site-record) ---
+DFV_POWERBI_ENABLED = os.environ.get("DFV_POWERBI_ENABLED", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+    "sim",
+}
+DFV_POWERBI_RESOURCE_KEY = os.environ.get(
+    "DFV_POWERBI_RESOURCE_KEY", "8a9db8f9-7cf1-4db5-90d2-5259ad149eba"
+).strip()
+DFV_POWERBI_CLUSTER = os.environ.get(
+    "DFV_POWERBI_CLUSTER", "https://wabi-brazil-south-b-primary-api.analysis.windows.net"
+).strip()
+DFV_POWERBI_MODEL_ID = int(os.environ.get("DFV_POWERBI_MODEL_ID", "6061538") or "6061538")
+DFV_POWERBI_SP_RESOURCE_KEY = os.environ.get(
+    "DFV_POWERBI_SP_RESOURCE_KEY", "81e95c1a-e770-44e3-9646-19df8443756c"
+).strip()
+DFV_POWERBI_SP_MODEL_ID = int(os.environ.get("DFV_POWERBI_SP_MODEL_ID", "7340452") or "7340452")
+DFV_POWERBI_SUL_RESOURCE_KEY = os.environ.get(
+    "DFV_POWERBI_SUL_RESOURCE_KEY", "cc212c25-1b6a-4301-877b-703e2c7aa788"
+).strip()
+DFV_POWERBI_SUL_MODEL_ID = int(os.environ.get("DFV_POWERBI_SUL_MODEL_ID", "6062850") or "6062850")
+DFV_POWERBI_TIMEOUT_SECONDS = float(os.environ.get("DFV_POWERBI_TIMEOUT_SECONDS", "18") or "18")
+DFV_POWERBI_CACHE_TTL_SECONDS = int(os.environ.get("DFV_POWERBI_CACHE_TTL_SECONDS", "600") or "600")
+
 # --- WhatsApp: Evolution API + n8n (mesmo padrão do site-record) ---
 EVOLUTION_API_URL = os.environ.get("EVOLUTION_API_URL", "").strip()
 EVOLUTION_API_KEY = os.environ.get("EVOLUTION_API_KEY", "").strip()

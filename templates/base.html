@@ -23,6 +23,7 @@
           {% if eh_gestor %}
             <a href="{% url 'especialistas' %}">Especialistas</a>
           {% endif %}
+          <a href="{% url 'consultas_hub' %}">Consultas</a>
           <a href="{% url 'mascaras' %}">Máscaras</a>
           <a href="{% url 'config_resposta_lista' %}">Campos resposta</a>
           <a href="{% url 'meu_perfil' %}">{{ user.get_full_name|default:user.username }}</a>

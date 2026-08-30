@@ -518,3 +518,57 @@ body.modal-open { overflow: hidden; }
   .hero { flex-direction: column; align-items: start; }
   .table { display: block; overflow-x: auto; }
 }
+
+/* Consultas operacionais (DFV / CDOE) */
+.consultas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+.consulta-card {
+  display: flex; flex-direction: column; gap: 0.45rem;
+  padding: 1.1rem 1.15rem; border-radius: var(--radius);
+  border: 1px solid var(--line); background: var(--surface);
+  box-shadow: var(--shadow); color: inherit; text-decoration: none;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.consulta-card:hover {
+  border-color: var(--brand); text-decoration: none; transform: translateY(-1px);
+}
+.consulta-ico { font-size: 1.6rem; line-height: 1; }
+.consulta-card h2 { margin: 0; font-size: 1.15rem; }
+.consulta-card p { margin: 0; color: var(--muted); font-size: 0.92rem; line-height: 1.45; }
+.consulta-tag {
+  align-self: flex-start; margin-top: 0.35rem;
+  font-size: 0.75rem; font-weight: 800; letter-spacing: 0.03em;
+  text-transform: uppercase; color: var(--brand);
+  background: #eef8f5; border-radius: 999px; padding: 0.2rem 0.55rem;
+}
+.consulta-wpp-panel .panel-h {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+}
+.wpp-bubble {
+  background: #e7f7ef; border: 1px solid #c8ead8; border-radius: 12px;
+  padding: 0.85rem 1rem; font-size: 0.95rem; line-height: 1.55;
+  font-family: var(--font); white-space: normal; overflow-wrap: anywhere;
+}
+.wpp-bubble + .wpp-bubble { margin-top: 0.65rem; }
+.cdoe-uf-grid {
+  display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.65rem;
+}
+.cdoe-uf-btn { min-width: 3.2rem; font-weight: 800; }
+.cdoe-lista { display: flex; flex-direction: column; gap: 0.45rem; margin-top: 0.65rem; }
+.cdoe-lista-item {
+  display: flex; align-items: flex-start; gap: 0.65rem; text-align: left;
+  width: 100%; padding: 0.75rem 0.85rem; border-radius: 10px;
+  border: 1px solid var(--line); background: #fff; cursor: pointer;
+  font: inherit; color: inherit;
+}
+.cdoe-lista-item:hover { border-color: var(--brand); background: #f7fcfa; }
+.cdoe-lista-num {
+  flex-shrink: 0; width: 1.65rem; height: 1.65rem; border-radius: 999px;
+  background: var(--brand); color: #fff; font-weight: 800; font-size: 0.82rem;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.help.warn { color: var(--warn); font-weight: 700; }
+.help.err { color: var(--danger); font-weight: 700; }

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Consulta DFV · NIO GC Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>DFV — fachadas por CEP</h1>
+    <p>Consulta online no Power BI (mesma resposta do comando <strong>DFV</strong> no WhatsApp).</p>
+    <p class="help">Cobertura: {{ cobertura }}.</p>
+  </div>
+  <a class="btn btn-secondary" href="{% url 'consultas_hub' %}">Voltar</a>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-h"><h2>Informe o CEP</h2></div>
+    <div class="panel-b">
+      <form method="post">
+        {% csrf_token %}
+        <div style="margin-bottom:0.85rem">
+          <label for="cep">CEP</label>
+          <input type="text" name="cep" id="cep" class="mono" value="{{ cep }}"
+                 placeholder="00000-000" required autocomplete="off"
+                 {% if not dfv_enabled %}disabled{% endif %}>
+        </div>
+        <button class="btn btn-primary" type="submit" {% if not dfv_enabled %}disabled{% endif %}>
+          Consultar
+        </button>
+      </form>
+      {% if erro %}
+        <p class="help err" style="margin-top:0.85rem">{{ erro }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if mensagens_html %}
+    {% include "tickets/consultas/_preview_wpp.html" with titulo="Resposta (como no WhatsApp)" %}
+  {% endif %}
+</div>
+{% endblock %}

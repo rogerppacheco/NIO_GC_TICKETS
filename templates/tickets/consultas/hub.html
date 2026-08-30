@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Consultas operacionais · NIO GC Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Consultas operacionais</h1>
+    <p>As mesmas consultas dos bots de automação do site-record, disponíveis na web após login.</p>
+    {% if not dfv_enabled %}
+      <p class="help warn">Power BI (DFV/CDOE) temporariamente indisponível neste ambiente.</p>
+    {% else %}
+      <p class="help">Cobertura DFV/CDOE: {{ cobertura }}.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="consultas-grid">
+  <a class="consulta-card" href="{% url 'consulta_dfv' %}">
+    <span class="consulta-ico">🏢</span>
+    <h2>DFV</h2>
+    <p>Consulta fachadas por CEP no Power BI ao vivo (Sudeste, SP e Sul).</p>
+    <span class="consulta-tag">Por CEP</span>
+  </a>
+
+  <a class="consulta-card" href="{% url 'consulta_cdoe' %}">
+    <span class="consulta-ico">📡</span>
+    <h2>CDOE</h2>
+    <p>Endereços e números por código CDO — UF, cidade e rua, como no WhatsApp.</p>
+    <span class="consulta-tag">Por código CDO</span>
+  </a>
+</div>
+
+<div class="panel" style="margin-top:1.25rem">
+  <div class="panel-h"><h2>Em breve</h2></div>
+  <div class="panel-b">
+    <p class="help" style="margin-top:0">
+      Viabilidade, status de pedido, fatura e crédito (CPF) dependem do PAP/Playwright e serão
+      adicionados na sequência. Por enquanto, DFV e CDOE já consultam a mesma base do bot.
+    </p>
+  </div>
+</div>
+{% endblock %}
