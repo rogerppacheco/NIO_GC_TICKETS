@@ -7,7 +7,7 @@
     <span class="consulta-tag">Portal parceiro</span>
   </a>
 
-  <a class="consulta-card" href="{% if user.is_authenticated %}{% url 'consulta_dfv' %}{% else %}{% url 'login' %}?next={% url 'consulta_dfv' %}{% endif %}">
+  <a class="consulta-card" href="{% url 'consulta_dfv' %}">
     <span class="consulta-ico">🏢</span>
     <h2>Consulta DFV</h2>
     <p>Fachadas por CEP no Power BI (Sudeste, SP e Sul).</p>

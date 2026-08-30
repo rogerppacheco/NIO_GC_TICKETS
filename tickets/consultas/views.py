@@ -51,7 +51,6 @@ def consultas_hub(request: HttpRequest) -> HttpResponse:
     )
 
 
-@login_required
 @require_http_methods(["GET", "POST"])
 def consulta_dfv(request: HttpRequest) -> HttpResponse:
     ctx: dict = {

@@ -11,6 +11,7 @@ LIVRE_PREFIXOS = (
     "/abrir/",
     "/consulta/",
     "/repositorio/",
+    "/consultas/dfv/",
     "/consultas/viabilidade/",
     "/static/",
     "/media/",
