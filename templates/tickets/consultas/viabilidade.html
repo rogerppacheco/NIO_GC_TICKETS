@@ -55,7 +55,7 @@
         <p class="help">Nenhum registro para este CEP/fachada.</p>
       {% endif %}
       {% for item in resultados %}
-        <div class="wpp-bubble" style="margin-bottom:0.65rem">
+        <div class="wpp-bubble vtal-card status-{{ item.status_tratamento|slugify|default:'indefinido' }}" style="margin-bottom:0.65rem">
           <div style="display:flex;justify-content:space-between;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.35rem">
             <strong>Solicitação #{{ item.numero_linha_planilha|default:"—" }}</strong>
             <span class="pill">{{ item.status_tratamento|default:"Sem retorno" }}</span>

@@ -662,6 +662,9 @@ a.tab { text-decoration: none; display: inline-block; }
 .portal-cards {
   margin-top: 0.25rem;
 }
+.consultas-tabs {
+  margin-top: 0.25rem;
+}
 .consulta-card {
   display: flex; flex-direction: column; gap: 0.45rem;
   padding: 1.1rem 1.15rem; border-radius: var(--radius);
@@ -690,6 +693,20 @@ a.tab { text-decoration: none; display: inline-block; }
   font-family: var(--font); white-space: normal; overflow-wrap: anywhere;
 }
 .wpp-bubble + .wpp-bubble { margin-top: 0.65rem; }
+.vtal-card.status-viavel-total,
+.vtal-card.status-viavel-parcial {
+  background: #e7f7ef;
+  border-color: #c8ead8;
+}
+.vtal-card.status-inviavel {
+  background: #fdecea;
+  border-color: #f5c2c0;
+}
+.vtal-card.status-inviavel .pill {
+  background: #fde8e6;
+  color: #b42318;
+  border-color: #f5c2c0;
+}
 .cdoe-uf-grid {
   display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.65rem;
 }
