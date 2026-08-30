@@ -485,7 +485,7 @@ def gaps_ranking(ranking: dict) -> list[str]:
     if ranking["sem_municipio"]:
         avisos.append(
             f"{ranking['sem_municipio']} VB(s) sem município na OSAB. "
-            "Reimporte a base com a coluna MUNICIPIO/CIDADE para aplicar 0,5 nas praças BTU."
+            "Reimporte a base com a coluna LOCALIDADE (ou MUNICIPIO/CIDADE) para aplicar 0,5 nas praças BTU."
         )
     if ranking["tts_sem_data"]:
         avisos.append(

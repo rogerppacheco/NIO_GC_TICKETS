@@ -2105,6 +2105,40 @@ class ResultadosTests(TestCase):
         processar_osab(arquivo, "OSAB.xlsx", hoje.year, hoje.month)
         self.assertEqual(VendaOSAB.objects.get(pedido="PMUN").municipio, "Betim")
 
+    def test_import_osab_persiste_localidade(self):
+        hoje = timezone.localdate()
+        abertura = datetime(hoje.year, hoje.month, 1, 10, 0)
+        arquivo = _xlsx(
+            [
+                [
+                    "PLoc",
+                    abertura,
+                    "TT1",
+                    "JOAO",
+                    "INOVA MG",
+                    abertura,
+                    abertura,
+                    "Concluído",
+                    "500 MEGA",
+                    "Contagem",
+                ]
+            ],
+            [
+                "PEDIDO",
+                "DT_REF",
+                "MATRICULA_VENDEDOR",
+                "NOME_VENDEDOR",
+                "DESCRICAO",
+                "DATA_ABERTURA",
+                "DATA_FECHAMENTO",
+                "SITUACAO",
+                "VELOCIDADE",
+                "LOCALIDADE",
+            ],
+        )
+        processar_osab(arquivo, "OSAB.xlsx", hoje.year, hoje.month)
+        self.assertEqual(VendaOSAB.objects.get(pedido="PLoc").municipio, "Contagem")
+
     def test_acumulado_d0_d1(self):
         from gestao.models import ConfiguracaoOSAB
         from gestao.pipelines.resultados import linhas_acumulado

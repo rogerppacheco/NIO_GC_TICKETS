@@ -82,6 +82,8 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
     col_gc = resolver_coluna(trabalho, ["nm_gc", "NM_GC", "NOME_GC", "nome_gc"])
     col_sap = resolver_coluna(trabalho, ["PDV_SAP", "pdv_sap"])
     col_mun = resolver_coluna(trabalho, [
+        "LOCALIDADE",
+        "NM_LOCALIDADE",
         "MUNICIPIO",
         "NM_MUNICIPIO",
         "CIDADE",
