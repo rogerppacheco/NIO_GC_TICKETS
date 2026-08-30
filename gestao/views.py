@@ -520,6 +520,69 @@ def _grupo_ranking_padrao(grupos) -> Destinatario | None:
     return grupos[0] if grupos else None
 
 
+def _buscar_grupo_pp_wa() -> dict | None:
+    """Localiza Parceiros_PP_Nio na sessão Evolution (WhatsApp pareado)."""
+    if not syncwa_configurado():
+        return None
+    res = listar_grupos()
+    if not res.get("ok"):
+        return None
+    candidatos: list[dict] = []
+    for g in res.get("groups") or []:
+        nome = (g.get("name") or "").strip()
+        chave = nome.casefold().replace(" ", "_")
+        if "parceiros_pp" in chave:
+            candidatos.append(
+                {
+                    "jid": g.get("jid") or "",
+                    "name": nome,
+                    "size": g.get("size") or "",
+                }
+            )
+    if not candidatos:
+        return None
+    for c in candidatos:
+        if c["name"].casefold().replace(" ", "_") == "parceiros_pp_nio":
+            return c
+    return candidatos[0]
+
+
+def _ativar_destinatario_ranking(jid: str, nome: str) -> Destinatario:
+    existente = Destinatario.objects.filter(jid=jid).first()
+    if existente:
+        existente.parceiro = None
+        existente.nome = nome[:150]
+        existente.tipo = Destinatario.TipoDestino.GRUPO
+        existente.ativo = True
+        existente.ranking_consolidado = True
+        existente.envio_resultados = True
+        existente.save(
+            update_fields=[
+                "parceiro",
+                "nome",
+                "tipo",
+                "ativo",
+                "ranking_consolidado",
+                "envio_resultados",
+                "atualizado_em",
+            ]
+        )
+        return existente
+    return Destinatario.objects.create(
+        parceiro=None,
+        nome=nome[:150],
+        jid=jid,
+        tipo=Destinatario.TipoDestino.GRUPO,
+        ativo=True,
+        ranking_consolidado=True,
+        envio_resultados=True,
+        envio_osab=False,
+        envio_capilaridade=False,
+        envio_fpd=False,
+        envio_churn=False,
+    )
+
+
 @login_required
 def exportar_vb_sem_municipio(request: HttpRequest) -> HttpResponse:
     from .planilhas import planilha_vb_sem_municipio
@@ -680,6 +743,22 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                 enviar_acumulado_todos(visiveis, request.user, ano=ano, mes=mes),
             )
             return _voltar(request, "gestao_resultados")
+        if action == "ativar_grupo_ranking_pp" and eh_gestor(request.user):
+            grupo_wa = _buscar_grupo_pp_wa()
+            jid = (request.POST.get("jid") or "").strip() or (grupo_wa or {}).get("jid", "")
+            nome = (request.POST.get("nome") or "").strip() or (grupo_wa or {}).get("name") or "Parceiros_PP_Nio"
+            if not jid or "@g.us" not in jid:
+                messages.error(
+                    request,
+                    "Não foi possível obter o JID do grupo. Abra Destinatários → Listar grupos WhatsApp.",
+                )
+            else:
+                dest = _ativar_destinatario_ranking(jid, nome)
+                messages.success(
+                    request,
+                    f"Grupo «{dest.nome}» ativado para o Ranking VB. Agora é só clicar em Enviar imagem no grupo.",
+                )
+            return _voltar(request, "gestao_resultados", extra="aba=ranking")
         if action == "enviar_ranking" and _pode_enviar(request):
             dest_raw = (request.POST.get("destinatario") or "").strip()
             dest_id = int(dest_raw) if dest_raw.isdigit() else None
@@ -697,6 +776,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
     if aba not in {"parcial", "acumulado", "ranking"}:
         aba = "parcial"
     grupos_ranking = list(_grupos_ranking(visiveis))
+    grupo_pp_wa = _buscar_grupo_pp_wa() if not grupos_ranking else None
     return render(
         request,
         "gestao/resultados.html",
@@ -713,6 +793,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             "gaps_ranking": gaps_ranking(ranking),
             "grupos_ranking": grupos_ranking,
             "ranking_grupo_padrao": _grupo_ranking_padrao(grupos_ranking),
+            "grupo_pp_wa": grupo_pp_wa,
             "pracas_btu": pracas_ativas,
             "pracas_btu_mg": pracas_ativas.filter(uf="MG").count(),
             "ultimo_gdp": LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.GDP).first(),

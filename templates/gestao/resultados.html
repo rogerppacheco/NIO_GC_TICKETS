@@ -164,7 +164,41 @@
               </div>
             </form>
             {% else %}
-            <p class="help err">Nenhum grupo WhatsApp com flag Resultados. Em <a href="{% url 'gestao_destinatarios' %}?grupos=1">Destinatários</a>, liste os grupos e clique em <strong>Ranking consolidado</strong> no <code>Parceiros_PP_Nio</code>.</p>
+            <div class="ranking-setup">
+              <p class="help" style="margin:0 0 0.65rem">Para enviar o ranking, o sistema precisa vincular o grupo <strong>Parceiros_PP_Nio</strong> uma única vez.</p>
+              {% if grupo_pp_wa %}
+              <form method="post" class="form-grid">
+                {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+                <input type="hidden" name="action" value="ativar_grupo_ranking_pp">
+                <input type="hidden" name="jid" value="{{ grupo_pp_wa.jid }}">
+                <input type="hidden" name="nome" value="{{ grupo_pp_wa.name }}">
+                <div class="full">
+                  <p class="help" style="margin:0">Grupo encontrado no WhatsApp: <strong>{{ grupo_pp_wa.name }}</strong>{% if grupo_pp_wa.size %} · {{ grupo_pp_wa.size }} membros{% endif %}</p>
+                  <p class="help mono" style="margin:0.25rem 0 0">{{ grupo_pp_wa.jid }}</p>
+                </div>
+                <div class="full">
+                  <button class="btn btn-primary" type="submit">1. Ativar Parceiros_PP_Nio para Ranking</button>
+                </div>
+              </form>
+              {% else %}
+              <p class="help err" style="margin-bottom:0.65rem">Grupo não encontrado automaticamente. Vá em <a href="{% url 'gestao_destinatarios' %}?grupos=1">Destinatários</a>, clique em <strong>Listar grupos WhatsApp</strong>, filtre <code>pp</code> e use o botão <strong>Ranking consolidado</strong> na linha do Parceiros_PP_Nio.</p>
+              <form method="post" class="form-grid">
+                {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+                <input type="hidden" name="action" value="ativar_grupo_ranking_pp">
+                <div class="full">
+                  <label>JID do grupo (copie de Destinatários)</label>
+                  <input type="text" name="jid" class="mono" placeholder="120363429072782745@g.us" value="120363429072782745@g.us">
+                </div>
+                <div class="full">
+                  <label>Nome do grupo</label>
+                  <input type="text" name="nome" value="Parceiros_PP_Nio">
+                </div>
+                <div class="full">
+                  <button class="btn btn-primary" type="submit">Ativar grupo manualmente</button>
+                </div>
+              </form>
+              {% endif %}
+            </div>
             {% endif %}
           {% else %}
             <form method="post">
