@@ -1,9 +1,16 @@
 {% with escopo=gestao_escopo|default:"meus" %}
+{% with aba_qs=request.GET.aba|default:"" %}
 <div class="gestao-escopo" role="tablist" aria-label="Parceiros">
-  <a href="?escopo=meus" class="{% if escopo == 'meus' %}is-on{% endif %}">Meus parceiros <span class="help">({{ gestao_qtd_meus|default:0 }})</span></a>
-  <a href="?escopo=outros" class="{% if escopo == 'outros' %}is-on{% endif %}">Outros especialistas <span class="help">({{ gestao_qtd_outros|default:0 }})</span></a>
+  <a href="?escopo=meus{% if aba_qs %}&amp;aba={{ aba_qs }}{% endif %}" class="{% if escopo == 'meus' %}is-on{% endif %}">Meus parceiros <span class="help">({{ gestao_qtd_meus|default:0 }})</span></a>
+  <a href="?escopo=outros{% if aba_qs %}&amp;aba={{ aba_qs }}{% endif %}" class="{% if escopo == 'outros' %}is-on{% endif %}">Outros especialistas <span class="help">({{ gestao_qtd_outros|default:0 }})</span></a>
+  {% if eh_gestor %}
+  <a href="?escopo=todos{% if aba_qs %}&amp;aba={{ aba_qs }}{% endif %}" class="{% if escopo == 'todos' %}is-on{% endif %}">Todos <span class="help">({{ gestao_qtd_todos|default:0 }})</span></a>
+  {% endif %}
 </div>
 {% if escopo == "outros" %}
   <p class="help" style="margin:-0.4rem 0 1rem">PDVs de outros especialistas da gerência selecionada. Relatórios consolidados (sem PDV) aparecem em <strong>Todas</strong>. O envio WhatsApp segue a regra: admin → Destinatários; especialista → o próprio número.</p>
+{% elif escopo == "todos" %}
+  <p class="help" style="margin:-0.4rem 0 1rem">Todos os PDVs da gerência — use esta aba para gerar o <strong>ranking consolidado</strong> de todos os especialistas.</p>
 {% endif %}
+{% endwith %}
 {% endwith %}

@@ -47,6 +47,7 @@ def nav_counts(request):
 
         ctx["gestao_qtd_meus"] = parceiros_gestao(user, "meus").count()
         ctx["gestao_qtd_outros"] = parceiros_gestao(user, "outros").count()
+        ctx["gestao_qtd_todos"] = parceiros_gestao(user, "todos").count()
         if eh_gestor(user):
             ctx["gestao_gerencias"] = listar_gerencias()
             ctx["gestao_gerencia_sel"] = gerencia_seletor_valor(request)

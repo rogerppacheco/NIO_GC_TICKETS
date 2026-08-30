@@ -23,12 +23,11 @@ GAP = 16
 ALT_LINHA = 28
 LIMITE_LINHAS = 20
 
-# Larguras das colunas (formato RKG_2)
+# Larguras das colunas (formato RKG_2 — uma coluna ESPECIALISTA, nome curto)
 COLS = [
     ("RKG", 42),
-    ("PDV", 168),
-    ("ESPECIALISTA", 200),
-    ("ESP.", 108),
+    ("PDV", 200),
+    ("ESPECIALISTA", 148),
     ("PTS", 52),
     ("BTU", 52),
     ("PADRÃO", 58),
@@ -113,16 +112,14 @@ def _desenhar_tabela(
     draw.text((x_cur, y_head1), "PDV", fill=INK, font=font_head)
     x_cur += COLS[1][1]
     draw.text((x_cur, y_head1), "ESPECIALISTA", fill=INK, font=font_head)
-    x_cur += COLS[2][1] + COLS[3][1]
+    x_cur += COLS[2][1]
     draw.text((x_cur, y_head1), rotulo_janela, fill=INK, font=font_head)
-    x_cur += COLS[4][1] + COLS[5][1] + COLS[6][1]
+    x_cur += COLS[3][1] + COLS[4][1] + COLS[5][1]
     draw.text((x_cur, y_head1), rotulo_acumulado, fill=INK, font=font_head)
 
     y_head2 = y + 50
-    x_cur = x + 8 + COLS[0][1] + COLS[1][1]
-    draw.text((x_cur, y_head2), "ESPECIALISTA", fill=MUTED, font=font_micro)
-    x_cur += COLS[2][1] + COLS[3][1]
-    for rotulo, larg in COLS[4:]:
+    x_cur = x + 8 + COLS[0][1] + COLS[1][1] + COLS[2][1]
+    for rotulo, larg in COLS[3:]:
         draw.text((x_cur, y_head2), rotulo, fill=MUTED, font=font_micro)
         x_cur += larg
 
@@ -138,9 +135,8 @@ def _desenhar_tabela(
             draw.rectangle((x + 6, y_row, x + largura - 6, y_row + ALT_LINHA - 2), fill=ALT_ROW)
         vals = [
             str(item.get("posicao") or ""),
-            _truncar(str(item.get("pdv") or ""), 22),
-            _truncar(str(item.get("especialista") or ""), 26),
-            _truncar(str(item.get("especialista_curto") or ""), 14),
+            _truncar(str(item.get("pdv") or ""), 24),
+            _truncar(str(item.get("especialista_curto") or item.get("especialista") or "—"), 18),
             _fmt_pts(float(item.get("pontos_dia") or 0)),
             str(int(item.get("vb_btu") or 0)),
             str(int(item.get("vb_padrao") or 0)),

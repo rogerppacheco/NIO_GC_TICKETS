@@ -60,7 +60,7 @@ def parceiros_visiveis(user):
 def escopo_gestao(request) -> str:
     src = request.POST if getattr(request, "method", "") == "POST" else getattr(request, "GET", {})
     valor = (src.get("escopo") or "meus").strip().lower()
-    return valor if valor in {"meus", "outros"} else "meus"
+    return valor if valor in {"meus", "outros", "todos"} else "meus"
 
 
 GERENCIA_SESSAO = "gestao_gerencia"
@@ -164,9 +164,11 @@ def parceiros_gestao(user, escopo: str = "meus"):
             Q(especialista__perfil_staff__gerencia__iexact=gerencia) | Q(id__in=ids_osab)
         )
     elif not eh_gestor(user):
-        if escopo == "outros":
+        if escopo in {"outros", "todos"}:
             return qs.none()
         return qs.filter(especialista=user).order_by("nome")
+    if escopo == "todos":
+        return qs.order_by("nome")
     if escopo == "outros":
         return qs.exclude(especialista=user).order_by("nome")
     return qs.filter(especialista=user).order_by("nome")
