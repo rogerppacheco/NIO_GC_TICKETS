@@ -44,6 +44,18 @@ class Parceiro(models.Model):
         blank=True,
         help_text="Um único token para todos os contatos deste PDV (opcional).",
     )
+    data_credenciamento = models.DateField(
+        "Data credenciamento",
+        null=True,
+        blank=True,
+        help_text="Usada no ranking VB (Regular >6 meses · Iniciante ≤6 meses).",
+    )
+    endereco = models.TextField("Endereço", blank=True)
+    emails_empresario = models.TextField(
+        "E-mail(s) do empresário",
+        blank=True,
+        help_text="Um ou mais e-mails, separados por vírgula ou quebra de linha.",
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 

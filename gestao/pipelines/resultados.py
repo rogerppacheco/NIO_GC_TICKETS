@@ -12,7 +12,6 @@ from tickets.models import Parceiro
 
 from ..models import CadastroTerceiro, ConfiguracaoOSAB, PracaBTU, VendaOSAB
 from ..periodo import hoje
-from ..terceiros import mapa_terceiros_por_chave, normalizar_chave_tt
 from .osab import STATUS_IGNORADOS
 
 RANKING_INICIO = date(2026, 9, 2)
@@ -269,7 +268,20 @@ def pontos_venda(municipio: str, pracas_btu: set[str]) -> float:
     return PONTOS_PADRAO
 
 
+def classificar_grupo_parceiro(parceiro: Parceiro | None, data_corte: date) -> str:
+    if parceiro is None or not parceiro.data_credenciamento:
+        return GRUPO_SEM_CADASTRO
+    cred = parceiro.data_credenciamento
+    if cred.year <= 1901:
+        return GRUPO_REGULAR
+    limite = cred + relativedelta(months=6)
+    if data_corte > limite:
+        return GRUPO_REGULAR
+    return GRUPO_INICIANTE
+
+
 def classificar_grupo(terceiro: CadastroTerceiro | None, data_corte: date) -> str:
+    """Legado Sysmap — preferir classificar_grupo_parceiro."""
     if terceiro is None or not terceiro.data_alocacao:
         return GRUPO_SEM_CADASTRO
     limite = terceiro.data_alocacao + relativedelta(months=6)
@@ -303,14 +315,12 @@ def montar_ranking(
     ids = [p.pk for p in lista]
     mapa_parceiros = {p.pk: p for p in lista}
     pracas_btu = _praca_btu_set()
-    terceiros = mapa_terceiros_por_chave()
     vendas = VendaOSAB.objects.filter(
         parceiro_id__in=ids,
         data_abertura__date__gte=periodo["inicio"],
         data_abertura__date__lte=periodo["fim"],
     )
     agregados: dict[int, dict] = {}
-    pontos_por_tt: dict[int, dict[str, float]] = {}
     sem_municipio = 0
     for venda in vendas:
         if not venda_vb_valida(venda):
@@ -318,9 +328,6 @@ def montar_ranking(
         pid = venda.parceiro_id
         if pid is None:
             continue
-        chave = normalizar_chave_tt(venda.matricula_vendedor) or (venda.nome_vendedor or "").strip().upper()
-        if not chave:
-            chave = f"SEM-TT-{venda.pk}"
         dia = data_local(venda.data_abertura)
         if dia is None:
             continue
@@ -352,22 +359,15 @@ def montar_ranking(
             item["sem_municipio"] += 1
         if periodo["janela_ini"] <= dia <= periodo["janela_fim"]:
             item["pontos_dia"] += pts
-        pontos_por_tt.setdefault(pid, {})
-        pontos_por_tt[pid][chave] = pontos_por_tt[pid].get(chave, 0.0) + pts
 
     grupos = {GRUPO_REGULAR: [], GRUPO_INICIANTE: [], GRUPO_SEM_CADASTRO: []}
     pdvs_sem_classificacao = 0
     for pid, item in agregados.items():
         item["vb_padrao"] = item["vb"] - item["vb_btu"]
-        tt_map = pontos_por_tt.get(pid) or {}
-        if tt_map:
-            melhor_tt = max(tt_map, key=lambda k: tt_map[k])
-            terceiro = terceiros.get(melhor_tt)
-        else:
-            terceiro = None
-        grupo = classificar_grupo(terceiro, periodo["fim"])
+        parceiro = mapa_parceiros.get(pid)
+        grupo = classificar_grupo_parceiro(parceiro, periodo["fim"])
         item["grupo"] = grupo
-        item["data_alocacao"] = terceiro.data_alocacao if terceiro else None
+        item["data_credenciamento"] = parceiro.data_credenciamento if parceiro else None
         if grupo == GRUPO_SEM_CADASTRO:
             pdvs_sem_classificacao += 1
         grupos[grupo].append(item)
@@ -414,7 +414,7 @@ def mensagem_ranking(ranking: dict, *, limite: int = 40) -> str:
     rotulos = {
         GRUPO_REGULAR: "Base Regular (>6 meses)",
         GRUPO_INICIANTE: "Iniciante (≤6 meses)",
-        GRUPO_SEM_CADASTRO: "Sem data de alocação / Sysmap",
+        GRUPO_SEM_CADASTRO: "Sem data de credenciamento",
     }
     for chave in (GRUPO_REGULAR, GRUPO_INICIANTE, GRUPO_SEM_CADASTRO):
         grupo = ranking["grupos"].get(chave) or []
@@ -466,8 +466,8 @@ def gaps_ranking(ranking: dict) -> list[str]:
         )
     if ranking["tts_sem_data"]:
         avisos.append(
-            f"{ranking['tts_sem_data']} PDV(s) sem classificação no Sysmap "
-            "(vendedor principal sem data de alocação). Ficam no grupo à parte."
+            f"{ranking['tts_sem_data']} PDV(s) sem data de credenciamento no cadastro. "
+            "Preencha em Parceiros ou importe a Carteira PP."
         )
     if not ranking["total_tts"]:
         avisos.append("Nenhuma VB válida no período do ranking (até D-1).")

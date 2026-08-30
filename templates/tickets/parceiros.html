@@ -14,6 +14,20 @@
   </div>
   <a class="btn btn-primary" href="{% url 'parceiro_novo' %}">Novo parceiro</a>
 </div>
+{% if pode_importar_carteira %}
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-h"><h2>Importar Carteira PP</h2></div>
+  <div class="panel-b">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="importar_carteira">
+      <input type="file" name="arquivo" accept=".xlsx,.xlsb,.xls" required>
+      <p class="help">Planilha <code>Carteira_PP_…xlsx</code>, aba <code>Planilha1</code>. Atualiza a <strong>data credenciamento</strong> de cada PDV (colunas NM_PARCEIRO_2 e DT_CREDENC). Endereço e e-mail do empresário continuam no cadastro manual de cada PDV.</p>
+      <button class="btn btn-secondary" type="submit" style="margin-top:0.6rem">Atualizar credenciamento</button>
+    </form>
+  </div>
+</div>
+{% endif %}
 <div class="panel">
   <div class="table-scroll">
     <table class="table">
@@ -21,6 +35,7 @@
         <tr>
           <th>Código</th>
           <th>Nome</th>
+          <th>Credenciamento</th>
           <th>Razão social</th>
           <th>Especialista</th>
           <th>Gerência</th>
@@ -36,6 +51,7 @@
         <tr {% if not p.ativo %}style="opacity:0.65"{% endif %}>
           <td>{{ p.codigo_pdv }}</td>
           <td>{{ p.nome }}</td>
+          <td>{% if p.data_credenciamento %}{{ p.data_credenciamento|date:"d/m/Y" }}{% else %}—{% endif %}</td>
           <td>{{ p.razao_social|default:"—" }}</td>
           <td>
             {% if p.especialista %}

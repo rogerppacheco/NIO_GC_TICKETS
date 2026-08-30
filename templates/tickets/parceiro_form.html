@@ -35,8 +35,8 @@
                 {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
               </div>
             </div>
-          {% else %}
-            <div class="{% if field.name == 'nome' or field.name == 'razao_social' %}full{% endif %}">
+            {% else %}
+            <div class="{% if field.name == 'nome' or field.name == 'razao_social' or field.name == 'endereco' or field.name == 'emails_empresario' %}full{% endif %}">
               <label for="{{ field.id_for_label }}">{{ field.label }}</label>
               {{ field }}
               {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}

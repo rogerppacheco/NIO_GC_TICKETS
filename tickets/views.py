@@ -20,6 +20,7 @@ from .acesso import (
     gestor_required,
     parceiros_para_cadastro,
     parceiros_visiveis,
+    pode_importar_bases,
     qs_equipe,
     ticket_para_usuario,
     tickets_visiveis,
@@ -681,6 +682,36 @@ def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
 @login_required
 def parceiros_lista(request: HttpRequest) -> HttpResponse:
     escopo = escopo_gestao(request)
+    if request.method == "POST" and request.POST.get("action") == "importar_carteira":
+        if not pode_importar_bases(request.user):
+            messages.error(request, "Sem permissão para importar a carteira.")
+            return redirect(f"{reverse('parceiros')}?escopo={escopo}")
+        from gestao.forms import UploadBaseForm
+        from gestao.pipelines.carteira import processar_carteira
+
+        form_imp = UploadBaseForm(request.POST, request.FILES, extensoes=[".xlsx", ".xlsb", ".xls"])
+        if form_imp.is_valid():
+            arquivo = form_imp.cleaned_data["arquivo"]
+            try:
+                resumo = processar_carteira(arquivo, arquivo.name)
+                extra = ""
+                if resumo.get("sem_cadastro_n"):
+                    extra = (
+                        f" {resumo['sem_cadastro_n']} PDV(s) da carteira sem cadastro"
+                        f" (ex.: {', '.join(resumo['sem_cadastro'][:5])})."
+                    )
+                if resumo.get("divergencias_n"):
+                    extra += f" {resumo['divergencias_n']} divergência(s) de aging vs. data."
+                messages.success(
+                    request,
+                    f"Carteira PP: {resumo['atualizados']} PDV(s) com data credenciamento atualizada.{extra}",
+                )
+            except Exception as exc:
+                messages.error(request, f"Falha ao importar carteira: {exc}")
+        else:
+            messages.error(request, "Selecione a Carteira PP (.xlsx).")
+        return redirect(f"{reverse('parceiros')}?escopo={escopo}")
+
     parceiros = (
         parceiros_para_cadastro(request.user, escopo)
         .select_related("especialista", "especialista__perfil_staff")
@@ -700,6 +731,7 @@ def parceiros_lista(request: HttpRequest) -> HttpResponse:
             "gestao_escopo": escopo,
             "gestao_qtd_meus": parceiros_para_cadastro(request.user, "meus").count(),
             "gestao_qtd_outros": parceiros_para_cadastro(request.user, "outros").count(),
+            "pode_importar_carteira": pode_importar_bases(request.user),
         },
     )
 

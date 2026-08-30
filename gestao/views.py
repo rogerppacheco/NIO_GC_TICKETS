@@ -87,6 +87,8 @@ from .pipelines.comissionamento import mapa_pdv_razoes, processar_comissionament
 from .pipelines.fpd import processar_fpd
 from .pipelines.gdp import processar_gdp
 from .pipelines.metas import processar_metas
+from .pipelines.carteira import processar_carteira
+from .pipelines.du_consolidado import aplicar_du_consolidado
 from .pipelines.comissao import aplicar_politica_nos_pdvs
 from .pipelines.calendario import (
     aplicar_nos_pdvs as aplicar_du_pdvs,
@@ -1146,12 +1148,21 @@ def configs_view(request: HttpRequest) -> HttpResponse:
     ano, mes = periodo_ativo()
     parceiros = list(_parceiros(request))
     form_import = UploadBaseForm() if _pode_importar(request) else None
+    aba = (request.GET.get("aba") or "metas").strip().lower()
+    if aba not in ("importar", "calendario", "comissao", "metas"):
+        aba = "metas"
+    if aba == "importar" and not form_import:
+        aba = "metas"
+    aba_qs = f"aba={aba}"
     if request.method == "POST":
         action = request.POST.get("action") or "salvar"
+        post_aba = (request.POST.get("aba") or aba).strip().lower()
+        if post_aba in ("importar", "calendario", "comissao", "metas"):
+            aba_qs = f"aba={post_aba}"
         if action == "importar_metas":
             if not _pode_importar(request):
                 messages.error(request, "Sem permissão para importar metas.")
-                return _voltar(request, "gestao_configs")
+                return _voltar(request, "gestao_configs", aba_qs)
             form_import = UploadBaseForm(
                 request.POST, request.FILES, extensoes=[".xlsx", ".xlsb", ".xls"]
             )
@@ -1174,16 +1185,38 @@ def configs_view(request: HttpRequest) -> HttpResponse:
                         f"Metas {mes:02d}/{ano}: {resumo['atualizados']} PDV(s) atualizados."
                         f"{du}{extra}",
                     )
-                    return _voltar(request, "gestao_configs")
+                    return _voltar(request, "gestao_configs", aba_qs)
                 except Exception as exc:
                     _lote(request, LoteImportacao.Tipo.METAS, arquivo.name, False, {}, str(exc))
                     messages.error(request, f"Falha ao importar metas: {exc}")
             else:
                 messages.error(request, "Selecione o acompanhamento semanal (.xlsb ou .xlsx).")
-            return _voltar(request, "gestao_configs")
+            return _voltar(request, "gestao_configs", aba_qs)
+        if action == "importar_du_consolidado":
+            if not _pode_importar(request):
+                messages.error(request, "Sem permissão para importar DU.")
+                return _voltar(request, "gestao_configs", aba_qs)
+            form_du = UploadBaseForm(
+                request.POST, request.FILES, extensoes=[".xlsx", ".xlsb", ".xls"]
+            )
+            if form_du.is_valid():
+                arquivo = form_du.cleaned_data["arquivo"]
+                try:
+                    resumo = aplicar_du_consolidado(arquivo, arquivo.name, ano, mes)
+                    messages.success(
+                        request,
+                        f"DU consolidado {mes:02d}/{ano}: VL {resumo['du_vl']:.2f} · "
+                        f"Gross {resumo['du_gross']:.2f}. Aplicado em {resumo['pdvs_atualizados']} PDV(s).",
+                    )
+                    return _voltar(request, "gestao_configs", "aba=calendario")
+                except Exception as exc:
+                    messages.error(request, f"Falha ao importar DU consolidado: {exc}")
+            else:
+                messages.error(request, "Selecione o Consolidado_DU (.xlsx).")
+            return _voltar(request, "gestao_configs", "aba=calendario")
         if not eh_gestor(request.user):
             messages.error(request, "Só o admin altera metas, política e calendário.")
-            return _voltar(request, "gestao_configs")
+            return _voltar(request, "gestao_configs", aba_qs)
         if action == "salvar_politica":
             politica = PoliticaComissao.vigente()
             campos = [
@@ -1215,7 +1248,7 @@ def configs_view(request: HttpRequest) -> HttpResponse:
                 request,
                 f"Política PAP salva. Comissões 500/800/1Gb copiadas para {n} PDV(s) do período.",
             )
-            return _voltar(request, "gestao_configs")
+            return _voltar(request, "gestao_configs", "aba=comissao")
         if action == "salvar_calendario":
             salvar_calendario_lote(
                 request.POST.getlist("dia_id"),
@@ -1230,7 +1263,7 @@ def configs_view(request: HttpRequest) -> HttpResponse:
                 f"Calendário DU {mes:02d}/{ano}: VL {tot['du_vl']:.2f} · Gross {tot['du_gross']:.2f}. "
                 f"Aplicado em {n} PDV(s).",
             )
-            return _voltar(request, "gestao_configs")
+            return _voltar(request, "gestao_configs", "aba=calendario")
         if action == "add_feriado":
             raw = (request.POST.get("feriado_data") or "").strip()
             desc = (request.POST.get("feriado_desc") or "Feriado").strip()
@@ -1245,7 +1278,7 @@ def configs_view(request: HttpRequest) -> HttpResponse:
                 messages.success(request, f"Feriado {dia.strftime('%d/%m/%Y')} com peso 0.")
             except (TypeError, ValueError, IndexError):
                 messages.error(request, "Informe a data do feriado (dd/mm/aaaa).")
-            return _voltar(request, "gestao_configs")
+            return _voltar(request, "gestao_configs", "aba=calendario")
         if action == "del_feriado":
             try:
                 desmarcar_feriado(int(request.POST.get("feriado_id") or 0))
@@ -1253,7 +1286,7 @@ def configs_view(request: HttpRequest) -> HttpResponse:
                 messages.success(request, "Feriado removido e o dia voltou ao peso padrão.")
             except (TypeError, ValueError):
                 messages.error(request, "Não foi possível remover o feriado.")
-            return _voltar(request, "gestao_configs")
+            return _voltar(request, "gestao_configs", "aba=calendario")
         du_padrao = defaults_osab(ano, mes)
         for p in parceiros:
             prefix = f"p{p.id}_"
@@ -1289,7 +1322,7 @@ def configs_view(request: HttpRequest) -> HttpResponse:
                 defaults=osab_defaults,
             )
         messages.success(request, f"Metas salvas para {mes:02d}/{ano}.")
-        return _voltar(request, "gestao_configs")
+        return _voltar(request, "gestao_configs", "aba=metas")
 
     metas = {(m.parceiro_id): m for m in MetaCapilaridade.objects.filter(ano=ano, mes=mes)}
     configs = {(c.parceiro_id): c for c in ConfiguracaoOSAB.objects.filter(ano=ano, mes=mes)}
@@ -1312,6 +1345,7 @@ def configs_view(request: HttpRequest) -> HttpResponse:
             "calendario_totais": tot_cal,
             "feriados": feriados_do_mes(ano, mes),
             "cal_nav": nav,
+            "aba": aba,
         },
     )
 

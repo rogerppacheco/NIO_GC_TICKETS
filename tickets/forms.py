@@ -73,6 +73,9 @@ class ParceiroForm(forms.ModelForm):
             "codigo_pdv",
             "nome",
             "razao_social",
+            "data_credenciamento",
+            "endereco",
+            "emails_empresario",
             "ativo",
             "especialista",
             "token_acesso",
@@ -84,6 +87,10 @@ class ParceiroForm(forms.ModelForm):
             ),
             "token_acesso": "Um único token para todos os contatos deste PDV (opcional).",
             "especialista": "Quem trata as demandas deste PDV.",
+            "data_credenciamento": (
+                "Define Regular (>6 meses) ou Iniciante (≤6 meses) no ranking de VB."
+            ),
+            "emails_empresario": "Separe vários e-mails com vírgula ou uma linha por endereço.",
         }
         widgets = {
             "token_acesso": forms.TextInput(
@@ -93,6 +100,9 @@ class ParceiroForm(forms.ModelForm):
                     "class": "mono",
                 }
             ),
+            "endereco": forms.Textarea(attrs={"rows": 3}),
+            "emails_empresario": forms.Textarea(attrs={"rows": 2, "placeholder": "a@loja.com, b@loja.com"}),
+            "data_credenciamento": forms.DateInput(attrs={"type": "date"}),
         }
 
     def __init__(self, *args, **kwargs):

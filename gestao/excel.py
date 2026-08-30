@@ -24,7 +24,7 @@ def _engine_excel(sufixo: str) -> str | None:
     return None
 
 
-def ler_planilha(arquivo, nome: str = "", sheet_name=0) -> pd.DataFrame:
+def ler_planilha(arquivo, nome: str = "", sheet_name=0, **kwargs) -> pd.DataFrame:
     """Lê .xlsx, .xlsb, .xls e HTML exportado como .xls."""
     conteudo, nome = _bytes_planilha(arquivo, nome)
     sufixo = Path(nome).suffix.lower()
@@ -39,11 +39,11 @@ def ler_planilha(arquivo, nome: str = "", sheet_name=0) -> pd.DataFrame:
         tmp.write(conteudo)
         caminho = tmp.name
     try:
-        kwargs = {"sheet_name": sheet_name}
+        read_kwargs = {"sheet_name": sheet_name, **kwargs}
         engine = _engine_excel(sufixo)
         if engine:
-            kwargs["engine"] = engine
-        return pd.read_excel(caminho, **kwargs)
+            read_kwargs["engine"] = engine
+        return pd.read_excel(caminho, **read_kwargs)
     finally:
         Path(caminho).unlink(missing_ok=True)
 

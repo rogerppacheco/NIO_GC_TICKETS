@@ -2155,26 +2155,8 @@ class ResultadosTests(TestCase):
         from gestao.pipelines.resultados import cadastrar_praca_btu, montar_ranking
 
         cadastrar_praca_btu("Betim")
-        CadastroTerceiro.objects.create(
-            chave_acesso="TTREG",
-            nome_terceiro="ANA REGULAR",
-            parceiro=self.pdv,
-            data_alocacao=d(2025, 1, 1),
-            situacao_empresa="Ativo",
-            situacao_funcional="Ativo",
-            situacao_contrato="Alocado",
-            cargo_funcao="VENDEDOR",
-        )
-        CadastroTerceiro.objects.create(
-            chave_acesso="TTINI",
-            nome_terceiro="BIA INICIANTE",
-            parceiro=self.pdv,
-            data_alocacao=d(2026, 4, 1),
-            situacao_empresa="Ativo",
-            situacao_funcional="Ativo",
-            situacao_contrato="Alocado",
-            cargo_funcao="VENDEDOR",
-        )
+        self.pdv.data_credenciamento = d(2025, 1, 1)
+        self.pdv.save(update_fields=["data_credenciamento"])
         VendaOSAB.objects.create(
             pedido="R1",
             pdv_nome="INOVA MG",
