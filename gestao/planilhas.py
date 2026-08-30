@@ -176,24 +176,21 @@ def planilha_ranking(ranking: dict) -> tuple[bytes, str]:
     rows = []
     for chave, grupo in (ranking.get("grupos") or {}).items():
         for item in grupo:
-            aloc = item.get("data_alocacao")
             rows.append(
                 {
                     "Grupo": rotulos.get(chave, chave),
-                    "Posição": item.get("posicao"),
-                    "TT": item.get("tt"),
-                    "Nome": item.get("nome"),
+                    "RKG": item.get("posicao"),
                     "PDV": item.get("pdv"),
-                    "Pontos": item.get("pontos"),
-                    "Pontos dia anterior": item.get("pontos_dia"),
-                    "VB": item.get("vb"),
-                    "VB BTU": item.get("vb_btu"),
-                    "Sem município": item.get("sem_municipio"),
-                    "Data alocação": aloc.isoformat() if aloc else "",
+                    "Especialista": item.get("especialista"),
+                    "Esp. curto": item.get("especialista_curto"),
+                    "PTS janela": item.get("pontos_dia"),
+                    "BTU": item.get("vb_btu"),
+                    "Padrão": item.get("vb_padrao"),
+                    "PTS acumulado": item.get("pontos"),
                 }
             )
     df = pd.DataFrame(rows) if rows else pd.DataFrame(
-        columns=["Grupo", "Posição", "TT", "Nome", "Pontos"]
+        columns=["Grupo", "RKG", "PDV", "Especialista", "PTS acumulado"]
     )
     periodo = ranking.get("periodo") or {}
     fim = periodo.get("fim")

@@ -278,14 +278,32 @@ def classificar_grupo(terceiro: CadastroTerceiro | None, data_corte: date) -> st
     return GRUPO_INICIANTE
 
 
+def _nome_curto_pessoa(nome: str) -> str:
+    partes = (nome or "").strip().split()
+    if len(partes) >= 2:
+        return f"{partes[0]} {partes[-1]}"
+    return (nome or "—").strip() or "—"
+
+
+def _dados_especialista(parceiro: Parceiro | None) -> tuple[str, str]:
+    if parceiro is None or not parceiro.especialista:
+        return "—", "—"
+    user = parceiro.especialista
+    completo = (user.get_full_name() or user.username or "—").strip().upper()
+    curto = _nome_curto_pessoa(completo).upper()
+    return completo, curto
+
+
 def montar_ranking(
     parceiros: Iterable[Parceiro],
     *,
     data_ref: date | None = None,
 ) -> dict:
+    """Ranking por PDV (formato RKG_2): pontos acumulados até D-1 + janela do dia anterior."""
     periodo = periodo_ranking(data_ref)
     lista = list(parceiros)
     ids = [p.pk for p in lista]
+    mapa_parceiros = {p.pk: p for p in lista}
     pracas_btu = _praca_btu_set()
     terceiros = mapa_terceiros_por_chave()
     vendas = VendaOSAB.objects.filter(
@@ -293,10 +311,14 @@ def montar_ranking(
         data_abertura__date__gte=periodo["inicio"],
         data_abertura__date__lte=periodo["fim"],
     )
-    agregados: dict[str, dict] = {}
+    agregados: dict[int, dict] = {}
+    pontos_por_tt: dict[int, dict[str, float]] = {}
     sem_municipio = 0
     for venda in vendas:
         if not venda_vb_valida(venda):
+            continue
+        pid = venda.parceiro_id
+        if pid is None:
             continue
         chave = normalizar_chave_tt(venda.matricula_vendedor) or (venda.nome_vendedor or "").strip().upper()
         if not chave:
@@ -307,22 +329,23 @@ def montar_ranking(
         pts = pontos_venda(venda.municipio, pracas_btu)
         if not (venda.municipio or "").strip():
             sem_municipio += 1
+        parceiro = mapa_parceiros.get(pid)
+        esp_completo, esp_curto = _dados_especialista(parceiro)
         item = agregados.setdefault(
-            chave,
+            pid,
             {
-                "tt": chave,
-                "nome": (venda.nome_vendedor or chave).strip(),
-                "pdv": venda.pdv_nome,
-                "parceiro_id": venda.parceiro_id,
+                "parceiro_id": pid,
+                "pdv": (parceiro.nome if parceiro else venda.pdv_nome or "—").strip(),
+                "especialista": esp_completo,
+                "especialista_curto": esp_curto,
                 "pontos": 0.0,
                 "pontos_dia": 0.0,
                 "vb": 0,
                 "vb_btu": 0,
+                "vb_padrao": 0,
                 "sem_municipio": 0,
             },
         )
-        if venda.nome_vendedor and len(venda.nome_vendedor) > len(item["nome"]):
-            item["nome"] = venda.nome_vendedor.strip()
         item["pontos"] += pts
         item["vb"] += 1
         if pts == PONTOS_BTU:
@@ -331,22 +354,28 @@ def montar_ranking(
             item["sem_municipio"] += 1
         if periodo["janela_ini"] <= dia <= periodo["janela_fim"]:
             item["pontos_dia"] += pts
+        pontos_por_tt.setdefault(pid, {})
+        pontos_por_tt[pid][chave] = pontos_por_tt[pid].get(chave, 0.0) + pts
 
     grupos = {GRUPO_REGULAR: [], GRUPO_INICIANTE: [], GRUPO_SEM_CADASTRO: []}
-    tts_sem_data = 0
-    for item in agregados.values():
-        terceiro = terceiros.get(item["tt"])
+    pdvs_sem_classificacao = 0
+    for pid, item in agregados.items():
+        item["vb_padrao"] = item["vb"] - item["vb_btu"]
+        tt_map = pontos_por_tt.get(pid) or {}
+        if tt_map:
+            melhor_tt = max(tt_map, key=lambda k: tt_map[k])
+            terceiro = terceiros.get(melhor_tt)
+        else:
+            terceiro = None
         grupo = classificar_grupo(terceiro, periodo["fim"])
         item["grupo"] = grupo
         item["data_alocacao"] = terceiro.data_alocacao if terceiro else None
-        if terceiro and terceiro.nome_terceiro:
-            item["nome"] = terceiro.nome_terceiro
         if grupo == GRUPO_SEM_CADASTRO:
-            tts_sem_data += 1
+            pdvs_sem_classificacao += 1
         grupos[grupo].append(item)
 
     def _ordem(item: dict) -> tuple:
-        return (-item["pontos"], -item["pontos_dia"], item["nome"].upper())
+        return (-item["pontos"], -item["pontos_dia"], item["pdv"].upper())
 
     for grupo in grupos.values():
         grupo.sort(key=_ordem)
@@ -359,7 +388,7 @@ def montar_ranking(
         "pracas_btu": sorted(pracas_btu),
         "qtd_btu": len(pracas_btu),
         "sem_municipio": sem_municipio,
-        "tts_sem_data": tts_sem_data,
+        "tts_sem_data": pdvs_sem_classificacao,
         "total_tts": len(agregados),
     }
 
@@ -400,11 +429,12 @@ def mensagem_ranking(ranking: dict, *, limite: int = 40) -> str:
             continue
         for item in grupo[:limite]:
             partes.append(
-                f"{item['posicao']}. {item['nome']} ({item['tt']}) — "
-                f"*{_fmt_pts(item['pontos'])} pts* · {titulo_janela}: {_fmt_pts(item['pontos_dia'])}"
+                f"{item['posicao']}. {item['pdv']} ({item['especialista_curto']}) — "
+                f"*{_fmt_pts(item['pontos'])} pts* · {titulo_janela}: {_fmt_pts(item['pontos_dia'])} "
+                f"(BTU {item['vb_btu']} · padrão {item['vb_padrao']})"
             )
         if len(grupo) > limite:
-            partes.append(f"_… +{len(grupo) - limite} vendedor(es)_")
+            partes.append(f"_… +{len(grupo) - limite} PDV(s)_")
     return "\n".join(partes)
 
 
@@ -438,8 +468,8 @@ def gaps_ranking(ranking: dict) -> list[str]:
         )
     if ranking["tts_sem_data"]:
         avisos.append(
-            f"{ranking['tts_sem_data']} vendedor(es) sem data de alocação no Sysmap "
-            "(ou TT que não bate com a chave de acesso). Eles ficam no grupo à parte."
+            f"{ranking['tts_sem_data']} PDV(s) sem classificação no Sysmap "
+            "(vendedor principal sem data de alocação). Ficam no grupo à parte."
         )
     if not ranking["total_tts"]:
         avisos.append("Nenhuma VB válida no período do ranking (até D-1).")

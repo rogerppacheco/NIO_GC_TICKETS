@@ -2211,11 +2211,11 @@ class ResultadosTests(TestCase):
         regular = ranking["grupos"]["regular"]
         iniciante = ranking["grupos"]["iniciante"]
         self.assertEqual(len(regular), 1)
-        self.assertEqual(regular[0]["pontos"], 1.5)
-        self.assertEqual(regular[0]["pontos_dia"], 0.5)
-        self.assertEqual(len(iniciante), 1)
-        self.assertEqual(iniciante[0]["pontos"], 1.0)
-        self.assertEqual(iniciante[0]["pontos_dia"], 1.0)
+        self.assertEqual(regular[0]["pontos"], 2.5)
+        self.assertEqual(regular[0]["pontos_dia"], 1.5)
+        self.assertEqual(regular[0]["vb_btu"], 1)
+        self.assertEqual(regular[0]["vb_padrao"], 2)
+        self.assertEqual(len(iniciante), 0)
 
     def test_cadastra_praca_btu(self):
         from gestao.models import PracaBTU

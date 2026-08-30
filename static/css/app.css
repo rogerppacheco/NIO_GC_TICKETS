@@ -459,13 +459,31 @@ a.tab { text-decoration: none; display: inline-block; }
   color: var(--brand); border-bottom-color: var(--brand);
 }
 .resultados-tabs-panel .tab-panel { padding: 1rem 1.1rem 1.15rem; }
+.page-resultados .wrap-resultados {
+  max-width: none;
+  width: 100%;
+  padding-left: 0.85rem;
+  padding-right: 0.85rem;
+}
+.resultados-tabs-panel { margin-bottom: 0; }
 .ranking-envio {
-  display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.8fr);
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
   gap: 1.25rem; align-items: start;
+}
+.ranking-envio-wide {
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
 }
 .ranking-preview-wrap {
   border: 1px solid var(--line); border-radius: 12px; background: #f8fafb;
   padding: 0.85rem;
+}
+.ranking-preview-wrap-full {
+  overflow-x: auto;
+}
+.ranking-preview-wrap-full .ranking-preview-img {
+  width: 100%;
+  min-width: min(100%, 960px);
+  max-width: none;
 }
 .ranking-preview-img {
   display: block; width: 100%; height: auto; border-radius: 8px;

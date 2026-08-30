@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Resultados · Gestão{% endblock %}
+{% block body_class %}page-resultados{% endblock %}
+{% block main_class %}wrap wrap-resultados{% endblock %}
 {% block content %}
 {% include "gestao/_escopo.html" %}
 <div class="hero">
@@ -61,7 +63,7 @@
         {% endif %}
       </div>
     </div>
-    <div class="table-scroll">
+    <div class="table-scroll table-scroll-wide">
       <table class="table">
         <thead>
           <tr>
@@ -121,8 +123,8 @@
     </div>
     {% endif %}
 
-    <div class="ranking-envio">
-      <div class="ranking-preview-wrap">
+    <div class="ranking-envio ranking-envio-wide">
+      <div class="ranking-preview-wrap ranking-preview-wrap-full">
         <p class="help" style="margin:0 0 0.65rem">Prévia da imagem que será enviada no WhatsApp:</p>
         <img
           class="ranking-preview-img"
