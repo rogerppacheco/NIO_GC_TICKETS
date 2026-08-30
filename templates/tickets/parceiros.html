@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Parceiros · NIO GC Tickets{% endblock %}
+{% block body_class %}page-parceiros{% endblock %}
+{% block main_class %}wrap wrap-parceiros{% endblock %}
 {% block content %}
 {% with escopo=gestao_escopo|default:"meus" %}
 <div class="gestao-escopo" role="tablist" aria-label="Parceiros">
@@ -7,107 +9,101 @@
   <a href="?escopo=outros" class="{% if escopo == 'outros' %}is-on{% endif %}">Outros especialistas <span class="help">({{ gestao_qtd_outros|default:0 }})</span></a>
 </div>
 {% endwith %}
-<div class="hero">
+<div class="hero hero-parceiros">
   <div>
     <h1>Parceiros</h1>
-    <p>Com demandas no PDV: use <strong>Inativar</strong>. Sem demandas: pode <strong>Excluir</strong>. Cadastre a <strong>razão social</strong> (Sysmap/comissionamento) em cada PDV. O admin vê <strong>todas as gerências</strong> em Outros especialistas. A OSAB vai para o <strong>Empresário</strong> (ou para o grupo em Destinatários, se não houver empresário).</p>
+    <p>Cadastre <strong>razão social</strong>, <strong>endereço</strong> e <strong>e-mail do empresário</strong> em cada PDV. A coluna <strong>Credenciamento</strong> vem da Carteira PP (coluna <code>DT_CREDENC</code>).</p>
   </div>
-  <a class="btn btn-primary" href="{% url 'parceiro_novo' %}">Novo parceiro</a>
-</div>
-{% if pode_importar_carteira %}
-<div class="panel" style="margin-bottom:1rem">
-  <div class="panel-h"><h2>Importar Carteira PP</h2></div>
-  <div class="panel-b">
-    <form method="post" enctype="multipart/form-data">
-      {% csrf_token %}
-      <input type="hidden" name="action" value="importar_carteira">
-      <input type="file" name="arquivo" accept=".xlsx,.xlsb,.xls" required>
-      <p class="help">Planilha <code>Carteira_PP_…xlsx</code>, aba <code>Planilha1</code>. Atualiza a <strong>data credenciamento</strong> de cada PDV (colunas NM_PARCEIRO_2 e DT_CREDENC). Endereço e e-mail do empresário continuam no cadastro manual de cada PDV.</p>
-      <button class="btn btn-secondary" type="submit" style="margin-top:0.6rem">Atualizar credenciamento</button>
-    </form>
+  <div class="hero-parceiros-actions">
+    {% if pode_importar_carteira %}
+    <details class="import-carteira">
+      <summary class="btn btn-secondary">Importar Carteira PP</summary>
+      <form method="post" enctype="multipart/form-data" class="import-carteira-form">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="importar_carteira">
+        <input type="file" name="arquivo" accept=".xlsx,.xlsb,.xls" required>
+        <p class="help">Aba <code>Planilha1</code> · colunas <code>NM_PARCEIRO_2</code> e <code>DT_CREDENC</code>.</p>
+        <button class="btn btn-primary" type="submit">Atualizar credenciamento</button>
+      </form>
+    </details>
+    {% endif %}
+    <a class="btn btn-primary" href="{% url 'parceiro_novo' %}">Novo parceiro</a>
   </div>
 </div>
-{% endif %}
-<div class="panel">
-  <div class="table-scroll">
-    <table class="table">
+<div class="panel panel-parceiros">
+  <div class="table-scroll table-scroll-wide table-scroll-parceiros">
+    <table class="table table-parceiros">
       <thead>
         <tr>
-          <th>Código</th>
-          <th>Nome</th>
-          <th>Credenciamento</th>
-          <th>Razão social</th>
-          <th>Especialista</th>
-          <th>Gerência</th>
-          <th>Empresários</th>
-          <th>Contatos</th>
-          <th>Demandas</th>
-          <th>Situação</th>
-          <th>Ações</th>
+          <th class="col-cod">Código</th>
+          <th class="col-nome">Nome</th>
+          <th class="col-cred">Credenciamento</th>
+          <th class="col-razao">Razão social</th>
+          <th class="col-esp">Especialista</th>
+          <th class="col-ger">Ger.</th>
+          <th class="col-emp">Empresários</th>
+          <th class="col-num">Cont.</th>
+          <th class="col-num">Dem.</th>
+          <th class="col-sit">Situação</th>
+          <th class="col-acoes">Ações</th>
         </tr>
       </thead>
       <tbody>
         {% for p in parceiros %}
-        <tr {% if not p.ativo %}style="opacity:0.65"{% endif %}>
-          <td>{{ p.codigo_pdv }}</td>
-          <td>{{ p.nome }}</td>
-          <td>{% if p.data_credenciamento %}{{ p.data_credenciamento|date:"d/m/Y" }}{% else %}—{% endif %}</td>
-          <td>{{ p.razao_social|default:"—" }}</td>
-          <td>
-            {% if p.especialista %}
-              {{ p.especialista.get_full_name|default:p.especialista.username }}
-            {% else %}
-              —
-            {% endif %}
-          </td>
-          <td>
+        <tr {% if not p.ativo %}class="is-inactive"{% endif %}>
+          <td class="mono col-cod">{{ p.codigo_pdv }}</td>
+          <td class="col-nome"><strong>{{ p.nome }}</strong></td>
+          <td class="col-cred nowrap">{% if p.data_credenciamento %}{{ p.data_credenciamento|date:"d/m/Y" }}{% else %}<span class="help">—</span>{% endif %}</td>
+          <td class="col-razao cell-clip" title="{{ p.razao_social }}">{{ p.razao_social|default:"—" }}</td>
+          <td class="col-esp nowrap" title="{% if p.especialista %}{{ p.especialista.get_full_name|default:p.especialista.username }}{% endif %}">{{ p.especialista_curto }}</td>
+          <td class="col-ger nowrap">
             {% if p.especialista and p.especialista.perfil_staff.gerencia %}
               {{ p.especialista.perfil_staff.gerencia }}
             {% else %}—{% endif %}
           </td>
-          <td>
+          <td class="col-emp cell-clip">
             {% for c in p.empresarios %}
-              {{ c.nome }}{% if c.telefone %} <span class="help">{{ c.telefone }}</span>{% endif %}{% if not forloop.last %}<br>{% endif %}
+              {{ c.nome }}{% if c.telefone %} <span class="help">{{ c.telefone }}</span>{% endif %}{% if not forloop.last %} · {% endif %}
             {% empty %}
               —
             {% endfor %}
           </td>
-          <td>{{ p.qtd_contatos }}</td>
-          <td>{{ p.qtd_tickets }}</td>
-          <td>
+          <td class="col-num">{{ p.qtd_contatos }}</td>
+          <td class="col-num">{{ p.qtd_tickets }}</td>
+          <td class="col-sit">
             {% if p.ativo %}
               <span class="pill resolvido">Ativo</span>
             {% else %}
               <span class="pill cancelado">Inativo</span>
             {% endif %}
           </td>
-          <td>
-            <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
-              <a class="btn btn-secondary" href="{% url 'parceiro_editar' p.pk %}">Editar</a>
+          <td class="col-acoes">
+            <div class="parceiro-acoes">
+              <a class="btn btn-secondary btn-sm" href="{% url 'parceiro_editar' p.pk %}">Editar</a>
               {% if p.ativo %}
                 <form method="post" action="{% url 'parceiro_inativar' p.pk %}"
                       onsubmit="return confirm('Inativar {{ p.nome }}?');">
                   {% csrf_token %}
-                  <button type="submit" class="btn btn-secondary">Inativar</button>
+                  <button type="submit" class="btn btn-secondary btn-sm">Inativar</button>
                 </form>
               {% else %}
                 <form method="post" action="{% url 'parceiro_reativar' p.pk %}">
                   {% csrf_token %}
-                  <button type="submit" class="btn btn-primary">Reativar</button>
+                  <button type="submit" class="btn btn-primary btn-sm">Reativar</button>
                 </form>
               {% endif %}
               {% if p.qtd_tickets == 0 %}
                 <form method="post" action="{% url 'parceiro_excluir' p.pk %}"
                       onsubmit="return confirm('Excluir definitivamente {{ p.nome }}?');">
                   {% csrf_token %}
-                  <button type="submit" class="btn" style="background:var(--danger);color:#fff">Excluir</button>
+                  <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
                 </form>
               {% endif %}
             </div>
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="10">Nenhum parceiro neste escopo.</td></tr>
+        <tr><td colspan="11">Nenhum parceiro neste escopo.</td></tr>
         {% endfor %}
       </tbody>
     </table>

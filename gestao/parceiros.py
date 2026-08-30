@@ -53,6 +53,17 @@ def resolver_parceiro_id(nome: str, indice: list[tuple[int, str, str, str]] | No
         if nome_cad.casefold() == bruto.casefold():
             return pid
 
+    alvo_norm = normalizar_pdv(bruto)
+    if alvo_norm:
+        for pid, _, pdv_norm, razao_cad in indice:
+            if alvo_norm == pdv_norm or (razao_cad and alvo_norm == razao_cad):
+                return pid
+            if pdv_norm and (
+                alvo_norm.startswith(pdv_norm + " ")
+                or pdv_norm.startswith(alvo_norm + " ")
+            ):
+                return pid
+
     razao_norm = normalizar_razao(bruto)
     if not razao_norm:
         return None

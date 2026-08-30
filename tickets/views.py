@@ -723,6 +723,11 @@ def parceiros_lista(request: HttpRequest) -> HttpResponse:
         contatos = list(p.contatos.all())
         p.qtd_contatos = len(contatos)
         p.empresarios = [c for c in contatos if c.ativo and c.eh_empresario()]
+        if p.especialista:
+            completo = (p.especialista.get_full_name() or p.especialista.username or "").strip()
+            p.especialista_curto = completo.split()[0] if completo else "—"
+        else:
+            p.especialista_curto = "—"
     return render(
         request,
         "tickets/parceiros.html",

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 import pandas as pd
+import re
 
 from tickets.models import Parceiro
 
@@ -25,8 +26,19 @@ def _parse_data(valor) -> date | None:
             return datetime.strptime(txt[:10], fmt).date()
         except ValueError:
             continue
+    # Anos truncados na planilha (ex.: 14/04/202)
+    m = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{2,4})$", txt)
+    if m:
+        d, mo, y_raw = int(m.group(1)), int(m.group(2)), m.group(3)
+        y = int(y_raw) if len(y_raw) == 4 else int(y_raw.ljust(4, "0"))
+        if len(y_raw) == 2:
+            y = 2000 + int(y_raw)
+        try:
+            return date(y, mo, d)
+        except ValueError:
+            pass
     try:
-        return pd.to_datetime(valor).date()
+        return pd.to_datetime(valor, dayfirst=True).date()
     except (TypeError, ValueError):
         return None
 
@@ -35,6 +47,7 @@ def processar_carteira(arquivo, nome_arquivo: str) -> dict:
     """Importa data credenciamento da Carteira PP (aba Planilha1)."""
     df = ler_planilha(arquivo, nome_arquivo, sheet_name="Planilha1")
     col_pdv = resolver_coluna(df, ["NM_PARCEIRO_2", "NM_PARCEIRO", "PDV", "PARCEIRO"])
+    col_pdv_bi = resolver_coluna(df, ["NM_PARCEIRO_BI", "NM_PARCEIRO_1"])
     col_cred = resolver_coluna(df, ["DT_CREDENC", "DATA_CREDENCIAMENTO", "DT_CREDENCIAMENTO"])
     col_aging = resolver_coluna(df, ["CLASS_AGING", "CLASSIFICACAO", "AGING"])
     if not col_pdv or not col_cred:
@@ -58,6 +71,8 @@ def processar_carteira(arquivo, nome_arquivo: str) -> dict:
             ignorados += 1
             continue
         pid = resolver_parceiro_id(nome, indice)
+        if pid is None and col_pdv_bi:
+            pid = resolver_parceiro_id(texto(row.get(col_pdv_bi)), indice)
         if pid is None:
             sem_cadastro.append(nome)
             continue
