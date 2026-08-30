@@ -85,7 +85,6 @@ def consulta_dfv(request: HttpRequest) -> HttpResponse:
     return render(request, "tickets/consultas/dfv.html", ctx)
 
 
-@login_required
 @require_http_methods(["GET", "POST"])
 def consulta_cdoe(request: HttpRequest) -> HttpResponse:
     """

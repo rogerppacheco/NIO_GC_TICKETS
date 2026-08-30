@@ -10,7 +10,9 @@
   <a class="btn btn-secondary" href="{% url 'portal_inicio' %}">← Início</a>
 </div>
 
-<div class="grid-2">
+{% include "tickets/consultas/_consultas_nav.html" with consulta_ativa="dfv" %}
+
+<div class="grid-2" style="margin-top:1rem">
   <div class="panel">
     <div class="panel-h"><h2>Informe o CEP</h2></div>
     <div class="panel-b">
@@ -34,6 +36,14 @@
 
   {% if mensagens_html %}
     {% include "tickets/consultas/_preview_wpp.html" with titulo="Resposta (como no WhatsApp)" %}
+  {% else %}
+  <div class="panel">
+    <div class="panel-h"><h2>Consulta CDOE</h2></div>
+    <div class="panel-b">
+      <p class="help">Também é possível consultar endereços e fachadas pelo <strong>código CDOE</strong> (UF → cidade → rua).</p>
+      <a class="btn btn-secondary" href="{% url 'consulta_cdoe' %}" style="margin-top:0.65rem">Abrir consulta CDOE</a>
+    </div>
+  </div>
   {% endif %}
 </div>
 {% endblock %}

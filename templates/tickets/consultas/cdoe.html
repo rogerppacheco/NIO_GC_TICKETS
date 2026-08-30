@@ -7,8 +7,10 @@
     <p>Fluxo igual ao bot: código → UF → cidade (se houver) → rua → números.</p>
     <p class="help">Cobertura: {{ cobertura }}.</p>
   </div>
-  <a class="btn btn-secondary" href="{% url 'consultas_hub' %}">Voltar</a>
+  <a class="btn btn-secondary" href="{% url 'portal_inicio' %}">← Início</a>
 </div>
+
+{% include "tickets/consultas/_consultas_nav.html" with consulta_ativa="cdoe" %}
 
 {% if erro %}
   <div class="panel" style="margin-bottom:1rem">

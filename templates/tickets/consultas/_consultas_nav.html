@@ -1,0 +1,5 @@
+<nav class="tabs consultas-tabs" aria-label="Tipo de consulta">
+  <a class="tab{% if consulta_ativa == 'dfv' %} is-active{% endif %}" href="{% url 'consulta_dfv' %}">DFV (CEP)</a>
+  <a class="tab{% if consulta_ativa == 'cdoe' %} is-active{% endif %}" href="{% url 'consulta_cdoe' %}">CDOE</a>
+  <a class="tab{% if consulta_ativa == 'viabilidade' %} is-active{% endif %}" href="{% url 'consulta_viabilidade' %}">Viabilidade VTAL</a>
+</nav>
