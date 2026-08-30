@@ -278,11 +278,9 @@ def classificar_grupo(terceiro: CadastroTerceiro | None, data_corte: date) -> st
     return GRUPO_INICIANTE
 
 
-def _nome_curto_pessoa(nome: str) -> str:
+def _primeiro_nome_pessoa(nome: str) -> str:
     partes = (nome or "").strip().split()
-    if len(partes) >= 2:
-        return f"{partes[0]} {partes[-1]}"
-    return (nome or "—").strip() or "—"
+    return partes[0] if partes else "—"
 
 
 def _dados_especialista(parceiro: Parceiro | None) -> tuple[str, str]:
@@ -290,7 +288,7 @@ def _dados_especialista(parceiro: Parceiro | None) -> tuple[str, str]:
         return "—", "—"
     user = parceiro.especialista
     completo = (user.get_full_name() or user.username or "—").strip().upper()
-    curto = _nome_curto_pessoa(completo).upper()
+    curto = _primeiro_nome_pessoa(completo).upper()
     return completo, curto
 
 
