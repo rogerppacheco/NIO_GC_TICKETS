@@ -659,6 +659,9 @@ a.tab { text-decoration: none; display: inline-block; }
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 1rem;
 }
+.portal-cards {
+  margin-top: 0.25rem;
+}
 .consulta-card {
   display: flex; flex-direction: column; gap: 0.45rem;
   padding: 1.1rem 1.15rem; border-radius: var(--radius);

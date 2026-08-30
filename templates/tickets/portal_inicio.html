@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}NIO GC Tickets · Portal parceiros{% endblock %}
+{% block main_class %}wrap wrap-wide{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>NIO GC Tickets</h1>
+    <p>Demandas, consultas e guias operacionais para parceiros Nova Fibra.</p>
+  </div>
+  {% if portal_contato %}
+    <a class="btn btn-secondary" href="{% url 'portal_parceiro' %}">Meu portal ({{ portal_contato.nome }})</a>
+  {% else %}
+    <a class="btn btn-secondary" href="{% url 'consulta_busca' %}">Consultar protocolo</a>
+  {% endif %}
+</div>
+
+{% include "tickets/_portal_cards.html" %}
+
+<div class="panel" style="margin-top:1.25rem">
+  <div class="panel-h"><h2>Consultar protocolo</h2></div>
+  <div class="panel-b">
+    <form method="get" action="{% url 'consulta_busca' %}" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-end">
+      <div style="flex:1;min-width:200px">
+        <label for="protocolo">Protocolo</label>
+        <input type="text" name="protocolo" id="protocolo" placeholder="Ex.: NIO-2026-000123" required>
+      </div>
+      <button class="btn btn-primary" type="submit">Consultar</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

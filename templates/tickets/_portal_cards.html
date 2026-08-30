@@ -1,0 +1,30 @@
+{% load static %}
+<div class="consultas-grid portal-cards">
+  <a class="consulta-card" href="{% url 'abrir_demanda' %}">
+    <span class="consulta-ico">🎫</span>
+    <h2>Abrir demanda</h2>
+    <p>Registre uma solicitação ao especialista NIO do seu PDV.</p>
+    <span class="consulta-tag">Portal parceiro</span>
+  </a>
+
+  <a class="consulta-card" href="{% if user.is_authenticated %}{% url 'consulta_dfv' %}{% else %}{% url 'login' %}?next={% url 'consulta_dfv' %}{% endif %}">
+    <span class="consulta-ico">🏢</span>
+    <h2>Consulta DFV</h2>
+    <p>Fachadas por CEP no Power BI (Sudeste, SP e Sul).</p>
+    <span class="consulta-tag">Por CEP</span>
+  </a>
+
+  <a class="consulta-card" href="{% url 'consulta_viabilidade' %}">
+    <span class="consulta-ico">📍</span>
+    <h2>Viabilidade VTAL</h2>
+    <p>Consulte o retorno de viabilidade por CEP e número da fachada.</p>
+    <span class="consulta-tag">Forms VTAL</span>
+  </a>
+
+  <a class="consulta-card" href="{% url 'repositorio_lista' %}">
+    <span class="consulta-ico">📚</span>
+    <h2>Central de processos</h2>
+    <p>Guias, formulários e passo a passo para rotinas do parceiro.</p>
+    <span class="consulta-tag">Arquivos e links</span>
+  </a>
+</div>

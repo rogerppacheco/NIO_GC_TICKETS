@@ -10,6 +10,8 @@ LIVRE_PREFIXOS = (
     "/logout/",
     "/abrir/",
     "/consulta/",
+    "/repositorio/",
+    "/consultas/viabilidade/",
     "/static/",
     "/media/",
 )

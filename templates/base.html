@@ -23,7 +23,8 @@
           {% if eh_gestor %}
             <a href="{% url 'especialistas' %}">Especialistas</a>
           {% endif %}
-          <a href="{% url 'consultas_hub' %}">Consultas</a>
+          <a href="{% url 'consultas_hub' %}">DFV</a>
+          <a href="{% url 'repositorio_lista' %}">Processos</a>
           <a href="{% url 'mascaras' %}">Máscaras</a>
           <a href="{% url 'config_resposta_lista' %}">Campos resposta</a>
           {% if eh_gestor %}
@@ -47,7 +48,9 @@
             <a href="{% url 'consulta_busca' %}">Consultar</a>
             <a href="{% url 'portal_sair' %}">Trocar PDV</a>
           {% else %}
+            <a href="{% url 'portal_inicio' %}">Início</a>
             <a href="{% url 'abrir_demanda' %}">Abrir demanda</a>
+            <a href="{% url 'repositorio_lista' %}">Processos</a>
             <a href="{% url 'consulta_busca' %}">Consultar protocolo</a>
             <a href="{% url 'login' %}">Área interna</a>
           {% endif %}

@@ -565,3 +565,140 @@ class Encaminhamento(models.Model):
 
     class Meta:
         ordering = ["-criado_em"]
+
+
+class ProcessoRepositorio(models.Model):
+    """Runbook / playbook operacional para parceiros e equipe NIO."""
+
+    class Canal(models.TextChoices):
+        EMAIL = "email", "E-mail"
+        DEMANDA = "demanda", "Abrir demanda no portal"
+        LINK = "link", "Link externo"
+        MANUAL = "manual", "Procedimento manual"
+        MISTO = "misto", "Misto (e-mail + anexo + outros)"
+
+    class Categoria(models.TextChoices):
+        CADASTRO = "cadastro", "Cadastro"
+        VIABILIDADE = "viabilidade", "Viabilidade"
+        FINANCEIRO = "financeiro", "Financeiro / crédito"
+        OPERACIONAL = "operacional", "Operacional"
+        OUTRO = "outro", "Outro"
+
+    slug = models.SlugField(max_length=120, unique=True)
+    titulo = models.CharField(max_length=200)
+    categoria = models.CharField(
+        max_length=32, choices=Categoria.choices, default=Categoria.OPERACIONAL
+    )
+    resumo = models.CharField(
+        max_length=280,
+        blank=True,
+        help_text="Texto curto para cards e listagens.",
+    )
+    finalidade = models.TextField(
+        "Para que serve?",
+        help_text="Objetivo do processo e quando o parceiro deve usá-lo.",
+    )
+    quando_usar = models.TextField(
+        "Quando usar (sinais / gatilhos)",
+        blank=True,
+        help_text="Ex.: tela de erro no PAP, mensagem do sistema, etc.",
+    )
+    encaminhamento = models.TextField(
+        "Encaminha para quem?",
+        blank=True,
+        help_text="Destino, área responsável ou fila.",
+    )
+    canal = models.CharField(
+        max_length=20, choices=Canal.choices, default=Canal.EMAIL
+    )
+    email_destino = models.EmailField("E-mail destino", blank=True)
+    email_cc_especialista = models.BooleanField(
+        "Copiar especialista do PDV",
+        default=False,
+        help_text="Inclui o e-mail do especialista NIO vinculado ao parceiro (portal).",
+    )
+    email_cc_extra = models.CharField(
+        "CC fixo",
+        max_length=500,
+        blank=True,
+        help_text="E-mails adicionais separados por vírgula.",
+    )
+    requer_planilha = models.BooleanField("Exige planilha / formulário", default=False)
+    instrucoes_planilha = models.TextField(
+        "Instruções da planilha",
+        blank=True,
+        help_text="Como preencher e anexar no e-mail.",
+    )
+    passos = models.TextField(
+        "Passo a passo",
+        blank=True,
+        help_text="Um passo por linha. Ex.: 1) Baixar formulário…",
+    )
+    tags = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Palavras-chave separadas por vírgula (busca).",
+    )
+    publico = models.BooleanField(
+        "Visível no portal parceiro",
+        default=True,
+    )
+    ordem = models.PositiveSmallIntegerField(default=0)
+    ativo = models.BooleanField(default=True)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="processos_criados",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["ordem", "titulo"]
+        verbose_name = "Processo (repositório)"
+        verbose_name_plural = "Processos (repositório)"
+
+    def __str__(self) -> str:
+        return self.titulo
+
+    def lista_tags(self) -> list[str]:
+        return [t.strip() for t in self.tags.split(",") if t.strip()]
+
+
+class ProcessoAnexo(models.Model):
+    class Tipo(models.TextChoices):
+        PLANILHA = "planilha", "Planilha / formulário"
+        MODELO = "modelo", "Modelo / template"
+        EVIDENCIA = "evidencia", "Exemplo / evidência"
+        OUTRO = "outro", "Outro"
+
+    processo = models.ForeignKey(
+        ProcessoRepositorio, on_delete=models.CASCADE, related_name="anexos"
+    )
+    titulo = models.CharField(max_length=160)
+    arquivo = models.FileField(upload_to="repositorio/%Y/%m/")
+    tipo = models.CharField(max_length=20, choices=Tipo.choices, default=Tipo.OUTRO)
+    ordem = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["ordem", "titulo"]
+
+    def __str__(self) -> str:
+        return self.titulo
+
+
+class ProcessoLink(models.Model):
+    processo = models.ForeignKey(
+        ProcessoRepositorio, on_delete=models.CASCADE, related_name="links"
+    )
+    titulo = models.CharField(max_length=160)
+    url = models.URLField(max_length=500)
+    ordem = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["ordem", "titulo"]
+
+    def __str__(self) -> str:
+        return self.titulo

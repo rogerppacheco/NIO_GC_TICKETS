@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{% if anexo %}Editar anexo{% else %}Novo anexo{% endif %}{% endblock %}
+{% block content %}
+<div class="hero">
+  <div><h1>{% if anexo %}Editar anexo{% else %}Novo anexo{% endif %}</h1>
+  <p class="help">{{ processo.titulo }}</p></div>
+  <a class="btn btn-secondary" href="{% url 'repositorio_gerir_editar' processo.pk %}">← Voltar</a>
+</div>
+<form method="post" enctype="multipart/form-data" class="panel" style="max-width:560px">
+  <div class="panel-b">
+    {% csrf_token %}
+    {% for field in form %}
+      <div style="margin-bottom:0.85rem">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% for err in field.errors %}<div class="help warn">{{ err }}</div>{% endfor %}
+      </div>
+    {% endfor %}
+    <button class="btn btn-primary" type="submit">Salvar</button>
+  </div>
+</form>
+{% endblock %}

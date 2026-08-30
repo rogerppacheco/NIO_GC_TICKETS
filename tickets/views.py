@@ -94,7 +94,12 @@ def meu_perfil(request: HttpRequest) -> HttpResponse:
 def home(request: HttpRequest) -> HttpResponse:
     if request.user.is_authenticated:
         return redirect("fila")
-    return redirect("abrir_demanda")
+    return redirect("portal_inicio")
+
+
+def portal_inicio(request: HttpRequest) -> HttpResponse:
+    """Landing pública com cards rápidos (demanda, DFV, viabilidade, repositório)."""
+    return render(request, "tickets/portal_inicio.html")
 
 
 def _chave_pedido(pedido: str | None) -> str:

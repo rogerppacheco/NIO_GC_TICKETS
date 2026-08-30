@@ -25,6 +25,13 @@ from .dfv_powerbi_service import (
     resolver_cidade_escolhida,
 )
 from .helpers import wpp_para_html
+from .vtal_service import (
+    consultar_viabilidade,
+    fontes_vtal_ativas,
+    normalizar_cep,
+    normalizar_fachada,
+    vtal_disponivel,
+)
 
 
 def _dfv_habilitado() -> bool:
@@ -200,3 +207,53 @@ def consulta_cdoe(request: HttpRequest) -> HttpResponse:
             ctx["erro"] = "Falha ao consultar o Power BI. Tente novamente."
 
     return render(request, "tickets/consultas/cdoe.html", ctx)
+
+
+@require_http_methods(["GET"])
+def consulta_viabilidade(request: HttpRequest) -> HttpResponse:
+    """Consulta read-only à base VTAL (forms) por CEP + fachada."""
+    fontes = fontes_vtal_ativas()
+    vtal_ok = vtal_disponivel()
+    cep = (request.GET.get("cep") or "").strip()
+    numero_fachada = (request.GET.get("numero_fachada") or "").strip()
+    fonte_codigo = (request.GET.get("fonte") or "").strip()
+    fonte = None
+    resultados = []
+    erro = ""
+    buscou = bool(cep or numero_fachada)
+
+    if fontes:
+        if fonte_codigo:
+            fonte = next((f for f in fontes if f.codigo == fonte_codigo), None)
+        if not fonte:
+            fonte = fontes[0]
+
+    if buscou:
+        if not vtal_ok or not fonte:
+            erro = "Consulta VTAL indisponível neste ambiente."
+        elif not normalizar_cep(cep) and not normalizar_fachada(numero_fachada):
+            erro = "Informe CEP e/ou número da fachada."
+        else:
+            try:
+                resultados = consultar_viabilidade(
+                    fonte=fonte,
+                    cep=cep,
+                    numero_fachada=numero_fachada,
+                )
+            except Exception:
+                erro = "Falha ao consultar a base VTAL."
+
+    return render(
+        request,
+        "tickets/consultas/viabilidade.html",
+        {
+            "vtal_ok": vtal_ok,
+            "fontes": fontes,
+            "fonte": fonte,
+            "cep": cep,
+            "numero_fachada": numero_fachada,
+            "resultados": resultados,
+            "erro": erro,
+            "buscou": buscou,
+        },
+    )

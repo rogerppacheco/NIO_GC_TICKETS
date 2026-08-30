@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Portal · {{ parceiro.nome }}{% endblock %}
+{% block main_class %}wrap wrap-wide{% endblock %}
 {% block content %}
 <div class="hero">
   <div>
@@ -9,9 +10,11 @@
   <a class="btn btn-secondary" href="{% url 'portal_sair' %}">Trocar contato / PDV</a>
 </div>
 
-<div class="grid-2">
+{% include "tickets/_portal_cards.html" %}
+
+<div class="grid-2" style="margin-top:1.25rem">
   <div class="panel">
-    <div class="panel-h"><h2>O que deseja fazer?</h2></div>
+    <div class="panel-h"><h2>Atalhos</h2></div>
     <div class="panel-b" style="display:flex;flex-direction:column;gap:0.75rem">
       <a class="btn btn-primary" href="{% url 'abrir_demanda_form' %}">Abrir nova demanda</a>
       <a class="btn btn-secondary" href="{% url 'minhas_demandas' %}">Ver demandas do PDV</a>

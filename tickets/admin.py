@@ -1,6 +1,19 @@
 from django.contrib import admin
 
-from .models import Anexo, ContatoParceiro, Encaminhamento, Mascara, Mensagem, Parceiro, PerfilStaff, Ticket, ConfigRespostaTipo
+from .models import (
+    Anexo,
+    ContatoParceiro,
+    Encaminhamento,
+    Mascara,
+    Mensagem,
+    Parceiro,
+    PerfilStaff,
+    ProcessoAnexo,
+    ProcessoLink,
+    ProcessoRepositorio,
+    Ticket,
+    ConfigRespostaTipo,
+)
 
 admin.site.site_header = "NIO GC Tickets"
 admin.site.site_title = "NIO GC Tickets"
@@ -97,4 +110,24 @@ class PerfilStaffAdmin(admin.ModelAdmin):
 class ConfigRespostaTipoAdmin(admin.ModelAdmin):
     list_display = ("tipo", "atualizado_em")
     search_fields = ("tipo",)
+
+
+class ProcessoAnexoInline(admin.TabularInline):
+    model = ProcessoAnexo
+    extra = 0
+
+
+class ProcessoLinkInline(admin.TabularInline):
+    model = ProcessoLink
+    extra = 0
+
+
+@admin.register(ProcessoRepositorio)
+class ProcessoRepositorioAdmin(admin.ModelAdmin):
+    list_display = ("titulo", "categoria", "canal", "publico", "ativo", "ordem")
+    list_filter = ("categoria", "canal", "publico", "ativo")
+    search_fields = ("titulo", "slug", "tags", "finalidade")
+    prepopulated_fields = {"slug": ("titulo",)}
+    inlines = [ProcessoAnexoInline, ProcessoLinkInline]
+
 

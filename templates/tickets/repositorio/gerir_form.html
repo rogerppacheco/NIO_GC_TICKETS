@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo_pagina }} · Repositório{% endblock %}
+{% block content %}
+<div class="hero">
+  <div><h1>{{ titulo_pagina }}</h1></div>
+  <a class="btn btn-secondary" href="{% url 'repositorio_gerir_lista' %}">← Lista</a>
+</div>
+
+<form method="post" class="panel">
+  <div class="panel-b form-grid">
+    {% csrf_token %}
+    {% for field in form %}
+      <div class="{% if field.field.widget.input_type == 'checkbox' %}checkbox-row{% endif %}">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+        {% for err in field.errors %}<div class="help warn">{{ err }}</div>{% endfor %}
+      </div>
+    {% endfor %}
+    <div style="grid-column:1/-1">
+      <button class="btn btn-primary" type="submit">Salvar</button>
+    </div>
+  </div>
+</form>
+
+{% if processo %}
+<div class="grid-2" style="margin-top:1rem">
+  <div class="panel">
+    <div class="panel-h">
+      <h2>Anexos</h2>
+      <a href="{% url 'repositorio_anexo_novo' processo.pk %}">+ Anexo</a>
+    </div>
+    <div class="panel-b">
+      {% for a in processo.anexos.all %}
+        <div style="display:flex;justify-content:space-between;gap:0.5rem;padding:0.45rem 0;border-bottom:1px solid var(--line)">
+          <span>{{ a.titulo }} <span class="help">({{ a.get_tipo_display }})</span></span>
+          <span>
+            <a href="{% url 'repositorio_anexo_editar' processo.pk a.pk %}">Editar</a>
+            ·
+            <form method="post" action="{% url 'repositorio_anexo_excluir' a.pk %}" style="display:inline">
+              {% csrf_token %}
+              <button type="submit" class="nav-btn" onclick="return confirm('Remover anexo?')">Excluir</button>
+            </form>
+          </span>
+        </div>
+      {% empty %}
+        <p class="help">Nenhum anexo.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-h">
+      <h2>Links</h2>
+      <a href="{% url 'repositorio_link_novo' processo.pk %}">+ Link</a>
+    </div>
+    <div class="panel-b">
+      {% for l in processo.links.all %}
+        <div style="display:flex;justify-content:space-between;gap:0.5rem;padding:0.45rem 0;border-bottom:1px solid var(--line)">
+          <span>{{ l.titulo }}</span>
+          <span>
+            <a href="{% url 'repositorio_link_editar' processo.pk l.pk %}">Editar</a>
+            ·
+            <form method="post" action="{% url 'repositorio_link_excluir' l.pk %}" style="display:inline">
+              {% csrf_token %}
+              <button type="submit" class="nav-btn" onclick="return confirm('Remover link?')">Excluir</button>
+            </form>
+          </span>
+        </div>
+      {% empty %}
+        <p class="help">Nenhum link.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

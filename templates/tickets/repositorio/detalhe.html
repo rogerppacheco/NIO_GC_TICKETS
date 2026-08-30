@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}{{ processo.titulo }} · Central de processos{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>{{ processo.titulo }}</h1>
+    <p class="help">{{ processo.get_categoria_display }} · {{ processo.get_canal_display }}</p>
+  </div>
+  <a class="btn btn-secondary" href="{% url 'repositorio_lista' %}">← Voltar</a>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-h"><h2>Para que serve</h2></div>
+    <div class="panel-b">{{ processo.finalidade|linebreaks }}</div>
+  </div>
+
+  {% if processo.quando_usar %}
+  <div class="panel">
+    <div class="panel-h"><h2>Quando usar</h2></div>
+    <div class="panel-b">{{ processo.quando_usar|linebreaks }}</div>
+  </div>
+  {% endif %}
+</div>
+
+{% if passos %}
+<div class="panel" style="margin-top:1rem">
+  <div class="panel-h"><h2>Passo a passo</h2></div>
+  <div class="panel-b">
+    <ol style="margin:0;padding-left:1.25rem;line-height:1.6">
+      {% for passo in passos %}
+        <li style="margin-bottom:0.45rem">{{ passo }}</li>
+      {% endfor %}
+    </ol>
+  </div>
+</div>
+{% endif %}
+
+<div class="grid-2" style="margin-top:1rem">
+  <div class="panel">
+    <div class="panel-h"><h2>Encaminhamento</h2></div>
+    <div class="panel-b">
+      {% if processo.encaminhamento %}
+        <p>{{ processo.encaminhamento|linebreaks }}</p>
+      {% endif %}
+      {% if processo.email_destino %}
+        <p><strong>E-mail:</strong> <a href="mailto:{{ processo.email_destino }}">{{ processo.email_destino }}</a></p>
+      {% endif %}
+      {% if processo.email_cc_especialista and email_especialista %}
+        <p><strong>Copiar (CC):</strong> {{ email_especialista }} <span class="help">— especialista do seu PDV</span></p>
+      {% elif processo.email_cc_especialista and parceiro %}
+        <p class="help warn">Seu PDV ainda não tem especialista com e-mail cadastrado para CC.</p>
+      {% endif %}
+      {% if processo.email_cc_extra %}
+        <p><strong>CC fixo:</strong> {{ processo.email_cc_extra }}</p>
+      {% endif %}
+      {% if processo.requer_planilha %}
+        <p><strong>Planilha:</strong> obrigatória — {{ processo.instrucoes_planilha|default:"anexe o formulário indicado abaixo." }}</p>
+      {% endif %}
+      {% if processo.canal == 'email' and processo.email_destino %}
+        <p style="margin-top:0.75rem">
+          <a class="btn btn-primary" href="mailto:{{ mailto_dest }}{% if mailto_cc %}?cc={{ mailto_cc|join:','|urlencode }}{% endif %}">Abrir e-mail</a>
+        </p>
+      {% elif processo.canal == 'demanda' %}
+        <p style="margin-top:0.75rem"><a class="btn btn-primary" href="{% url 'abrir_demanda_form' %}">Abrir demanda</a></p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-h"><h2>Arquivos e links</h2></div>
+    <div class="panel-b">
+      {% for anexo in processo.anexos.all %}
+        <div style="padding:0.5rem 0;border-bottom:1px solid var(--line)">
+          <a href="{{ anexo.arquivo.url }}" download><strong>{{ anexo.titulo }}</strong></a>
+          <span class="help"> · {{ anexo.get_tipo_display }}</span>
+        </div>
+      {% empty %}
+        {% if not processo.links.all %}
+          <p class="help">Nenhum arquivo ou link cadastrado.</p>
+        {% endif %}
+      {% endfor %}
+      {% for link in processo.links.all %}
+        <div style="padding:0.5rem 0;border-bottom:1px solid var(--line)">
+          <a href="{{ link.url }}" target="_blank" rel="noopener">{{ link.titulo }} ↗</a>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% if processo.lista_tags %}
+<p class="help" style="margin-top:1rem">Tags: {{ processo.lista_tags|join:", " }}</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Viabilidade VTAL · NIO GC Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Viabilidade VTAL</h1>
+    <p>Retorno das solicitações do formulário de viabilidade (CEP + fachada).</p>
+    {% if not vtal_ok %}
+      <p class="help warn">Base VTAL indisponível neste ambiente (PostgreSQL + tabelas viabilidade_*).</p>
+    {% elif fonte %}
+      <p class="help">Base: {{ fonte.nome }}</p>
+    {% endif %}
+  </div>
+  <a class="btn btn-secondary" href="{% url 'portal_inicio' %}">← Início</a>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-h"><h2>Consultar</h2></div>
+    <div class="panel-b">
+      <form method="get">
+        {% if fontes|length > 1 %}
+        <div style="margin-bottom:0.85rem">
+          <label for="fonte">Base</label>
+          <select name="fonte" id="fonte">
+            {% for f in fontes %}
+              <option value="{{ f.codigo }}" {% if fonte.codigo == f.codigo %}selected{% endif %}>{{ f.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div style="margin-bottom:0.85rem">
+          <label for="cep">CEP</label>
+          <input type="text" name="cep" id="cep" value="{{ cep }}" placeholder="00000-000" maxlength="12">
+        </div>
+        <div style="margin-bottom:0.85rem">
+          <label for="numero_fachada">Número da fachada</label>
+          <input type="text" name="numero_fachada" id="numero_fachada" value="{{ numero_fachada }}" placeholder="Ex.: 123">
+        </div>
+        <button class="btn btn-primary" type="submit" {% if not vtal_ok %}disabled{% endif %}>Consultar</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-h">
+      <h2>Resultados</h2>
+      {% if buscou %}<span class="help">{{ resultados|length }} registro(s)</span>{% endif %}
+    </div>
+    <div class="panel-b">
+      {% if erro %}<p class="help warn">{{ erro }}</p>{% endif %}
+      {% if buscou and not resultados and not erro %}
+        <p class="help">Nenhum registro para este CEP/fachada.</p>
+      {% endif %}
+      {% for item in resultados %}
+        <div class="wpp-bubble" style="margin-bottom:0.65rem">
+          <div style="display:flex;justify-content:space-between;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.35rem">
+            <strong>Solicitação #{{ item.numero_linha_planilha|default:"—" }}</strong>
+            <span class="pill">{{ item.status_tratamento|default:"Sem retorno" }}</span>
+          </div>
+          {% if item.observacoes_vtal %}
+            <p><strong>Obs. VTAL:</strong> {{ item.observacoes_vtal }}</p>
+          {% endif %}
+          <p><strong>Endereço:</strong> {{ item.logradouro|default:"" }}{% if item.numero_fachada %}, {{ item.numero_fachada }}{% endif %}</p>
+          <p><strong>Bairro:</strong> {{ item.bairro|default:"—" }} · <strong>Cidade:</strong> {{ item.cidade|default:"—" }}/{{ item.estado_uf|default:"—" }}</p>
+          <p><strong>CEP:</strong> {{ item.cep|default:"—" }}</p>
+          {% if item.carimbo_data_hora %}
+            <p class="help">Solicitado em {{ item.carimbo_data_hora|date:"d/m/Y H:i" }}</p>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

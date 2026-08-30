@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Gerenciar processos · NIO GC Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Processos (repositório)</h1>
+    <p>Cadastro de runbooks para parceiros e equipe.</p>
+  </div>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    <a class="btn btn-primary" href="{% url 'repositorio_gerir_novo' %}">Novo processo</a>
+    <a class="btn btn-secondary" href="{% url 'repositorio_lista' %}">Ver portal</a>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-b" style="padding:0">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Ordem</th>
+          <th>Título</th>
+          <th>Categoria</th>
+          <th>Público</th>
+          <th>Ativo</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in processos %}
+          <tr>
+            <td>{{ p.ordem }}</td>
+            <td><a href="{% url 'repositorio_detalhe' p.slug %}">{{ p.titulo }}</a></td>
+            <td>{{ p.get_categoria_display }}</td>
+            <td>{% if p.publico %}Sim{% else %}Não{% endif %}</td>
+            <td>{% if p.ativo %}Sim{% else %}Não{% endif %}</td>
+            <td><a href="{% url 'repositorio_gerir_editar' p.pk %}">Editar</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="help">Nenhum processo cadastrado.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

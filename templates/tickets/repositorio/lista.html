@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Central de processos · NIO GC Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Central de processos</h1>
+    <p>Guias, formulários e encaminhamentos para rotinas operacionais.</p>
+  </div>
+  {% if pode_gerir %}
+    <a class="btn btn-secondary" href="{% url 'repositorio_gerir_lista' %}">Gerenciar</a>
+  {% endif %}
+</div>
+
+<form method="get" class="panel" style="margin-bottom:1rem">
+  <div class="panel-b" style="display:flex;gap:0.65rem;flex-wrap:wrap;align-items:flex-end">
+    <div style="flex:1;min-width:180px">
+      <label for="q">Buscar</label>
+      <input type="search" name="q" id="q" value="{{ q }}" placeholder="Cadastro, crédito, planilha…">
+    </div>
+    <div>
+      <label for="categoria">Categoria</label>
+      <select name="categoria" id="categoria">
+        <option value="">Todas</option>
+        {% for val, label in categorias %}
+          <option value="{{ val }}" {% if categoria == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn btn-primary" type="submit">Filtrar</button>
+  </div>
+</form>
+
+<div class="consultas-grid">
+  {% for p in processos %}
+    <a class="consulta-card" href="{% url 'repositorio_detalhe' p.slug %}">
+      <span class="consulta-ico">📋</span>
+      <h2>{{ p.titulo }}</h2>
+      <p>{{ p.resumo|default:p.finalidade|truncatechars:140 }}</p>
+      <span class="consulta-tag">{{ p.get_categoria_display }}</span>
+    </a>
+  {% empty %}
+    <div class="panel">
+      <div class="panel-b">
+        <p class="help">Nenhum processo publicado ainda.</p>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

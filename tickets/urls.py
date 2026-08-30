@@ -1,6 +1,6 @@
 from django.urls import include, path
 
-from . import views
+from . import repositorio_views, views
 
 urlpatterns = [
     path("", views.home, name="home"),
@@ -15,7 +15,47 @@ urlpatterns = [
     path("tickets/<str:protocolo>/", views.ticket_detalhe, name="ticket_detalhe"),
     path("campos-resposta/", views.config_resposta_lista, name="config_resposta_lista"),
     path("campos-resposta/<str:tipo>/", views.config_resposta_editar, name="config_resposta_editar"),
-    path("abrir/", views.abrir_demanda, name="abrir_demanda"),
+    path("abrir/", views.portal_inicio, name="portal_inicio"),
+    path("abrir/demanda/", views.abrir_demanda, name="abrir_demanda"),
+    path("repositorio/", repositorio_views.repositorio_lista, name="repositorio_lista"),
+    path("repositorio/gerir/", repositorio_views.repositorio_gerir_lista, name="repositorio_gerir_lista"),
+    path("repositorio/gerir/novo/", repositorio_views.repositorio_gerir_form, name="repositorio_gerir_novo"),
+    path(
+        "repositorio/gerir/<int:pk>/",
+        repositorio_views.repositorio_gerir_form,
+        name="repositorio_gerir_editar",
+    ),
+    path(
+        "repositorio/gerir/<int:processo_pk>/anexo/",
+        repositorio_views.repositorio_anexo_form,
+        name="repositorio_anexo_novo",
+    ),
+    path(
+        "repositorio/gerir/<int:processo_pk>/anexo/<int:pk>/",
+        repositorio_views.repositorio_anexo_form,
+        name="repositorio_anexo_editar",
+    ),
+    path(
+        "repositorio/gerir/anexo/<int:pk>/excluir/",
+        repositorio_views.repositorio_anexo_excluir,
+        name="repositorio_anexo_excluir",
+    ),
+    path(
+        "repositorio/gerir/<int:processo_pk>/link/",
+        repositorio_views.repositorio_link_form,
+        name="repositorio_link_novo",
+    ),
+    path(
+        "repositorio/gerir/<int:processo_pk>/link/<int:pk>/",
+        repositorio_views.repositorio_link_form,
+        name="repositorio_link_editar",
+    ),
+    path(
+        "repositorio/gerir/link/<int:pk>/excluir/",
+        repositorio_views.repositorio_link_excluir,
+        name="repositorio_link_excluir",
+    ),
+    path("repositorio/<slug:slug>/", repositorio_views.repositorio_detalhe, name="repositorio_detalhe"),
     path("abrir/formulario/", views.abrir_demanda_form, name="abrir_demanda_form"),
     path("abrir/inicio/", views.portal_parceiro, name="portal_parceiro"),
     path("abrir/minhas/", views.minhas_demandas, name="minhas_demandas"),

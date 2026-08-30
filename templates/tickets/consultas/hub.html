@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Consultas operacionais · NIO GC Tickets{% endblock %}
+{% block title %}DFV · NIO GC Tickets{% endblock %}
 {% block content %}
 <div class="hero">
   <div>
-    <h1>Consultas operacionais</h1>
-    <p>As mesmas consultas dos bots de automação do site-record, disponíveis na web após login.</p>
+    <h1>DFV</h1>
+    <p>Consultas operacionais — fachadas e endereços (Power BI e bases VTAL).</p>
     {% if not dfv_enabled %}
       <p class="help warn">Power BI (DFV/CDOE) temporariamente indisponível neste ambiente.</p>
     {% else %}
@@ -26,6 +26,13 @@
     <h2>CDOE</h2>
     <p>Endereços e números por código CDO — UF, cidade e rua, como no WhatsApp.</p>
     <span class="consulta-tag">Por código CDO</span>
+  </a>
+
+  <a class="consulta-card" href="{% url 'consulta_viabilidade' %}">
+    <span class="consulta-ico">📍</span>
+    <h2>Viabilidade VTAL</h2>
+    <p>Retorno do formulário de viabilidade por CEP e número da fachada.</p>
+    <span class="consulta-tag">Forms VTAL</span>
   </a>
 </div>
 {% endblock %}
