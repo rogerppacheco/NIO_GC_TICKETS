@@ -5,14 +5,23 @@
 <div class="hero">
   <div>
     <h1>Resultados</h1>
-    <p>Parcial (imagem), acumulado do mês {{ mes|stringformat:"02d" }}/{{ ano }} e ranking de VB. Destinatários com a flag <strong>Resultados</strong>.</p>
+    <p>Parcial (imagem), acumulado do mês {{ mes|stringformat:"02d" }}/{{ ano }} e ranking de VB.</p>
   </div>
 </div>
 
-<div class="panel" style="margin-bottom:1rem">
-  <div class="panel-h"><h2>1. Parcial de vendas</h2></div>
-  <div class="panel-b">
-    <p class="help" style="margin-top:0">Anexe o print e envie para um PDV ou para todos do escopo. O texto curto vai como legenda da imagem.</p>
+<div class="panel resultados-tabs-panel">
+  <div class="tabs resultados-tabs" role="tablist">
+    <a class="tab{% if aba == 'parcial' %} is-active{% endif %}"
+       href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial" role="tab">Parcial de vendas</a>
+    <a class="tab{% if aba == 'acumulado' %} is-active{% endif %}"
+       href="?escopo={{ gestao_escopo|default:'meus' }}&aba=acumulado" role="tab">Acumulado do mês</a>
+    <a class="tab{% if aba == 'ranking' %} is-active{% endif %}"
+       href="?escopo={{ gestao_escopo|default:'meus' }}&aba=ranking" role="tab">Ranking de VB</a>
+  </div>
+
+  {% if aba == "parcial" %}
+  <div class="tab-panel is-active" role="tabpanel">
+    <p class="help" style="margin:0 0 0.85rem">Anexe o print e envie para um PDV ou para todos do escopo. O texto curto vai como legenda da imagem.</p>
     {% if pode_enviar %}
     <form method="post" enctype="multipart/form-data" class="form-grid">
       {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
@@ -28,31 +37,30 @@
     <p class="help">Configure o WhatsApp (Evolution) para enviar o parcial.</p>
     {% endif %}
   </div>
-</div>
+  {% endif %}
 
-<div class="panel" style="margin-bottom:1rem">
-  <div class="panel-h">
-    <h2>2. Acumulado do mês</h2>
-    <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
-      {% if msg_acumulado %}
-      <textarea id="acumulado-msg" hidden>{{ msg_acumulado }}</textarea>
-      <button class="btn btn-ghost" type="button" data-copy-target="acumulado-msg">Copiar</button>
-      {% endif %}
-      {% if pode_enviar %}
-      <form method="post">
-        {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
-        <input type="hidden" name="action" value="enviar_acumulado_todos">
-        <button class="btn btn-primary" type="submit">Enviar todos</button>
-      </form>
-      {% endif %}
+  {% if aba == "acumulado" %}
+  <div class="tab-panel is-active" role="tabpanel">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.85rem">
+      <p class="help" style="margin:0">
+        Recorte da DASHBOARD: PDV, meta, realizado, % meta, D-1 e D0 (VB e Gross).
+        D0 é o último dia com VB no mês (até hoje); D-1 é o dia civil anterior.
+        {% if acumulado.d0 %}Corte atual: D0 {{ acumulado.d0|date:"d/m" }}{% if acumulado.d1 %} · D-1 {{ acumulado.d1|date:"d/m" }}{% endif %}.{% else %}Ainda não há VB no período.{% endif %}
+      </p>
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
+        {% if msg_acumulado %}
+        <textarea id="acumulado-msg" hidden>{{ msg_acumulado }}</textarea>
+        <button class="btn btn-ghost" type="button" data-copy-target="acumulado-msg">Copiar</button>
+        {% endif %}
+        {% if pode_enviar %}
+        <form method="post">
+          {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+          <input type="hidden" name="action" value="enviar_acumulado_todos">
+          <button class="btn btn-primary" type="submit">Enviar todos</button>
+        </form>
+        {% endif %}
+      </div>
     </div>
-  </div>
-  <div class="panel-b">
-    <p class="help" style="margin-top:0">
-      Recorte da DASHBOARD: PDV, meta, realizado, % meta, D-1 e D0 (VB e Gross).
-      D0 é o último dia com VB no mês (até hoje); D-1 é o dia civil anterior.
-      {% if acumulado.d0 %}Corte atual: D0 {{ acumulado.d0|date:"d/m" }}{% if acumulado.d1 %} · D-1 {{ acumulado.d1|date:"d/m" }}{% endif %}.{% else %}Ainda não há VB no período.{% endif %}
-    </p>
     <div class="table-scroll">
       <table class="table">
         <thead>
@@ -103,146 +111,106 @@
       </table>
     </div>
   </div>
-</div>
+  {% endif %}
 
-<div class="panel">
-  <div class="panel-h">
-    <h2>3. Ranking de VB</h2>
-    <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
-      {% if msg_ranking %}
-      <textarea id="ranking-msg" hidden>{{ msg_ranking }}</textarea>
-      <button class="btn btn-ghost" type="button" data-copy-target="ranking-msg">Copiar</button>
-      {% endif %}
-      {% if pode_enviar %}
-      <form method="post">
-        {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
-        <input type="hidden" name="action" value="enviar_ranking">
-        <button class="btn btn-primary" type="submit">Enviar ranking</button>
-      </form>
-      {% endif %}
-    </div>
-  </div>
-  <div class="panel-b">
-    <p class="help" style="margin-top:0">
-      Por <strong>vendedor (TT)</strong>, não por PDV. VB em praça padrão = 1 ponto; praça BTU (GDP NOVO ESPECIAL) = 0,5.
-      Acumulado mensal até D-1 ({{ ranking.periodo.fim|date:"d/m/Y" }}).
-      Na 2ª feira a coluna “dia anterior” soma sexta a domingo.
-      Regular = alocado há mais de 6 meses no Sysmap; Iniciante = até 6 meses.
-      Início oficial em 02/09/2026.
-      {% if not ranking.periodo.oficial %}<strong>Prévia</strong> — o ranking oficial ainda não começou.{% endif %}
-    </p>
+  {% if aba == "ranking" %}
+  <div class="tab-panel is-active" role="tabpanel">
     {% if gaps_ranking %}
-    <div class="help" style="color:var(--warn);margin-bottom:0.8rem">
+    <div class="help warn-box" style="margin-bottom:0.85rem">
       {% for aviso in gaps_ranking %}<div>{{ aviso }}</div>{% endfor %}
     </div>
     {% endif %}
 
-    {% if pode_editar %}
-    <form method="post" enctype="multipart/form-data" class="form-grid" style="margin-bottom:0.8rem">
-      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
-      <input type="hidden" name="action" value="importar_gdp">
-      <div>{{ form_gdp.arquivo_b2c.label_tag }}{{ form_gdp.arquivo_b2c }}<div class="help">{{ form_gdp.arquivo_b2c.help_text }}</div></div>
-      <div>{{ form_gdp.arquivo_b2b.label_tag }}{{ form_gdp.arquivo_b2b }}<div class="help">{{ form_gdp.arquivo_b2b.help_text }}</div></div>
-      <div class="full"><button class="btn btn-primary" type="submit">Importar GDP (praças BTU)</button></div>
-    </form>
-    <p class="help">
-      No GDP, BTU = portfólio vigente <strong>NOVO ESPECIAL</strong> (oferta ~50%).
-      Lê a aba <code>PAP (Local)</code> e a última coluna <code>PORTFOLIO_GDP_…</code>.
-      B2C e B2B deste recorte têm o mesmo mapa; um arquivo já basta.
-      {% if ultimo_gdp %}Último import: {{ ultimo_gdp.arquivo_nome }} em {{ ultimo_gdp.criado_em|date:"d/m H:i" }}{% if ultimo_gdp.ok %} ({{ ultimo_gdp.resumo.especial_uniao }} praças, {{ ultimo_gdp.resumo.mg }} MG).{% endif %}{% endif %}
-    </p>
-    <form method="post" class="fila-toolbar" style="margin-bottom:0.8rem">
-      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
-      <input type="hidden" name="action" value="add_praca_btu">
-      {{ form_btu.nome }}
-      <button class="btn btn-secondary" type="submit">Incluir praça avulsa</button>
-    </form>
-    {% if pracas_btu %}
-    <p class="help" style="margin-bottom:0.6rem">
-      {{ pracas_btu|length }} praça(s) BTU ativas{% if pracas_btu_mg %} · {{ pracas_btu_mg }} em MG{% endif %}:
-      {% for p in pracas_btu %}
-        <span class="pill">{% if p.uf %}{{ p.uf }} {% endif %}{{ p.nome }}
-          <button form="del-btu-{{ p.pk }}" class="btn btn-ghost" type="submit" style="padding:0 0.3rem">×</button>
-        </span>
-      {% endfor %}
-    </p>
-    {% for p in pracas_btu %}
-    <form id="del-btu-{{ p.pk }}" method="post" style="display:none">
-      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
-      <input type="hidden" name="action" value="del_praca_btu">
-      <input type="hidden" name="praca" value="{{ p.pk }}">
-    </form>
-    {% endfor %}
-    {% endif %}
-    {% endif %}
-
-    <div class="grid-2">
-      <div>
-        <h3 style="margin:0 0 0.5rem">Base Regular (&gt;6 meses)</h3>
-        <div class="table-scroll">
-          <table class="table">
-            <thead><tr><th>#</th><th>Vendedor</th><th>TT</th><th>Pts</th><th>Dia ant.</th><th>VB</th></tr></thead>
-            <tbody>
-              {% for item in ranking.grupos.regular %}
-              <tr>
-                <td>{{ item.posicao }}</td>
-                <td>{{ item.nome }}</td>
-                <td class="mono">{{ item.tt }}</td>
-                <td>{{ item.pontos }}</td>
-                <td>{{ item.pontos_dia }}</td>
-                <td>{{ item.vb }}{% if item.vb_btu %} <span class="help">({{ item.vb_btu }} BTU)</span>{% endif %}</td>
-              </tr>
-              {% empty %}
-              <tr><td colspan="6">Ninguém neste grupo.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
+    <div class="ranking-envio">
+      <div class="ranking-preview-wrap">
+        <p class="help" style="margin:0 0 0.65rem">Prévia da imagem que será enviada no WhatsApp:</p>
+        <img
+          class="ranking-preview-img"
+          src="{% url 'gestao_ranking_preview' %}?escopo={{ gestao_escopo|default:'meus' }}&_={{ ranking.periodo.fim|date:'U' }}"
+          alt="Ranking VB — preview"
+          loading="lazy">
       </div>
-      <div>
-        <h3 style="margin:0 0 0.5rem">Iniciante (≤6 meses)</h3>
-        <div class="table-scroll">
-          <table class="table">
-            <thead><tr><th>#</th><th>Vendedor</th><th>TT</th><th>Pts</th><th>Dia ant.</th><th>VB</th></tr></thead>
-            <tbody>
-              {% for item in ranking.grupos.iniciante %}
-              <tr>
-                <td>{{ item.posicao }}</td>
-                <td>{{ item.nome }}</td>
-                <td class="mono">{{ item.tt }}</td>
-                <td>{{ item.pontos }}</td>
-                <td>{{ item.pontos_dia }}</td>
-                <td>{{ item.vb }}{% if item.vb_btu %} <span class="help">({{ item.vb_btu }} BTU)</span>{% endif %}</td>
-              </tr>
-              {% empty %}
-              <tr><td colspan="6">Ninguém neste grupo.</td></tr>
+
+      <div class="ranking-envio-form">
+        {% if pode_enviar %}
+          {% if eh_gestor %}
+            {% if grupos_ranking %}
+            <form method="post" class="form-grid">
+              {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+              <input type="hidden" name="action" value="enviar_ranking">
+              <div class="full">
+                <label for="destinatario-ranking">Grupo WhatsApp</label>
+                <select name="destinatario" id="destinatario-ranking" required>
+                  <option value="">Escolha o grupo…</option>
+                  {% for g in grupos_ranking %}
+                    <option value="{{ g.id }}">{{ g.parceiro.nome }} — {{ g.nome }}</option>
+                  {% endfor %}
+                </select>
+                <p class="help">Somente grupos com flag <strong>Resultados</strong> no cadastro de destinatários.</p>
+              </div>
+              <div class="full">
+                <button class="btn btn-primary" type="submit">Enviar imagem no grupo</button>
+              </div>
+            </form>
+            {% else %}
+            <p class="help err">Nenhum grupo WhatsApp com flag Resultados no escopo. Cadastre em <a href="{% url 'gestao_destinatarios' %}">Destinatários</a>.</p>
+            {% endif %}
+          {% else %}
+            <form method="post">
+              {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+              <input type="hidden" name="action" value="enviar_ranking">
+              <p class="help" style="margin-top:0">Como especialista, o envio vai para o WhatsApp do seu perfil.</p>
+              <button class="btn btn-primary" type="submit">Enviar imagem</button>
+            </form>
+          {% endif %}
+        {% else %}
+        <p class="help">Configure o WhatsApp (Evolution) para enviar o ranking.</p>
+        {% endif %}
+
+        {% if pode_editar %}
+        <details class="ranking-config">
+          <summary>Praças BTU e importação GDP</summary>
+          <div class="ranking-config-body">
+            <form method="post" enctype="multipart/form-data" class="form-grid" style="margin-bottom:0.8rem">
+              {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+              <input type="hidden" name="action" value="importar_gdp">
+              <div>{{ form_gdp.arquivo_b2c.label_tag }}{{ form_gdp.arquivo_b2c }}<div class="help">{{ form_gdp.arquivo_b2c.help_text }}</div></div>
+              <div>{{ form_gdp.arquivo_b2b.label_tag }}{{ form_gdp.arquivo_b2b }}<div class="help">{{ form_gdp.arquivo_b2b.help_text }}</div></div>
+              <div class="full"><button class="btn btn-primary" type="submit">Importar GDP (praças BTU)</button></div>
+            </form>
+            <p class="help">
+              BTU = portfólio <strong>NOVO ESPECIAL</strong> no GDP.
+              {% if ultimo_gdp %}Último import: {{ ultimo_gdp.arquivo_nome }} em {{ ultimo_gdp.criado_em|date:"d/m H:i" }}.{% endif %}
+            </p>
+            <form method="post" class="fila-toolbar" style="margin-bottom:0.8rem">
+              {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+              <input type="hidden" name="action" value="add_praca_btu">
+              {{ form_btu.nome }}
+              <button class="btn btn-secondary" type="submit">Incluir praça avulsa</button>
+            </form>
+            {% if pracas_btu %}
+            <p class="help" style="margin-bottom:0.6rem">
+              {{ pracas_btu|length }} praça(s) BTU ativas{% if pracas_btu_mg %} · {{ pracas_btu_mg }} em MG{% endif %}:
+              {% for p in pracas_btu %}
+                <span class="pill">{% if p.uf %}{{ p.uf }} {% endif %}{{ p.nome }}
+                  <button form="del-btu-{{ p.pk }}" class="btn btn-ghost" type="submit" style="padding:0 0.3rem">×</button>
+                </span>
               {% endfor %}
-            </tbody>
-          </table>
-        </div>
+            </p>
+            {% for p in pracas_btu %}
+            <form id="del-btu-{{ p.pk }}" method="post" style="display:none">
+              {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+              <input type="hidden" name="action" value="del_praca_btu">
+              <input type="hidden" name="praca" value="{{ p.pk }}">
+            </form>
+            {% endfor %}
+            {% endif %}
+          </div>
+        </details>
+        {% endif %}
       </div>
     </div>
-
-    {% if ranking.grupos.sem_cadastro %}
-    <h3 style="margin:1rem 0 0.5rem">Sem data de alocação / Sysmap</h3>
-    <div class="table-scroll">
-      <table class="table">
-        <thead><tr><th>#</th><th>Vendedor</th><th>TT</th><th>Pts</th><th>Dia ant.</th><th>VB</th></tr></thead>
-        <tbody>
-          {% for item in ranking.grupos.sem_cadastro %}
-          <tr>
-            <td>{{ item.posicao }}</td>
-            <td>{{ item.nome }}</td>
-            <td class="mono">{{ item.tt }}</td>
-            <td>{{ item.pontos }}</td>
-            <td>{{ item.pontos_dia }}</td>
-            <td>{{ item.vb }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% endif %}
   </div>
+  {% endif %}
 </div>
 {% endblock %}

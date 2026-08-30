@@ -106,7 +106,6 @@ from .pipelines.resultados import (
     gaps_ranking,
     linhas_acumulado,
     mensagem_acumulado_consolidada,
-    mensagem_ranking,
     montar_ranking,
 )
 from .pipelines.tarefas import processar_tarefas
@@ -488,6 +487,30 @@ def osab_view(request: HttpRequest) -> HttpResponse:
     )
 
 
+def _grupos_ranking(parceiros: list[Parceiro]):
+    ids = [p.pk for p in parceiros]
+    return (
+        Destinatario.objects.filter(
+            ativo=True,
+            tipo=Destinatario.TipoDestino.GRUPO,
+            envio_resultados=True,
+            parceiro_id__in=ids,
+        )
+        .select_related("parceiro")
+        .order_by("parceiro__nome", "prioridade", "nome")
+    )
+
+
+@login_required
+def ranking_preview(request: HttpRequest) -> HttpResponse:
+    from .ranking_imagem import imagem_ranking
+
+    visiveis = list(_parceiros(request))
+    ranking = montar_ranking(visiveis)
+    png, _ = imagem_ranking(ranking)
+    return HttpResponse(png, content_type="image/png")
+
+
 @login_required
 def resultados_view(request: HttpRequest) -> HttpResponse:
     ano, mes = periodo_ativo()
@@ -534,7 +557,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                     messages.error(request, f"Falha ao importar GDP: {exc}")
             else:
                 messages.error(request, "Envie o GDP B2C e/ou B2B em .xlsx.")
-            return _voltar(request, "gestao_resultados")
+            return _voltar(request, "gestao_resultados", extra="aba=ranking")
         if action == "add_praca_btu" and _pode_importar(request):
             form_btu = PracaBTUForm(request.POST)
             if form_btu.is_valid():
@@ -545,13 +568,13 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                     messages.error(request, str(exc))
             else:
                 messages.error(request, "Informe o município BTU.")
-            return _voltar(request, "gestao_resultados")
+            return _voltar(request, "gestao_resultados", extra="aba=ranking")
         if action == "del_praca_btu" and _pode_importar(request):
             pk = request.POST.get("praca")
             apagada, _ = PracaBTU.objects.filter(pk=pk).delete()
             if apagada:
                 messages.success(request, "Praça BTU removida.")
-            return _voltar(request, "gestao_resultados")
+            return _voltar(request, "gestao_resultados", extra="aba=ranking")
         if action in {"enviar_parcial", "enviar_parcial_todos"} and _pode_enviar(request):
             form = ParcialResultadoForm(
                 request.POST,
@@ -610,16 +633,27 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             )
             return _voltar(request, "gestao_resultados")
         if action == "enviar_ranking" and _pode_enviar(request):
-            _flash_resumo(request, "Ranking VB", enviar_ranking(visiveis, request.user))
-            return _voltar(request, "gestao_resultados")
+            dest_raw = (request.POST.get("destinatario") or "").strip()
+            dest_id = int(dest_raw) if dest_raw.isdigit() else None
+            _flash_resumo(
+                request,
+                "Ranking VB",
+                enviar_ranking(visiveis, request.user, destinatario_id=dest_id),
+            )
+            return _voltar(request, "gestao_resultados", extra="aba=ranking")
 
     acumulado = linhas_acumulado(visiveis, ano, mes)
     ranking = montar_ranking(visiveis)
     pracas_ativas = PracaBTU.objects.filter(ativo=True)
+    aba = (request.GET.get("aba") or "parcial").strip().lower()
+    if aba not in {"parcial", "acumulado", "ranking"}:
+        aba = "parcial"
+    grupos_ranking = list(_grupos_ranking(visiveis))
     return render(
         request,
         "gestao/resultados.html",
         {
+            "aba": aba,
             "ano": ano,
             "mes": mes,
             "form": form,
@@ -628,13 +662,14 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             "acumulado": acumulado,
             "msg_acumulado": mensagem_acumulado_consolidada(acumulado),
             "ranking": ranking,
-            "msg_ranking": mensagem_ranking(ranking),
             "gaps_ranking": gaps_ranking(ranking),
+            "grupos_ranking": grupos_ranking,
             "pracas_btu": pracas_ativas,
             "pracas_btu_mg": pracas_ativas.filter(uf="MG").count(),
             "ultimo_gdp": LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.GDP).first(),
             "pode_enviar": _pode_enviar(request),
             "pode_editar": _pode_importar(request),
+            "eh_gestor": eh_gestor(request.user),
         },
     )
 

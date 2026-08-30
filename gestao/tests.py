@@ -2053,6 +2053,23 @@ class ResultadosTests(TestCase):
         self.assertContains(r, "Parcial de vendas")
         self.assertContains(r, "Acumulado do mês")
         self.assertContains(r, "Ranking de VB")
+        r2 = self.client.get(reverse("gestao_resultados"), {"aba": "ranking"})
+        self.assertContains(r2, "ranking-preview-img")
+
+    def test_imagem_ranking_gera_png(self):
+        from gestao.pipelines.resultados import montar_ranking
+        from gestao.ranking_imagem import imagem_ranking
+
+        ranking = montar_ranking([self.pdv])
+        png, nome = imagem_ranking(ranking)
+        self.assertTrue(png.startswith(b"\x89PNG"))
+        self.assertTrue(nome.endswith(".png"))
+
+    def test_ranking_preview(self):
+        r = self.client.get(reverse("gestao_ranking_preview"))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r["Content-Type"], "image/png")
+        self.assertTrue(r.content.startswith(b"\x89PNG"))
 
     def test_import_osab_persiste_municipio(self):
         hoje = timezone.localdate()

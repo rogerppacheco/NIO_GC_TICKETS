@@ -8,6 +8,7 @@ urlpatterns = [
     path("sysmap/", views.importar_sysmap_view, name="gestao_sysmap"),
     path("osab/", views.osab_view, name="gestao_osab"),
     path("resultados/", views.resultados_view, name="gestao_resultados"),
+    path("resultados/ranking-preview/", views.ranking_preview, name="gestao_ranking_preview"),
     path("capilaridade/", views.capilaridade_view, name="gestao_capilaridade"),
     path("fpd/", views.fpd_view, name="gestao_fpd"),
     path("churn/", views.churn_view, name="gestao_churn"),

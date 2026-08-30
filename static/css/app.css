@@ -453,7 +453,38 @@ body.modal-open { overflow: hidden; }
   padding: 0.55rem 0.75rem; border-bottom: 2px solid transparent;
   white-space: nowrap;
 }
-.tab:hover { color: var(--ink); }
+.tab:hover { color: var(--ink); text-decoration: none; }
+a.tab { text-decoration: none; display: inline-block; }
+.tab.is-active, .tab[aria-selected="true"] {
+  color: var(--brand); border-bottom-color: var(--brand);
+}
+.resultados-tabs-panel .tab-panel { padding: 1rem 1.1rem 1.15rem; }
+.ranking-envio {
+  display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.8fr);
+  gap: 1.25rem; align-items: start;
+}
+.ranking-preview-wrap {
+  border: 1px solid var(--line); border-radius: 12px; background: #f8fafb;
+  padding: 0.85rem;
+}
+.ranking-preview-img {
+  display: block; width: 100%; height: auto; border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+.ranking-envio-form .form-grid { margin-top: 0; }
+.ranking-config {
+  margin-top: 1rem; border: 1px dashed var(--line); border-radius: 10px;
+  padding: 0.65rem 0.85rem; background: #fff;
+}
+.ranking-config summary {
+  cursor: pointer; font-weight: 700; color: var(--muted);
+}
+.ranking-config-body { margin-top: 0.75rem; }
+.warn-box { color: var(--warn); font-weight: 600; }
+.help.err { color: var(--danger); font-weight: 700; }
+@media (max-width: 900px) {
+  .ranking-envio { grid-template-columns: 1fr; }
+}
 .modal-tipo {
   display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.55rem;
   padding: 0.75rem 1.1rem 0.35rem;

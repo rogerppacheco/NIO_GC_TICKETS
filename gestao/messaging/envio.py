@@ -1028,23 +1028,53 @@ def enviar_acumulado_todos(
 def enviar_ranking(
     parceiros: list[Parceiro],
     user: AbstractBaseUser | None = None,
+    *,
+    destinatario_id: int | None = None,
 ) -> ResumoEnvio:
-    from ..pipelines.resultados import mensagem_ranking, montar_ranking
+    from ..ranking_imagem import imagem_ranking
+    from ..pipelines.resultados import montar_ranking
 
     ranking = montar_ranking(parceiros)
-    mensagem = mensagem_ranking(ranking)
-    destinos: list[DestinoEnvio] = []
+    periodo = ranking.get("periodo") or {}
+    fim = periodo.get("fim")
+    periodo_txt = fim.strftime("%m/%Y") if fim else ""
+    caption = f"🏆 *Ranking VB*{f' · {periodo_txt}' if periodo_txt else ''}"
+
     if user is not None and not eh_gestor(user):
         destinos = destinos_para_envio(user, "envio_resultados")
+    elif destinatario_id:
+        dest = (
+            Destinatario.objects.filter(
+                pk=destinatario_id,
+                ativo=True,
+                tipo=Destinatario.TipoDestino.GRUPO,
+                envio_resultados=True,
+                parceiro__in=parceiros,
+            )
+            .select_related("parceiro")
+            .first()
+        )
+        if not dest:
+            return ResumoEnvio(
+                erros=1,
+                detalhes=["Grupo inválido ou sem flag Resultados no escopo."],
+            )
+        destinos = [
+            DestinoEnvio(
+                jid=dest.jid,
+                nome=dest.nome,
+                parceiro=dest.parceiro,
+                destinatario=dest,
+            )
+        ]
     else:
-        for p in parceiros:
-            destinos.extend(destinos_para_envio(user, "envio_resultados", p))
-        destinos = _unicos_jid(destinos)
-    arquivo_bytes, nome_arquivo = planilha_ranking(ranking)
+        return ResumoEnvio(erros=1, detalhes=["Escolha o grupo WhatsApp para enviar o ranking."])
+
+    arquivo_bytes, nome_arquivo = imagem_ranking(ranking)
     return _enviar_com_anexo(
         tipo=EnvioWhatsApp.Tipo.RANKING,
-        mensagem=mensagem,
-        caption="🏆 *Ranking VB*",
+        mensagem=caption,
+        caption=caption,
         destinos=destinos,
         parceiro=None,
         user=user,
