@@ -10,28 +10,26 @@ from .pipelines.resultados import GRUPO_INICIANTE, GRUPO_REGULAR, GRUPO_SEM_CADA
 
 BG = (255, 255, 255)
 BRAND = (15, 107, 92)
-BRAND_DARK = (11, 82, 71)
 INK = (21, 32, 43)
 MUTED = (91, 107, 124)
 LINE = (215, 222, 231)
 ALT_ROW = (248, 250, 252)
-HEAD_BG = (232, 244, 240)
 
-LARGURA = 1920
-PAD = 24
-GAP = 16
-ALT_LINHA = 28
-LIMITE_LINHAS = 20
+PAD = 20
+GAP = 14
+ALT_LINHA = 30
+LIMITE_LINHAS = 24
+HEADER_H = 88
 
-# Larguras das colunas (formato RKG_2 — uma coluna ESPECIALISTA, nome curto)
+# Colunas mais largas — imagem vertical para WhatsApp
 COLS = [
-    ("RKG", 42),
-    ("PDV", 200),
-    ("ESPECIALISTA", 148),
-    ("PTS", 52),
-    ("BTU", 52),
-    ("PADRÃO", 58),
-    ("PTS", 58),
+    ("RKG", 46),
+    ("PDV", 260),
+    ("ESPECIALISTA", 168),
+    ("PTS", 54),
+    ("BTU", 54),
+    ("PADRÃO", 62),
+    ("PTS", 62),
 ]
 
 
@@ -135,8 +133,8 @@ def _desenhar_tabela(
             draw.rectangle((x + 6, y_row, x + largura - 6, y_row + ALT_LINHA - 2), fill=ALT_ROW)
         vals = [
             str(item.get("posicao") or ""),
-            _truncar(str(item.get("pdv") or ""), 24),
-            _truncar(str(item.get("especialista_curto") or item.get("especialista") or "—"), 18),
+            _truncar(str(item.get("pdv") or ""), 28),
+            _truncar(str(item.get("especialista_curto") or item.get("especialista") or "—"), 20),
             _fmt_pts(float(item.get("pontos_dia") or 0)),
             str(int(item.get("vb_btu") or 0)),
             str(int(item.get("vb_padrao") or 0)),
@@ -144,7 +142,7 @@ def _desenhar_tabela(
         ]
         x_cur = x + 8
         for (texto, (_, larg)) in zip(vals, COLS):
-            draw.text((x_cur + 2, y_row + 5), texto, fill=INK, font=font_cell)
+            draw.text((x_cur + 2, y_row + 6), texto, fill=INK, font=font_cell)
             x_cur += larg
         y_row += ALT_LINHA
 
@@ -156,8 +154,8 @@ def _desenhar_tabela(
 
 
 def imagem_ranking(ranking: dict, *, limite_por_grupo: int = LIMITE_LINHAS) -> tuple[bytes, str]:
-    """Gera PNG no layout da aba RKG_2 (BASE REGULAR | INICIANTES)."""
-    del limite_por_grupo  # limite fixo LIMITE_LINHAS na imagem
+    """Gera PNG vertical: BASE REGULAR, depois INICIANTES (melhor leitura no WhatsApp)."""
+    del limite_por_grupo
     periodo = ranking.get("periodo") or {}
     grupos = ranking.get("grupos") or {}
     regular = list(grupos.get(GRUPO_REGULAR) or [])
@@ -172,39 +170,42 @@ def imagem_ranking(ranking: dict, *, limite_por_grupo: int = LIMITE_LINHAS) -> t
     if inicio and fim:
         periodo_txt = f"{inicio.strftime('%d/%m/%Y')} a {fim.strftime('%d/%m/%Y')}"
 
-    font_titulo = _fonte(18, negrito=True)
-    font_banner = _fonte(24, negrito=True)
-    font_sub = _fonte(14)
-    font_head = _fonte(12, negrito=True)
-    font_cell = _fonte(11)
-    font_micro = _fonte(10)
+    font_titulo = _fonte(19, negrito=True)
+    font_banner = _fonte(26, negrito=True)
+    font_sub = _fonte(13)
+    font_head = _fonte(13, negrito=True)
+    font_cell = _fonte(12)
+    font_micro = _fonte(11)
 
     tab_w = _largura_tabela()
-    altura_corpo = max(_altura_tabela(len(regular)), _altura_tabela(len(iniciante)))
-    altura_extra = _altura_tabela(len(sem_cad)) + GAP if sem_cad else 0
-    altura = PAD + 72 + altura_corpo + altura_extra + PAD
+    largura = tab_w + 2 * PAD
+    altura_corpo = (
+        _altura_tabela(len(regular))
+        + GAP
+        + _altura_tabela(len(iniciante))
+        + (GAP + _altura_tabela(len(sem_cad)) if sem_cad else 0)
+    )
+    altura = HEADER_H + altura_corpo + PAD
 
-    img = Image.new("RGB", (LARGURA, altura), BG)
+    img = Image.new("RGB", (largura, altura), BG)
     draw = ImageDraw.Draw(img)
 
-    draw.rectangle((0, 0, LARGURA, 72), fill=BRAND)
-    draw.text((PAD, 14), "Ranking VB", fill=(255, 255, 255), font=font_banner)
+    draw.rectangle((0, 0, largura, HEADER_H), fill=BRAND)
+    draw.text((PAD, 12), "Ranking VB", fill=(255, 255, 255), font=font_banner)
     if periodo_txt:
         draw.text((PAD, 44), periodo_txt, fill=(220, 240, 236), font=font_sub)
     draw.text(
-        (LARGURA - PAD - 420, 44),
+        (PAD, 64),
         "Padrão = 1 pt · BTU = 0,5 pt · atualização até D-1",
         fill=(200, 230, 224),
         font=font_sub,
     )
 
-    y0 = PAD + 72
-    x_reg = PAD
-    x_ini = PAD + tab_w + GAP
-    _desenhar_tabela(
+    y_cur = HEADER_H
+    y_cur = _desenhar_tabela(
         draw,
-        x=x_reg,
-        y=y0,
+        x=PAD,
+        y=y_cur,
         titulo_grupo="BASE REGULAR",
         itens=regular,
         rotulo_janela=rotulo_janela,
@@ -214,10 +215,11 @@ def imagem_ranking(ranking: dict, *, limite_por_grupo: int = LIMITE_LINHAS) -> t
         font_cell=font_cell,
         font_micro=font_micro,
     )
-    _desenhar_tabela(
+    y_cur += GAP
+    y_cur = _desenhar_tabela(
         draw,
-        x=x_ini,
-        y=y0,
+        x=PAD,
+        y=y_cur,
         titulo_grupo="INICIANTES",
         itens=iniciante,
         rotulo_janela=rotulo_janela,
@@ -229,12 +231,12 @@ def imagem_ranking(ranking: dict, *, limite_por_grupo: int = LIMITE_LINHAS) -> t
     )
 
     if sem_cad:
-        y_sem = y0 + altura_corpo + GAP
+        y_cur += GAP
         _desenhar_tabela(
             draw,
             x=PAD,
-            y=y_sem,
-            titulo_grupo="SEM CLASSIFICAÇÃO SYSMAP",
+            y=y_cur,
+            titulo_grupo="SEM DATA CREDENCIAMENTO",
             itens=sem_cad,
             rotulo_janela=rotulo_janela,
             rotulo_acumulado=rotulo_acumulado,
