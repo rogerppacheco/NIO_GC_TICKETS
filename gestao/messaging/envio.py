@@ -1043,14 +1043,16 @@ def enviar_ranking(
     if user is not None and not eh_gestor(user):
         destinos = destinos_para_envio(user, "envio_resultados")
     elif destinatario_id:
+        from django.db.models import Q
+
         dest = (
             Destinatario.objects.filter(
                 pk=destinatario_id,
                 ativo=True,
                 tipo=Destinatario.TipoDestino.GRUPO,
                 envio_resultados=True,
-                parceiro__in=parceiros,
             )
+            .filter(Q(ranking_consolidado=True) | Q(parceiro__in=parceiros))
             .select_related("parceiro")
             .first()
         )

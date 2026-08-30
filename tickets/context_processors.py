@@ -36,6 +36,8 @@ def nav_counts(request):
             ctx["portal_parceiro"] = parceiro
 
     ctx["gestao_escopo"] = escopo_gestao(request)
+    ctx["modo_teste"] = False
+    ctx["modo_teste_sessao"] = False
     user = getattr(request, "user", None)
     if user and user.is_authenticated and tem_acesso_interno(user):
         from .acesso import (
@@ -52,4 +54,9 @@ def nav_counts(request):
             ctx["gestao_gerencias"] = listar_gerencias()
             ctx["gestao_gerencia_sel"] = gerencia_seletor_valor(request)
             ctx["gestao_gerencia_todas"] = GERENCIA_TODAS
+
+        from gestao.messaging.syncwa import modo_teste_ativo, modo_teste_sessao
+
+        ctx["modo_teste"] = modo_teste_ativo()
+        ctx["modo_teste_sessao"] = modo_teste_sessao(request)
     return ctx

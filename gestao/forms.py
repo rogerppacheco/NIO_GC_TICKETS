@@ -29,6 +29,7 @@ class DestinatarioForm(forms.ModelForm):
             "envio_venda_indevida",
             "envio_recompra",
             "envio_resultados",
+            "ranking_consolidado",
             "email",
             "email_osab",
             "email_capilaridade",
@@ -70,6 +71,18 @@ class DestinatarioForm(forms.ModelForm):
         if gerencia:
             return f"{obj.nome} · {nome} · {gerencia}"
         return f"{obj.nome} · {nome}"
+
+    def clean(self):
+        cleaned = super().clean()
+        consolidado = cleaned.get("ranking_consolidado")
+        parceiro = cleaned.get("parceiro")
+        if consolidado:
+            if cleaned.get("tipo") != Destinatario.TipoDestino.GRUPO:
+                self.add_error("tipo", "Ranking consolidado exige tipo Grupo WhatsApp.")
+            cleaned["envio_resultados"] = True
+        elif not parceiro:
+            self.add_error("parceiro", "Informe o PDV ou marque Ranking consolidado.")
+        return cleaned
 
     def clean_jid(self):
         jid = (self.cleaned_data.get("jid") or "").strip()

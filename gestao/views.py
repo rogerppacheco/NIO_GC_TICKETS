@@ -6,7 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
-from django.db.models import Count, Max, Q
+from django.db.models import Q
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -59,7 +59,14 @@ from .messaging.envio import (
     enviar_acumulado_todos,
     enviar_ranking,
 )
-from .messaging.syncwa import healthcheck, listar_grupos, modo_teste_ativo, syncwa_configurado
+from .messaging.syncwa import (
+    alternar_modo_teste_sessao,
+    healthcheck,
+    listar_grupos,
+    modo_teste_ativo,
+    modo_teste_sessao,
+    syncwa_configurado,
+)
 from .models import (
     CadastroTerceiro,
     ConfiguracaoOSAB,
@@ -496,11 +503,50 @@ def _grupos_ranking(parceiros: list[Parceiro]):
             ativo=True,
             tipo=Destinatario.TipoDestino.GRUPO,
             envio_resultados=True,
-            parceiro_id__in=ids,
         )
+        .filter(Q(ranking_consolidado=True) | Q(parceiro_id__in=ids))
         .select_related("parceiro")
-        .order_by("parceiro__nome", "prioridade", "nome")
+        .order_by("-ranking_consolidado", "parceiro__nome", "prioridade", "nome")
     )
+
+
+def _grupo_ranking_padrao(grupos) -> Destinatario | None:
+    for g in grupos:
+        if g.ranking_consolidado and "parceiros_pp" in (g.nome or "").casefold():
+            return g
+    for g in grupos:
+        if g.ranking_consolidado:
+            return g
+    return grupos[0] if grupos else None
+
+
+@login_required
+def exportar_vb_sem_municipio(request: HttpRequest) -> HttpResponse:
+    from .planilhas import planilha_vb_sem_municipio
+
+    visiveis = list(_parceiros(request))
+    conteudo, nome = planilha_vb_sem_municipio(visiveis)
+    resp = HttpResponse(
+        conteudo,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    resp["Content-Disposition"] = f'attachment; filename="{nome}"'
+    return resp
+
+
+@gestor_required
+def toggle_modo_teste_view(request: HttpRequest) -> HttpResponse:
+    if request.method != "POST":
+        return redirect(request.META.get("HTTP_REFERER") or reverse("gestao_hub"))
+    ativo, msg = alternar_modo_teste_sessao(request)
+    if ativo or "desligado" in msg.lower():
+        messages.success(request, msg)
+    else:
+        messages.error(request, msg)
+    ref = request.META.get("HTTP_REFERER") or ""
+    if ref and url_has_allowed_host_and_scheme(ref, allowed_hosts={request.get_host()}):
+        return redirect(ref)
+    return redirect("gestao_hub")
 
 
 @login_required
@@ -666,6 +712,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             "ranking": ranking,
             "gaps_ranking": gaps_ranking(ranking),
             "grupos_ranking": grupos_ranking,
+            "ranking_grupo_padrao": _grupo_ranking_padrao(grupos_ranking),
             "pracas_btu": pracas_ativas,
             "pracas_btu_mg": pracas_ativas.filter(uf="MG").count(),
             "ultimo_gdp": LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.GDP).first(),
@@ -1426,14 +1473,46 @@ def destinatarios_view(request: HttpRequest) -> HttpResponse:
 
 @gestor_required
 def destinatario_do_grupo(request: HttpRequest) -> HttpResponse:
-    """Cadastra rápido um grupo WhatsApp como destinatário de um PDV."""
+    """Cadastra rápido um grupo WhatsApp como destinatário de um PDV ou ranking consolidado."""
     if request.method != "POST":
         return _voltar(request, "gestao_destinatarios")
-    parceiro_id = request.POST.get("parceiro")
+    parceiro_id = (request.POST.get("parceiro") or "").strip()
+    ranking_consolidado = request.POST.get("ranking_consolidado") == "1"
     jid = (request.POST.get("jid") or "").strip()
     nome = (request.POST.get("nome") or "").strip() or jid
-    if not parceiro_id or not jid or "@g.us" not in jid:
-        messages.error(request, "Informe o PDV e um JID de grupo válido (@g.us).")
+    if not jid or "@g.us" not in jid:
+        messages.error(request, "Informe um JID de grupo válido (@g.us).")
+        return redirect(f"{reverse('gestao_destinatarios')}?grupos=1")
+    if ranking_consolidado:
+        existente = Destinatario.objects.filter(jid=jid, ranking_consolidado=True).first()
+        if existente:
+            existente.nome = nome[:150]
+            existente.envio_resultados = True
+            existente.ativo = True
+            existente.save(update_fields=["nome", "envio_resultados", "ativo", "atualizado_em"])
+            messages.success(request, f"Grupo «{nome}» atualizado para ranking consolidado.")
+            return _voltar(request, "gestao_destinatarios")
+        Destinatario.objects.create(
+            parceiro=None,
+            nome=nome[:150],
+            jid=jid,
+            tipo=Destinatario.TipoDestino.GRUPO,
+            ativo=True,
+            ranking_consolidado=True,
+            envio_resultados=True,
+            envio_osab=False,
+            envio_capilaridade=False,
+            envio_fpd=False,
+            envio_churn=False,
+        )
+        messages.success(
+            request,
+            f"Grupo «{nome}» vinculado ao Ranking VB consolidado. "
+            f"Aparece em Resultados → Ranking de VB.",
+        )
+        return _voltar(request, "gestao_destinatarios")
+    if not parceiro_id:
+        messages.error(request, "Informe o PDV ou marque Ranking consolidado.")
         return redirect(f"{reverse('gestao_destinatarios')}?grupos=1")
     parceiro = get_object_or_404(Parceiro, pk=parceiro_id, ativo=True)
     existente = Destinatario.objects.filter(parceiro=parceiro, jid=jid).first()

@@ -527,6 +527,8 @@ class Destinatario(models.Model):
         "tickets.Parceiro",
         on_delete=models.CASCADE,
         related_name="destinatarios_gestao",
+        null=True,
+        blank=True,
     )
     nome = models.CharField("Nome do destino", max_length=150)
     jid = models.CharField(
@@ -551,6 +553,11 @@ class Destinatario(models.Model):
     envio_venda_indevida = models.BooleanField("Venda indevida", default=False)
     envio_recompra = models.BooleanField("Recompra", default=False)
     envio_resultados = models.BooleanField("Resultados", default=False)
+    ranking_consolidado = models.BooleanField(
+        "Ranking consolidado",
+        default=False,
+        help_text="Grupo único da gerência (ex.: Parceiros_PP_Nio) — aparece no Ranking VB sem depender de um PDV.",
+    )
     razoes_sociais_comissionamento = models.TextField(
         "Razões sociais (comissionamento)",
         blank=True,

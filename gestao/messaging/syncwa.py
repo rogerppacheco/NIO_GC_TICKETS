@@ -53,10 +53,54 @@ def syncwa_configurado() -> bool:
 
 
 def modo_teste_ativo() -> bool:
-    return bool(getattr(settings, "SYNCWA_MODO_TESTE", False))
+    if bool(getattr(settings, "SYNCWA_MODO_TESTE", False)):
+        return True
+    from tickets.acesso import eh_gestor
+
+    from .request_ctx import get_request
+
+    request = get_request()
+    if request and getattr(request, "session", None) and eh_gestor(getattr(request, "user", None)):
+        return bool(request.session.get("whatsapp_modo_teste"))
+    return False
+
+
+def modo_teste_sessao(request) -> bool:
+    from tickets.acesso import eh_gestor
+
+    if not request or not getattr(request, "user", None) or not eh_gestor(request.user):
+        return False
+    return bool(request.session.get("whatsapp_modo_teste"))
+
+
+def alternar_modo_teste_sessao(request) -> tuple[bool, str]:
+    """Liga/desliga modo teste na sessão do admin. Retorna (ativo, mensagem)."""
+    from tickets.acesso import eh_gestor
+
+    if not eh_gestor(request.user):
+        return False, "Somente admin."
+    if request.session.get("whatsapp_modo_teste"):
+        request.session.pop("whatsapp_modo_teste", None)
+        return False, "Modo teste desligado — envios voltam aos destinatários reais."
+    perfil = getattr(request.user, "perfil_staff", None)
+    whatsapp = (getattr(perfil, "whatsapp", None) or "").strip()
+    if not whatsapp:
+        return False, "Cadastre seu WhatsApp em Especialistas / Meu perfil antes de ligar o modo teste."
+    request.session["whatsapp_modo_teste"] = True
+    return True, f"Modo teste ligado — envios vão para {whatsapp}."
 
 
 def jid_teste() -> str:
+    from tickets.acesso import eh_gestor
+
+    from .request_ctx import get_request
+
+    request = get_request()
+    if request and request.session.get("whatsapp_modo_teste") and eh_gestor(getattr(request, "user", None)):
+        perfil = getattr(request.user, "perfil_staff", None)
+        whatsapp = (getattr(perfil, "whatsapp", None) or "").strip()
+        if whatsapp:
+            return normalizar_destino(whatsapp)
     return (
         getattr(settings, "WHATSAPP_TEST_JID", "")
         or getattr(settings, "SYNCWA_TEST_JID", "")

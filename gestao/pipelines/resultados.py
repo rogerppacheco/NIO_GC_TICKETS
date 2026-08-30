@@ -452,6 +452,29 @@ def cadastrar_praca_btu(nome: str) -> PracaBTU:
     return obj
 
 
+def vendas_sem_municipio(parceiros: Iterable[Parceiro], data_ref: date | None = None) -> list[VendaOSAB]:
+    """VBs válidas no período do ranking sem município na OSAB."""
+    periodo = periodo_ranking(data_ref)
+    ids = [p.pk for p in parceiros]
+    qs = (
+        VendaOSAB.objects.filter(
+            parceiro_id__in=ids,
+            data_abertura__date__gte=periodo["inicio"],
+            data_abertura__date__lte=periodo["fim"],
+        )
+        .select_related("parceiro")
+        .order_by("-data_abertura")
+    )
+    out: list[VendaOSAB] = []
+    for venda in qs:
+        if not venda_vb_valida(venda):
+            continue
+        if (venda.municipio or "").strip():
+            continue
+        out.append(venda)
+    return out
+
+
 def gaps_ranking(ranking: dict) -> list[str]:
     avisos = []
     if ranking["qtd_btu"] == 0:

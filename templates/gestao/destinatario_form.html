@@ -4,7 +4,7 @@
 <div class="hero">
   <div>
     <h1>Editar {{ destinatario.nome }}</h1>
-    <p>{{ destinatario.parceiro.nome }}</p>
+    <p>{% if destinatario.ranking_consolidado %}Ranking consolidado{% elif destinatario.parceiro %}{{ destinatario.parceiro.nome }}{% else %}—{% endif %}</p>
   </div>
   <a class="btn btn-secondary" href="{% url 'gestao_destinatarios' %}">Voltar</a>
 </div>
@@ -30,6 +30,7 @@
         <label>{{ form.envio_venda_indevida }} Venda indevida</label>
         <label>{{ form.envio_recompra }} Recompra</label>
         <label>{{ form.envio_resultados }} Resultados</label>
+        <label>{{ form.ranking_consolidado }} Ranking consolidado</label>
       </div>
       <div class="full help"><strong>Enviar a máscara também por e-mail:</strong></div>
       <div class="full" style="display:flex;flex-wrap:wrap;gap:1rem">

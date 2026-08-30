@@ -24,6 +24,12 @@
       <p class="help" style="color:var(--danger)">Configure <code>EVOLUTION_API_URL</code> e <code>EVOLUTION_API_KEY</code> no Railway para enviar.</p>
     </div>
   </div>
+{% elif modo_teste_sessao %}
+  <div class="panel" style="margin-bottom:1rem">
+    <div class="panel-b">
+      <p class="help" style="color:var(--warn)">Modo teste ligado: envios WhatsApp vão para o seu número cadastrado.</p>
+    </div>
+  </div>
 {% elif modo_teste %}
   <div class="panel" style="margin-bottom:1rem">
     <div class="panel-b">
@@ -39,7 +45,7 @@
     <a class="btn btn-ghost" href="{% url 'gestao_destinatarios' %}">Fechar</a>
   </div>
   <div class="panel-b">
-    <p class="help" style="margin-bottom:0.8rem">Escolha o PDV e clique em <strong>Vincular</strong>. O JID correto (@g.us) é preenchido automaticamente.</p>
+    <p class="help" style="margin-bottom:0.8rem">Para o ranking da gerência, clique em <strong>Ranking consolidado</strong> (ex.: <code>Parceiros_PP_Nio</code>). Para mensagens de um PDV, escolha o PDV e <strong>Vincular PDV</strong>.</p>
     <input type="search" id="filtro-grupos" class="fila-pick" placeholder="Filtrar por nome do grupo…" style="width:100%;max-width:28rem;margin-bottom:0.8rem">
     <div class="table-scroll">
       <table class="table" id="tabela-grupos">
@@ -63,13 +69,14 @@
                 {% csrf_token %}
                 <input type="hidden" name="jid" value="{{ g.jid }}">
                 <input type="hidden" name="nome" value="{{ g.name }}">
-                <select name="parceiro" class="fila-pick" required>
+                <select name="parceiro" class="fila-pick">
                   <option value="">PDV…</option>
                   {% for p in parceiros %}
                     <option value="{{ p.id }}">{{ p.nome }}</option>
                   {% endfor %}
                 </select>
-                <button class="btn btn-primary" type="submit">Vincular</button>
+                <button class="btn btn-primary" type="submit">Vincular PDV</button>
+                <button class="btn btn-secondary" type="submit" name="ranking_consolidado" value="1">Ranking consolidado</button>
                 <button class="btn btn-ghost" type="button" data-fill-jid="{{ g.jid }}" data-fill-nome="{{ g.name }}">Usar no formulário</button>
               </form>
             </td>
@@ -170,14 +177,16 @@
       <tbody>
         {% for d in destinatarios %}
         <tr {% if not d.ativo %}style="opacity:0.6"{% endif %}>
-          <td>{{ d.parceiro.nome }}</td>
+          <td>{% if d.ranking_consolidado %}<span class="pill resolvido">Consolidado</span>{% elif d.parceiro %}{{ d.parceiro.nome }}{% else %}—{% endif %}</td>
           <td>
-            {% if d.parceiro.especialista %}
+            {% if d.ranking_consolidado %}—
+            {% elif d.parceiro.especialista %}
               {{ d.parceiro.especialista.get_full_name|default:d.parceiro.especialista.username }}
             {% else %}—{% endif %}
           </td>
           <td>
-            {% if d.parceiro.especialista and d.parceiro.especialista.perfil_staff.gerencia %}
+            {% if d.ranking_consolidado %}—
+            {% elif d.parceiro.especialista and d.parceiro.especialista.perfil_staff.gerencia %}
               {{ d.parceiro.especialista.perfil_staff.gerencia }}
             {% else %}—{% endif %}
           </td>

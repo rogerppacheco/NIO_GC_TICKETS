@@ -198,6 +198,33 @@ def planilha_ranking(ranking: dict) -> tuple[bytes, str]:
     return df_para_xlsx(df, nome)
 
 
+def planilha_vb_sem_municipio(parceiros: list[Parceiro], data_ref=None) -> tuple[bytes, str]:
+    from .pipelines.resultados import periodo_ranking, vendas_sem_municipio
+
+    vendas = vendas_sem_municipio(parceiros, data_ref)
+    periodo = periodo_ranking(data_ref)
+    rows = [
+        {
+            "Pedido": v.pedido,
+            "PDV": v.pdv_nome or (v.parceiro.nome if v.parceiro else ""),
+            "Matrícula": v.matricula_vendedor,
+            "Vendedor": v.nome_vendedor,
+            "Município": v.municipio,
+            "Situação": v.situacao,
+            "Abertura": v.data_abertura,
+            "Fechamento": v.data_fechamento,
+            "Velocidade": v.velocidade,
+        }
+        for v in vendas
+    ]
+    df = pd.DataFrame(rows) if rows else pd.DataFrame(
+        columns=["Pedido", "PDV", "Matrícula", "Vendedor", "Município", "Situação", "Abertura"]
+    )
+    fim = periodo.get("fim")
+    nome = f"VB_sem_municipio_{fim.isoformat()}.xlsx" if fim else "VB_sem_municipio.xlsx"
+    return df_para_xlsx(df, nome)
+
+
 def bytes_arquivo_field(arquivo_field, nome_fallback: str) -> tuple[bytes, str]:
     if not arquivo_field:
         return b"", nome_fallback

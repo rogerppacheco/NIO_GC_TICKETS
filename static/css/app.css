@@ -98,6 +98,22 @@ a:hover { text-decoration: underline; }
   font-size: 0.95rem; cursor: pointer; padding: 0;
 }
 .nav-btn:hover { color: var(--ink); }
+.modo-teste-form { display: inline; margin: 0; }
+.modo-teste-btn {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: #f8fafb;
+  color: var(--muted);
+}
+.modo-teste-btn.is-on {
+  background: var(--warn);
+  border-color: var(--warn);
+  color: #fff;
+}
+.modo-teste-btn:hover { opacity: 0.92; color: inherit; }
 .cep-status { font-size: 0.78rem; color: var(--muted); margin-top: 0.25rem; }
 .cep-status.ok { color: var(--ok); }
 [data-field][hidden] { display: none !important; }

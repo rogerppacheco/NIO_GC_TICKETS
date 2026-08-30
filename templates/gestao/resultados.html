@@ -119,7 +119,14 @@
   <div class="tab-panel is-active" role="tabpanel">
     {% if gaps_ranking %}
     <div class="help warn-box" style="margin-bottom:0.85rem">
-      {% for aviso in gaps_ranking %}<div>{{ aviso }}</div>{% endfor %}
+      {% for aviso in gaps_ranking %}
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap">
+        <span>{{ aviso }}</span>
+        {% if ranking.sem_municipio and "sem município" in aviso|lower %}
+        <a class="btn btn-secondary btn-sm" href="{% url 'gestao_vb_sem_municipio' %}?escopo={{ gestao_escopo|default:'meus' }}">Extrair planilha ({{ ranking.sem_municipio }})</a>
+        {% endif %}
+      </div>
+      {% endfor %}
     </div>
     {% endif %}
 
@@ -145,17 +152,19 @@
                 <select name="destinatario" id="destinatario-ranking" required>
                   <option value="">Escolha o grupo…</option>
                   {% for g in grupos_ranking %}
-                    <option value="{{ g.id }}">{{ g.parceiro.nome }} — {{ g.nome }}</option>
+                    <option value="{{ g.id }}"{% if ranking_grupo_padrao and g.id == ranking_grupo_padrao.id %} selected{% endif %}>
+                      {% if g.ranking_consolidado %}{{ g.nome }} · ranking consolidado{% else %}{{ g.parceiro.nome }} — {{ g.nome }}{% endif %}
+                    </option>
                   {% endfor %}
                 </select>
-                <p class="help">Somente grupos com flag <strong>Resultados</strong> no cadastro de destinatários.</p>
+                <p class="help">Grupos com flag <strong>Resultados</strong>. Para o consolidado da gerência (ex.: <code>Parceiros_PP_Nio</code>), vincule em <a href="{% url 'gestao_destinatarios' %}?grupos=1">Destinatários</a> → <strong>Ranking consolidado</strong>.</p>
               </div>
               <div class="full">
                 <button class="btn btn-primary" type="submit">Enviar imagem no grupo</button>
               </div>
             </form>
             {% else %}
-            <p class="help err">Nenhum grupo WhatsApp com flag Resultados no escopo. Cadastre em <a href="{% url 'gestao_destinatarios' %}">Destinatários</a>.</p>
+            <p class="help err">Nenhum grupo WhatsApp com flag Resultados. Em <a href="{% url 'gestao_destinatarios' %}?grupos=1">Destinatários</a>, liste os grupos e clique em <strong>Ranking consolidado</strong> no <code>Parceiros_PP_Nio</code>.</p>
             {% endif %}
           {% else %}
             <form method="post">

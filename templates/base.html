@@ -26,6 +26,14 @@
           <a href="{% url 'consultas_hub' %}">Consultas</a>
           <a href="{% url 'mascaras' %}">Máscaras</a>
           <a href="{% url 'config_resposta_lista' %}">Campos resposta</a>
+          {% if eh_gestor %}
+          <form method="post" action="{% url 'gestao_modo_teste' %}" class="modo-teste-form">
+            {% csrf_token %}
+            <button type="submit" class="nav-btn modo-teste-btn{% if modo_teste_sessao %} is-on{% endif %}" title="Redireciona todos os envios WhatsApp para o seu número">
+              {% if modo_teste_sessao %}Modo teste ON{% else %}Modo teste{% endif %}
+            </button>
+          </form>
+          {% endif %}
           <a href="{% url 'meu_perfil' %}">{{ user.get_full_name|default:user.username }}</a>
           <form method="post" action="{% url 'logout' %}" class="logout-form">
             {% csrf_token %}
