@@ -891,6 +891,36 @@ class FpdChurnTests(TestCase):
         rel = RelatorioFPD.objects.get(parceiro=self.pdv)
         self.assertEqual(rel.total_abertas, 1)
         self.assertIn("10 a 15", rel.mensagem)
+        self.assertTrue(rel.detalhes.get("base"))
+        self.assertIn("mes_yyyymm", rel.detalhes["meses"][0])
+
+    def test_fpd_planilha_e_email(self):
+        from gestao.fpd_format import assunto_email_fpd, html_email_fpd, planilha_fpd
+        from openpyxl import load_workbook
+
+        mes = timezone.localdate().strftime("%m/%Y")
+        yyyymm = timezone.localdate().strftime("%Y%m")
+        arquivo = _xlsx(
+            [
+                ["APOLO", mes, "Aberta", "15 a 30 Dias", "FPD", "1001"],
+                ["APOLO", mes, "Paga", "0 A 15 DIAS", "FPD", "1001"],
+            ],
+            ["APELIDO", "REF_VENCTO", "SITUACAO_FATURA_MENSAL", "FAIXA", "INDICADOR", "cd_rede"],
+        )
+        lote = LoteImportacao.objects.create(tipo="fpd", arquivo_nome="f2.xlsx", ok=True)
+        processar_fpd(arquivo, "f2.xlsx", lote)
+        rel = RelatorioFPD.objects.get(parceiro=self.pdv)
+        dados, nome = planilha_fpd(rel)
+        wb = load_workbook(BytesIO(dados))
+        self.assertIn("Planilha1", wb.sheetnames)
+        self.assertIn("BASE_PRE_FPD_ABERTO", wb.sheetnames)
+        self.assertEqual(wb["Planilha1"]["A1"].value, "MÊS FATURA")
+        self.assertIn(yyyymm, str(wb["Planilha1"]["B1"].value))
+        self.assertIn("FATURAS_ABERTAS", nome)
+        self.assertIn("1001", assunto_email_fpd(rel))
+        html = html_email_fpd(rel)
+        self.assertIn("Faixas e Quantidades", html)
+        self.assertIn("APOLO", html)
 
     def test_parse_periodo_yyyymm_float(self):
         from gestao.pipelines.fpd import _parse_periodo
@@ -1577,6 +1607,24 @@ class DestinatarioEnvioTests(TestCase):
             emails_para_envio(self.gestor, "envio_capilaridade", self.pdv),
             ["grupo@x.com"],
         )
+
+    def test_email_fpd_vai_para_especialista_pdv(self):
+        from gestao.messaging.envio import emails_fpd_especialista
+
+        User = get_user_model()
+        spec = User.objects.create_user(
+            "specfpd", "rogerio.pacheco@niointernet.com.br", "x", is_staff=True
+        )
+        PerfilStaff.objects.create(user=spec, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self.pdv.especialista = spec
+        self.pdv.save(update_fields=["especialista"])
+        self.assertEqual(
+            emails_fpd_especialista(self.pdv),
+            ["rogerio.pacheco@niointernet.com.br"],
+        )
+        self.pdv.especialista = None
+        self.pdv.save(update_fields=["especialista"])
+        self.assertEqual(emails_fpd_especialista(self.pdv), [])
 
     def test_especialista_envia_capilaridade_para_si(self):
         from unittest.mock import MagicMock, patch

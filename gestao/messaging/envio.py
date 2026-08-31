@@ -171,6 +171,19 @@ def emails_para_envio(
     return vistos
 
 
+def emails_fpd_especialista(parceiro: Parceiro | None) -> list[str]:
+    """FPD: e-mail vai para o especialista NIO vinculado ao PDV."""
+    if parceiro is None:
+        return []
+    spec = parceiro.especialista
+    if not spec:
+        return []
+    mail = (spec.email or "").strip()
+    if mail and "@" in mail:
+        return [mail]
+    return []
+
+
 def _talvez_email(
     *,
     flag: str,
@@ -181,8 +194,15 @@ def _talvez_email(
     arquivo_bytes: bytes = b"",
     nome_arquivo: str = "",
     resumo: ResumoEnvio,
+    assunto: str = "",
+    corpo_texto: str = "",
+    corpo_html: str = "",
+    destinos_email: list[str] | None = None,
 ) -> None:
-    destinos = emails_para_envio(user, flag, parceiro)
+    if destinos_email is None:
+        destinos = emails_para_envio(user, flag, parceiro)
+    else:
+        destinos = destinos_email
     if not destinos:
         return
     if not smtp_configurado():
@@ -196,8 +216,9 @@ def _talvez_email(
     pdv = parceiro.nome if parceiro else "Gestão"
     ok, erro = enviar_email_com_anexos(
         destinos,
-        assunto=f"[NIO GC] {titulo} — {pdv}",
-        corpo_texto=(mensagem or "").replace("*", ""),
+        assunto=assunto or f"[NIO GC] {titulo} — {pdv}",
+        corpo_texto=corpo_texto or (mensagem or "").replace("*", ""),
+        corpo_html=corpo_html,
         anexos=anexos,
     )
     if ok:
@@ -481,11 +502,14 @@ def enviar_osab_pdv(parceiro: Parceiro, user: AbstractBaseUser | None = None) ->
 
 
 def enviar_fpd_pdv(parceiro: Parceiro, user: AbstractBaseUser | None = None) -> ResumoEnvio:
+    from ..fpd_format import assunto_email_fpd, corpo_texto_email_fpd, html_email_fpd
+
     rel = RelatorioFPD.objects.filter(parceiro=parceiro).order_by("-criado_em").first()
     if not rel or not rel.mensagem.strip():
         return ResumoEnvio(ignorados=1, detalhes=[f"{parceiro.nome}: sem relatório FPD."])
     destinos = destinos_para_envio(user, "envio_fpd", parceiro)
     arquivo_bytes, nome_arquivo = planilha_fpd(rel)
+    email_destinos = emails_fpd_especialista(parceiro)
     resumo = _enviar_com_anexo(
         tipo=EnvioWhatsApp.Tipo.FPD,
         mensagem=rel.mensagem,
@@ -496,7 +520,15 @@ def enviar_fpd_pdv(parceiro: Parceiro, user: AbstractBaseUser | None = None) -> 
         arquivo_bytes=arquivo_bytes,
         nome_arquivo=nome_arquivo,
         flag="envio_fpd",
+        email_assunto=assunto_email_fpd(rel),
+        email_corpo_texto=corpo_texto_email_fpd(rel),
+        email_corpo_html=html_email_fpd(rel),
+        email_destinos=email_destinos,
     )
+    if not email_destinos and smtp_configurado():
+        resumo.detalhes.append(
+            f"E-mail FPD não enviado: PDV {parceiro.nome} sem especialista com e-mail cadastrado."
+        )
     # Alerta crítico global
     from django.conf import settings
 
@@ -570,6 +602,10 @@ def _enviar_com_anexo(
     arquivo_bytes: bytes,
     nome_arquivo: str,
     flag: str = "",
+    email_assunto: str = "",
+    email_corpo_texto: str = "",
+    email_corpo_html: str = "",
+    email_destinos: list[str] | None = None,
 ) -> ResumoEnvio:
     """Envia documento (+ texto se caption/mensagem > 900 chars)."""
     resumo = ResumoEnvio()
@@ -642,6 +678,10 @@ def _enviar_com_anexo(
             arquivo_bytes=arquivo_bytes,
             nome_arquivo=nome_arquivo,
             resumo=resumo,
+            assunto=email_assunto,
+            corpo_texto=email_corpo_texto,
+            corpo_html=email_corpo_html,
+            destinos_email=email_destinos,
         )
     return resumo
 

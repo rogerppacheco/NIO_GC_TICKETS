@@ -4,6 +4,7 @@ import pandas as pd
 
 from ..colunas_relatorio import normalizar_fpd
 from ..excel import ler_planilha, resolver_coluna
+from ..fpd_format import dataframe_para_base, mes_para_yyyymm
 from ..models import LoteImportacao, RelatorioFPD
 from ..parceiros import indice_parceiros, resolver_parceiro_id
 from ..periodo import hoje
@@ -108,6 +109,7 @@ def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
     col_sit = resolver_coluna(df, ["SITUACAO_FATURA_MENSAL", "DS_SIT_FATURA", "DS_STATUS_FATURA"])
     col_faixa = resolver_coluna(df, ["FAIXA"])
     col_ind = resolver_coluna(df, ["INDICADOR"])
+    col_rede = resolver_coluna(df, ["cd_rede", "CD_REDE", "cd_sap_original", "CD_SAP_ORIGINAL"])
     faltantes = []
     if not col_pdv:
         faltantes.append("APELIDO/nm_pdv_rel")
@@ -142,8 +144,13 @@ def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
         df_pdv = df[df[col_pdv] == apelido].copy()
         mensagem = f"📊 *Relatório FPD - {apelido}*\n_(Faturas Por Dia)_\n\n"
         meses_ref = sorted(df_pdv[col_ref].dropna().unique(), key=lambda x: str(x))
-        total_fat = total_ab = 0
+        total_fat = total_ab = total_pg = 0
         detalhe_meses = []
+        codigo_rede = ""
+        if col_rede and not df_pdv[col_rede].dropna().empty:
+            codigo_rede = str(df_pdv[col_rede].dropna().iloc[0]).strip()
+            if codigo_rede.endswith(".0") and codigo_rede[:-2].isdigit():
+                codigo_rede = codigo_rede[:-2]
         for mes_ref in meses_ref:
             bloco = df_pdv[df_pdv[col_ref] == mes_ref]
             status = bloco[col_sit].fillna("").astype(str)
@@ -153,6 +160,7 @@ def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
             perc = (abertas / total * 100) if total else 0
             total_fat += total
             total_ab += abertas
+            total_pg += pagas
             faixas = {
                 "10 a 15 Dias": 0,
                 "15 a 30 Dias": 0,
@@ -181,7 +189,15 @@ def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
                 mensagem += f"     - >60: {faixas['>= a 61 Dias']}\n"
             mensagem += "\n"
             detalhe_meses.append(
-                {"mes": _fmt_mes(mes_ref), "total": total, "pagas": pagas, "abertas": abertas, "faixas": faixas}
+                {
+                    "mes": _fmt_mes(mes_ref),
+                    "mes_yyyymm": mes_para_yyyymm(mes_ref),
+                    "total": total,
+                    "pagas": pagas,
+                    "abertas": abertas,
+                    "perc_aberto": round(perc, 2),
+                    "faixas": faixas,
+                }
             )
         perc_pdv = (total_ab / total_fat * 100) if total_fat else 0
         mensagem += (
@@ -195,7 +211,13 @@ def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
             total_faturas=total_fat,
             total_abertas=total_ab,
             mensagem=mensagem.strip(),
-            detalhes={"meses": detalhe_meses},
+            detalhes={
+                "meses": detalhe_meses,
+                "codigo_rede": codigo_rede,
+                "total_pagas": total_pg,
+                "base_colunas": list(df_pdv.columns),
+                "base": dataframe_para_base(df_pdv),
+            },
         )
         gerados += 1
 

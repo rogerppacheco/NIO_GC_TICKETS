@@ -93,29 +93,7 @@ def planilha_osab(parceiro: Parceiro) -> tuple[bytes, str]:
     return df_para_xlsx(df, f"OSAB_{_tag(parceiro)}_{mes:02d}-{ano}.xlsx")
 
 
-def planilha_fpd(rel: RelatorioFPD) -> tuple[bytes, str]:
-    rows = []
-    for mes in (rel.detalhes or {}).get("meses") or []:
-        faixas = mes.get("faixas") or {}
-        rows.append(
-            {
-                "PDV": rel.pdv_nome,
-                "Mês": mes.get("mes"),
-                "Total": mes.get("total"),
-                "Pagas": mes.get("pagas"),
-                "Abertas": mes.get("abertas"),
-                "10 a 15": faixas.get("10 a 15 Dias", 0),
-                "15 a 30": faixas.get("15 a 30 Dias", 0),
-                "30 a 45": faixas.get("30 a 45 Dias", 0),
-                "45 a 55": faixas.get("45 a 55 Dias", 0),
-                "55 a 60": faixas.get("55 a 60 Dias", 0),
-                ">60": faixas.get(">= a 61 Dias", 0),
-            }
-        )
-    df = pd.DataFrame(rows) if rows else pd.DataFrame(
-        [{"PDV": rel.pdv_nome, "FPD %": rel.percentual, "Abertas": rel.total_abertas, "Total": rel.total_faturas}]
-    )
-    return df_para_xlsx(df, f"FPD_{_tag(rel.parceiro)}.xlsx")
+from .fpd_format import planilha_fpd
 
 
 def planilha_churn(parceiro: Parceiro) -> tuple[bytes, str]:

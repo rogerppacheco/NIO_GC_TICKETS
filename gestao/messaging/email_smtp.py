@@ -19,6 +19,7 @@ def enviar_email_com_anexos(
     *,
     assunto: str,
     corpo_texto: str,
+    corpo_html: str = "",
     anexos: Sequence[tuple[str, bytes, str]] | None = None,
 ) -> tuple[bool, str]:
     destinos = [d.strip() for d in destinos if d and "@" in d]
@@ -38,7 +39,11 @@ def enviar_email_com_anexos(
     msg["Subject"] = assunto
     msg["From"] = remetente
     msg["To"] = ", ".join(destinos)
-    msg.set_content(corpo_texto or "(sem corpo)")
+    if corpo_html:
+        msg.set_content(corpo_texto or "Visualize este e-mail em HTML.")
+        msg.add_alternative(corpo_html, subtype="html")
+    else:
+        msg.set_content(corpo_texto or "(sem corpo)")
 
     for nome, dados, mime in anexos or ():
         if not dados:
