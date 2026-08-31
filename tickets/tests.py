@@ -935,3 +935,26 @@ class ContatoCargoTests(TestCase):
         self.assertEqual(contato.cargo, "Empresário")
         self.assertTrue(contato.eh_empresario())
 
+
+class DfvRegioesBrasilTests(SimpleTestCase):
+    def test_cobre_todas_as_ufs_e_roteia_co_e_nne(self):
+        from tickets.consultas.dfv_powerbi_service import (
+            CDOE_UFS,
+            listar_regioes_dfv,
+            regiao_por_uf,
+        )
+
+        ufs_brasil = {
+            "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA",
+            "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN",
+            "RO", "RR", "RS", "SC", "SE", "SP", "TO",
+        }
+        self.assertEqual(set(CDOE_UFS), ufs_brasil)
+        self.assertEqual({r.code for r in listar_regioes_dfv()}, {"SUDESTE", "SP", "SUL", "CO", "NNE"})
+        self.assertEqual(regiao_por_uf("GO").code, "CO")
+        self.assertEqual(regiao_por_uf("BA").code, "NNE")
+        self.assertEqual(regiao_por_uf("AC").code, "CO")
+        self.assertEqual(regiao_por_uf("AM").code, "NNE")
+        self.assertEqual(regiao_por_uf("SP").code, "SP")
+
+

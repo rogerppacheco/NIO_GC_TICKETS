@@ -2,10 +2,10 @@
 """
 Consulta ao vivo de fachadas no Power BI público (multi-região).
 
-Regiões: DFV_SUDESTE (MG/ES/RJ), DFV_SP e DFV_SUL (PR/SC/RS).
+Regiões: Sudeste (MG/ES/RJ), SP, Sul (PR/SC/RS), Centro-Oeste e Norte/Nordeste.
 
 Comandos WhatsApp:
-- DFV: filtro por CEP (consulta as 3 bases em paralelo)
+- DFV: filtro por CEP (consulta as bases regionais em paralelo)
 - CDOE: filtro por CODIGO_CDO (roteia pela UF → região)
 
 Independente da base local `crm_app.models.DFV` (legado; comando Fachada desativado).
@@ -85,6 +85,21 @@ _DEFAULT_REGION_SUL = DfvRegionConfig(
     model_id=6062850,
     ufs=("PR", "SC", "RS"),
 )
+# UFs reais de cada relatório (o recorte Nio mistura alguns estados do Norte).
+_DEFAULT_REGION_CO = DfvRegionConfig(
+    code="CO",
+    label="Centro-Oeste",
+    resource_key="a321b404-8186-4645-8070-507a8fea6abb",
+    model_id=6063900,
+    ufs=("AC", "DF", "GO", "MS", "MT", "RO", "TO"),
+)
+_DEFAULT_REGION_NNE = DfvRegionConfig(
+    code="NNE",
+    label="Norte e Nordeste",
+    resource_key="7b6cd391-63ef-4af2-9b09-1b0b1caa29a9",
+    model_id=6064171,
+    ufs=("AL", "AM", "AP", "BA", "CE", "MA", "PA", "PB", "PE", "PI", "RN", "RR", "SE"),
+)
 
 
 class DfvPowerBiError(Exception):
@@ -158,10 +173,38 @@ def variantes_codigo_cdo(codigo: str) -> list[str]:
     return ordered
 
 
-# Ordem exibida no WhatsApp (Sudeste → SP → Sul)
-CDOE_UFS: tuple[str, ...] = ("MG", "ES", "RJ", "SP", "PR", "SC", "RS")
+# Ordem do seletor CDOE: regiões já existentes, depois CO, Nordeste e Norte.
+CDOE_UFS: tuple[str, ...] = (
+    "MG",
+    "ES",
+    "RJ",
+    "SP",
+    "PR",
+    "SC",
+    "RS",
+    "DF",
+    "GO",
+    "MS",
+    "MT",
+    "AL",
+    "BA",
+    "CE",
+    "MA",
+    "PB",
+    "PE",
+    "PI",
+    "RN",
+    "SE",
+    "AC",
+    "AP",
+    "AM",
+    "PA",
+    "RO",
+    "RR",
+    "TO",
+)
 
-COBERTURA_DFV_TXT = "MG/ES/RJ, SP e Sul (PR/SC/RS)"
+COBERTURA_DFV_TXT = "Brasil (Sudeste, SP, Sul, Centro-Oeste, Norte e Nordeste)"
 
 
 def limpar_uf(uf: str) -> str:
@@ -187,46 +230,29 @@ def listar_regioes_dfv() -> list[DfvRegionConfig]:
     Retorna regiões DFV habilitadas (com resource_key e model_id válidos).
 
     Mantém compatibilidade com DFV_POWERBI_RESOURCE_KEY / MODEL_ID (Sudeste)
-    e aceita overrides DFV_POWERBI_SP_* / DFV_POWERBI_SUL_*.
+    e aceita overrides DFV_POWERBI_SP_* / DFV_POWERBI_SUL_* / DFV_POWERBI_CO_* /
+    DFV_POWERBI_NNE_*.
     """
-    sudeste_key = str(
-        _cfg("DFV_POWERBI_RESOURCE_KEY", _DEFAULT_REGION_SUDESTE.resource_key) or ""
-    ).strip()
-    sudeste_model = int(
-        _cfg("DFV_POWERBI_MODEL_ID", _DEFAULT_REGION_SUDESTE.model_id) or 0
+    defaults = (
+        (_DEFAULT_REGION_SUDESTE, "DFV_POWERBI_RESOURCE_KEY", "DFV_POWERBI_MODEL_ID"),
+        (_DEFAULT_REGION_SP, "DFV_POWERBI_SP_RESOURCE_KEY", "DFV_POWERBI_SP_MODEL_ID"),
+        (_DEFAULT_REGION_SUL, "DFV_POWERBI_SUL_RESOURCE_KEY", "DFV_POWERBI_SUL_MODEL_ID"),
+        (_DEFAULT_REGION_CO, "DFV_POWERBI_CO_RESOURCE_KEY", "DFV_POWERBI_CO_MODEL_ID"),
+        (_DEFAULT_REGION_NNE, "DFV_POWERBI_NNE_RESOURCE_KEY", "DFV_POWERBI_NNE_MODEL_ID"),
     )
-    sp_key = str(
-        _cfg("DFV_POWERBI_SP_RESOURCE_KEY", _DEFAULT_REGION_SP.resource_key) or ""
-    ).strip()
-    sp_model = int(_cfg("DFV_POWERBI_SP_MODEL_ID", _DEFAULT_REGION_SP.model_id) or 0)
-    sul_key = str(
-        _cfg("DFV_POWERBI_SUL_RESOURCE_KEY", _DEFAULT_REGION_SUL.resource_key) or ""
-    ).strip()
-    sul_model = int(_cfg("DFV_POWERBI_SUL_MODEL_ID", _DEFAULT_REGION_SUL.model_id) or 0)
-
-    candidatas = [
-        DfvRegionConfig(
-            code="SUDESTE",
-            label="Sudeste",
-            resource_key=sudeste_key,
-            model_id=sudeste_model,
-            ufs=_DEFAULT_REGION_SUDESTE.ufs,
-        ),
-        DfvRegionConfig(
-            code="SP",
-            label="SP",
-            resource_key=sp_key,
-            model_id=sp_model,
-            ufs=_DEFAULT_REGION_SP.ufs,
-        ),
-        DfvRegionConfig(
-            code="SUL",
-            label="Sul",
-            resource_key=sul_key,
-            model_id=sul_model,
-            ufs=_DEFAULT_REGION_SUL.ufs,
-        ),
-    ]
+    candidatas: list[DfvRegionConfig] = []
+    for default, key_setting, model_setting in defaults:
+        key = str(_cfg(key_setting, default.resource_key) or "").strip()
+        model = int(_cfg(model_setting, default.model_id) or 0)
+        candidatas.append(
+            DfvRegionConfig(
+                code=default.code,
+                label=default.label,
+                resource_key=key,
+                model_id=model,
+                ufs=default.ufs,
+            )
+        )
     return [r for r in candidatas if r.resource_key and r.model_id > 0]
 
 
@@ -626,7 +652,7 @@ def _consultar_em_regioes(
             region=regiao,
         )
 
-    max_workers = min(len(alvos), 3)
+    max_workers = min(len(alvos), 5)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futuros = {executor.submit(_job, r): r for r in alvos}
         for futuro in as_completed(futuros):
@@ -655,7 +681,7 @@ def _consultar_em_regioes(
 
 def consultar_fachadas_por_cep(cep: str) -> list[dict[str, Any]]:
     """
-    Consulta fachadas do CEP nas bases DFV (Sudeste, SP e Sul) em paralelo.
+    Consulta fachadas do CEP nas bases DFV regionais em paralelo.
 
     Returns:
         Lista de dicts com as colunas de SELECT_COLS (+ metadados de região).
