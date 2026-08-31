@@ -22,6 +22,7 @@
     <form method="post" enctype="multipart/form-data">
       {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       {{ form.arquivo }}
+      <p class="help">Arquivo do e-mail (APELIDO, REF_VENCTO) ou export do Power BI (<code>nm_pdv_rel</code>, <code>MES_VENC</code>). O sistema normaliza as colunas e usa só INDICADOR=FPD na janela de 3 meses.</p>
       <button class="btn btn-primary" type="submit" style="margin-top:0.7rem">Processar FPD</button>
     </form>
   </div>

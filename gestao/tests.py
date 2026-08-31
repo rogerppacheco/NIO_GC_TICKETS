@@ -260,6 +260,76 @@ class OsabCapilaridadeTests(TestCase):
         self.assertGreaterEqual(resumo["capilaridade"]["linhas"], 1)
         self.assertTrue(HistoricoOSAB.objects.filter(parceiro=self.pdv).exists())
 
+    def test_osab_formato_bi(self):
+        hoje = timezone.localdate()
+        abertura = datetime(hoje.year, hoje.month, 1, 10, 0)
+        arquivo = _xlsx(
+            [
+                [
+                    "P-BI",
+                    abertura,
+                    "TT99",
+                    "RECORD",
+                    abertura,
+                    abertura,
+                    "Concluído",
+                    "500MB",
+                    "MANAUS",
+                    "BL_500MB_VAR",
+                    "PP",
+                    "CARLA JULIANE",
+                    1069075,
+                    "Boleto Digital",
+                    "APPPAP",
+                ],
+                [
+                    "Filtros aplicados:\nANOMES",
+                    abertura,
+                    "",
+                    "",
+                    abertura,
+                    abertura,
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "Filtros aplicados:\nANOMES",
+                ],
+            ],
+            [
+                "PEDIDO",
+                "DT_REF",
+                "MATRICULA_VENDEDOR",
+                "nm_pdv_rel",
+                "DATA_ABERTURA",
+                "DATA_FECHAMENTO",
+                "SITUACAO",
+                "VELOCIDADE",
+                "LOCALIDADE",
+                "CAMPANHA",
+                "GERENCIA",
+                "nm_gc",
+                "PDV_SAP",
+                "meio_pagamento",
+                "PRODUTO",
+            ],
+        )
+        resumo = processar_osab(arquivo, "OSAB-BI.xlsx", hoje.year, hoje.month)
+        self.assertEqual(resumo["vendas"]["inseridos"], 1)
+        venda = VendaOSAB.objects.get(pedido="P-BI")
+        self.assertEqual(venda.pdv_nome, "RECORD")
+        self.assertEqual(venda.municipio, "MANAUS")
+        self.assertEqual(venda.oferta, "BL_500MB_VAR")
+        self.assertEqual(venda.nm_gc, "CARLA JULIANE")
+        self.assertEqual(venda.gerencia, "PP")
+        self.assertEqual(venda.pdv_sap, "1069075")
+        self.assertEqual(venda.meio_pagamento, "Boleto Digital")
+        self.assertEqual(venda.nome_vendedor, "TT99")
+
     def test_vendedor_externo_entra_na_mascara(self):
         from gestao.pipelines.osab import linhas_capilaridade_pdv
 
@@ -781,7 +851,25 @@ class FpdChurnTests(TestCase):
         self.assertIn("📊", rel.mensagem)
         self.assertIn("🗓️", rel.mensagem)
 
-    def test_churn(self):
+    def test_fpd_formato_bi(self):
+        anomes = float(timezone.localdate().strftime("%Y%m"))
+        arquivo = _xlsx(
+            [["APOLO", anomes, "ABERTA", "0 A 15 DIAS", "FPD"]],
+            ["nm_pdv_rel", "MES_VENC", "DS_SIT_FATURA", "FAIXA", "INDICADOR"],
+        )
+        lote = LoteImportacao.objects.create(tipo="fpd", arquivo_nome="fpd-bi.xlsx", ok=True)
+        resumo = processar_fpd(arquivo, "fpd-bi.xlsx", lote)
+        self.assertEqual(resumo["pdvs"], 1)
+        rel = RelatorioFPD.objects.get(parceiro=self.pdv)
+        self.assertEqual(rel.total_abertas, 1)
+        self.assertIn("10 a 15", rel.mensagem)
+
+    def test_parse_periodo_yyyymm_float(self):
+        from gestao.pipelines.fpd import _parse_periodo
+
+        self.assertEqual(str(_parse_periodo(202608.0)), "2026-08")
+        self.assertEqual(str(_parse_periodo(202608)), "2026-08")
+        self.assertEqual(str(_parse_periodo("08/2026")), "2026-08")
         anomes = int(timezone.localdate().strftime("%Y%m"))
         arquivo = _xlsx(
             [["APOLO", anomes, "VOL", 0, "residencial", "preço"]],

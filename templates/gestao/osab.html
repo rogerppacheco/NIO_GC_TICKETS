@@ -31,7 +31,7 @@
     <form method="post" enctype="multipart/form-data">
       {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       {{ form.arquivo }}
-      <p class="help">Arquivo .xlsb ou .xlsx. Merge por PEDIDO + DT_REF. Recalcula capilaridade e VL/Gross. Cadastra PDVs novos da coluna DESCRICAO com o código da coluna <code>PDV_SAP</code> (especialista via <code>nm_gc</code>), sem apagar os atuais. Códigos temporários <code>OSAB-…</code> passam a ser o PDV_SAP neste import.</p>
+      <p class="help">Arquivo .xlsb/.xlsx do e-mail ou export do Power BI (os nomes das colunas podem diferir; o sistema normaliza). Merge por PEDIDO + DT_REF. Recalcula capilaridade e VL/Gross. Cadastra PDVs novos da coluna DESCRICAO/<code>nm_pdv_rel</code> com o código da coluna <code>PDV_SAP</code> (especialista via <code>nm_gc</code>), sem apagar os atuais. Códigos temporários <code>OSAB-…</code> passam a ser o PDV_SAP neste import.</p>
       <button class="btn btn-primary" type="submit" style="margin-top:0.7rem">Atualizar base OSAB</button>
     </form>
   </div>

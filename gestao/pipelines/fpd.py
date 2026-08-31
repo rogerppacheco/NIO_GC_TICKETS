@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from ..colunas_relatorio import normalizar_fpd
 from ..excel import ler_planilha, resolver_coluna
 from ..models import LoteImportacao, RelatorioFPD
 from ..parceiros import indice_parceiros, resolver_parceiro_id
@@ -48,7 +49,19 @@ def _parse_periodo(valor):
         return valor.asfreq("M")
     if isinstance(valor, pd.Timestamp):
         return valor.to_period("M")
+    if isinstance(valor, (int, float)) and not isinstance(valor, bool):
+        try:
+            n = int(valor)
+        except (OverflowError, ValueError):
+            n = None
+        else:
+            if 199001 <= n <= 209912:
+                ano, mes = divmod(n, 100)
+                if 1 <= mes <= 12:
+                    return pd.Period(year=ano, month=mes, freq="M")
     texto = str(valor).strip()
+    if texto.endswith(".0") and texto[:-2].replace("-", "").isdigit():
+        texto = texto[:-2]
     if not texto:
         return None
     if texto.isdigit() and len(texto) == 6:
@@ -89,9 +102,9 @@ def _fmt_mes(valor) -> str:
 
 
 def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
-    df = ler_planilha(arquivo, nome_arquivo)
-    col_pdv = resolver_coluna(df, ["APELIDO", "nm_pdv_rel"])
-    col_ref = resolver_coluna(df, ["REF_VENCTO", "MES_VENC"])
+    df = normalizar_fpd(ler_planilha(arquivo, nome_arquivo))
+    col_pdv = resolver_coluna(df, ["APELIDO", "nm_pdv_rel", "NM_PDV_REL", "REDE", "DESC_APELIDO"])
+    col_ref = resolver_coluna(df, ["REF_VENCTO", "MES_VENC", "MES_VENCIMENTO"])
     col_sit = resolver_coluna(df, ["SITUACAO_FATURA_MENSAL", "DS_SIT_FATURA", "DS_STATUS_FATURA"])
     col_faixa = resolver_coluna(df, ["FAIXA"])
     col_ind = resolver_coluna(df, ["INDICADOR"])

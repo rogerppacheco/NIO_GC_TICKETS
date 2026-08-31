@@ -10,6 +10,7 @@ from django.db.models import Max, Q
 from django.utils import timezone
 
 from ..excel import as_aware, converter_data_robusto, resolver_coluna, texto
+from ..colunas_relatorio import normalizar_osab
 from ..models import (
     AnaliseCapilaridade,
     ConfiguracaoOSAB,
@@ -60,14 +61,15 @@ def data_ref_capilaridade() -> datetime:
 def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
     if indice is None:
         indice = indice_parceiros()
-    col_pedido = resolver_coluna(df, ALIASES_PEDIDO)
-    col_dt_ref = resolver_coluna(df, ALIASES_DT_REF)
+    trabalho = normalizar_osab(df)
+    col_pedido = resolver_coluna(trabalho, ALIASES_PEDIDO)
+    col_dt_ref = resolver_coluna(trabalho, ALIASES_DT_REF)
     if not col_pedido or not col_dt_ref:
         raise ValueError(
             "A planilha OSAB precisa de PEDIDO e DT_REF. "
             f"Colunas: {list(df.columns)}"
         )
-    trabalho = df.rename(columns={col_pedido: "PEDIDO", col_dt_ref: "DT_REF"}).copy()
+    trabalho = trabalho.rename(columns={col_pedido: "PEDIDO", col_dt_ref: "DT_REF"}).copy()
     if "NOME_VENDEDOR" not in trabalho.columns and "MATRICULA_VENDEDOR" in trabalho.columns:
         trabalho["NOME_VENDEDOR"] = trabalho["MATRICULA_VENDEDOR"].astype(str)
     for col in ("DATA_ABERTURA", "DATA_FECHAMENTO", "DT_REF"):
@@ -96,12 +98,13 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
     ])
     col_oferta = resolver_coluna(trabalho, [
         "OFERTA",
-        "PRODUTO",
-        "PLANO",
         "NOME_OFERTA",
         "NOME_PLANO",
+        "CAMPANHA",
         "PACOTE",
         "DESCRICAO_OFERTA",
+        "PLANO",
+        "PRODUTO",
     ])
     col_gerencia = resolver_coluna(trabalho, [
         "GERENCIA",

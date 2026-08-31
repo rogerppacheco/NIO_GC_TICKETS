@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import io
+import re
 import tempfile
+import unicodedata
 from pathlib import Path
 
 import pandas as pd
@@ -65,16 +67,51 @@ def listar_abas(arquivo, nome: str = "") -> list[str]:
         Path(caminho).unlink(missing_ok=True)
 
 
+def chave_coluna(nome) -> str:
+    """Compara colunas ignorando acento, caixa, espaços e pontuação."""
+    texto = unicodedata.normalize("NFKD", str(nome or ""))
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", "", texto.casefold())
+
+
 def resolver_coluna(df: pd.DataFrame, opcoes: list[str]) -> str | None:
+    colunas = list(df.columns)
     for nome in opcoes:
-        if nome in df.columns:
+        if nome in colunas:
             return nome
-    mapa = {str(c).casefold(): c for c in df.columns}
+    mapa_cf = {str(c).casefold(): c for c in colunas}
     for nome in opcoes:
-        achou = mapa.get(str(nome).casefold())
+        achou = mapa_cf.get(str(nome).casefold())
+        if achou is not None:
+            return achou
+    mapa_chave = {chave_coluna(c): c for c in colunas}
+    for nome in opcoes:
+        achou = mapa_chave.get(chave_coluna(nome))
         if achou is not None:
             return achou
     return None
+
+
+def aplicar_aliases(df: pd.DataFrame, campos: dict[str, list[str]]) -> pd.DataFrame:
+    """Renomeia a primeira coluna encontrada de cada campo para o nome canônico."""
+    out = df.copy()
+    rename: dict[str, str] = {}
+    usados: set[str] = set()
+    for canon, aliases in campos.items():
+        existente = resolver_coluna(out, [canon])
+        if existente is not None:
+            if existente != canon and existente not in usados and existente not in rename:
+                rename[existente] = canon
+                usados.add(existente)
+            continue
+        achou = resolver_coluna(out, aliases)
+        if not achou or achou in usados or achou in rename:
+            continue
+        rename[achou] = canon
+        usados.add(achou)
+    if rename:
+        out = out.rename(columns=rename)
+    return out
 
 
 def converter_data_robusto(coluna: pd.Series) -> pd.Series:
