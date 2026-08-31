@@ -922,6 +922,18 @@ class FpdChurnTests(TestCase):
         self.assertIn("Faixas e Quantidades", html)
         self.assertIn("APOLO", html)
 
+    def test_fpd_reimport_nao_duplica_pdv(self):
+        mes = timezone.localdate().strftime("%m/%Y")
+        lote1 = LoteImportacao.objects.create(tipo="fpd", arquivo_nome="f1.xlsx", ok=True)
+        lote2 = LoteImportacao.objects.create(tipo="fpd", arquivo_nome="f2.xlsx", ok=True)
+        for lote, abertas in ((lote1, "Aberta"), (lote2, "Paga")):
+            arquivo = _xlsx(
+                [["APOLO", mes, abertas, "15 a 30 Dias", "FPD"]],
+                ["APELIDO", "REF_VENCTO", "SITUACAO_FATURA_MENSAL", "FAIXA", "INDICADOR"],
+            )
+            processar_fpd(arquivo, f"{lote.id}.xlsx", lote)
+        self.assertEqual(RelatorioFPD.objects.filter(parceiro=self.pdv).count(), 1)
+
     def test_parse_periodo_yyyymm_float(self):
         from gestao.pipelines.fpd import _parse_periodo
 

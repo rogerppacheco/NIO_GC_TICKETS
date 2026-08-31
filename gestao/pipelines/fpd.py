@@ -141,6 +141,7 @@ def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
         if not parceiro_id:
             sem_parceiro.append(str(apelido))
             continue
+        RelatorioFPD.objects.filter(parceiro_id=parceiro_id).delete()
         df_pdv = df[df[col_pdv] == apelido].copy()
         mensagem = f"📊 *Relatório FPD - {apelido}*\n_(Faturas Por Dia)_\n\n"
         meses_ref = sorted(df_pdv[col_ref].dropna().unique(), key=lambda x: str(x))

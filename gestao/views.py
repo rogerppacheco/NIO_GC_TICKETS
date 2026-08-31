@@ -851,8 +851,20 @@ def fpd_view(request: HttpRequest) -> HttpResponse:
 
 
 def _render_fpd(request, form):
+    from django.db.models import Max
+
     visiveis = _parceiros(request)
-    relatorios = RelatorioFPD.objects.select_related("parceiro__especialista", "lote").filter(parceiro__in=visiveis)[:80]
+    ultimos_ids = (
+        RelatorioFPD.objects.filter(parceiro__in=visiveis)
+        .values("parceiro_id")
+        .annotate(ultimo_id=Max("id"))
+        .values_list("ultimo_id", flat=True)
+    )
+    relatorios = (
+        RelatorioFPD.objects.select_related("parceiro__especialista", "lote")
+        .filter(id__in=ultimos_ids)
+        .order_by("-percentual", "pdv_nome")
+    )
     return render(
         request,
         "gestao/fpd.html",
