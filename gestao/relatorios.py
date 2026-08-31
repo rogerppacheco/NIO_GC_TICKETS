@@ -11,6 +11,7 @@ from .pipelines.osab import (
     normalizar_cargo_ctps,
     normalizar_chave_tt,
     terceiro_ativo_para_auditoria,
+    terceiro_elegivel_capilaridade,
     ultimas_vendas_pdv,
 )
 from tickets.models import Parceiro
@@ -104,6 +105,57 @@ def resumir_auditoria(parceiro: Parceiro, ano: int, mes: int) -> dict:
     return buckets
 
 
+def resumir_desativados_com_venda(parceiro: Parceiro, ano: int, mes: int) -> list[dict]:
+    """TTs inelegíveis no Sysmap (desativada/desalocada) com venda OSAB no mês."""
+    from django.db.models import Count
+
+    from .models import VendaOSAB
+
+    mapa = mapa_terceiros_por_chave()
+    data_ref = data_ref_capilaridade()
+    ultimas = ultimas_vendas_pdv(parceiro.nome)
+    vendas = (
+        VendaOSAB.objects.filter(
+            pdv_nome=parceiro.nome,
+            data_abertura__year=ano,
+            data_abertura__month=mes,
+        )
+        .exclude(matricula_vendedor="")
+        .values("matricula_vendedor")
+        .annotate(total=Count("id"))
+    )
+    itens: list[dict] = []
+    vistos: set[str] = set()
+    for row in vendas:
+        chave = normalizar_chave_tt(row["matricula_vendedor"])
+        if not chave or chave in vistos:
+            continue
+        terceiro = mapa.get(chave)
+        if terceiro is None:
+            continue
+        if terceiro_elegivel_capilaridade(
+            terceiro.situacao_empresa,
+            terceiro.situacao_funcional,
+            terceiro.situacao_contrato,
+        ):
+            continue
+        ultima = ultimas.get(chave)
+        dias = None
+        if ultima is not None:
+            ultima_dia = ultima.date() if hasattr(ultima, "date") else ultima
+            dias = (data_ref.date() - ultima_dia).days
+        itens.append(
+            {
+                "chave": chave,
+                "nome": (terceiro.nome_terceiro or ""),
+                "dias": dias,
+                "ultima": ultima,
+            }
+        )
+        vistos.add(chave)
+    return sorted(itens, key=lambda x: x["chave"])
+
+
 def montar_mascara_pdv(
     parceiro: Parceiro,
     ano: int | None = None,
@@ -153,6 +205,15 @@ def montar_mascara_pdv(
         partes.append(
             f"🎉 *Capilaridade com vendas - Recentes: {len(recentes)}*\n" + "\n".join(recentes)
         )
+
+    desativados = resumir_desativados_com_venda(parceiro, ano, mes)
+    if desativados:
+        linhas_txt = [f"📴 *TTs desativadas com vendas no mês: {len(desativados)}*"]
+        for item in desativados:
+            linhas_txt.append(
+                _linha_tt(item["chave"], item["dias"], item["ultima"], item.get("nome") or "")
+            )
+        partes.append("\n".join(linhas_txt))
 
     auditoria = resumir_auditoria(parceiro, ano, mes)
     titulos = (

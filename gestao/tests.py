@@ -417,6 +417,34 @@ class OsabCapilaridadeTests(TestCase):
         chaves = {l["matricula_vendedor"] for l in linhas_capilaridade_pdv(pdv_kk)}
         self.assertNotIn("TT816374", chaves)
 
+    def test_mascara_desativada_com_venda_no_mes(self):
+        from gestao.relatorios import montar_mascara_pdv
+
+        CadastroTerceiro.objects.create(
+            chave_acesso="TT807399",
+            nome_terceiro="ANDRE JUNIO DE OLIVEIRA SANTOS SOUZA",
+            razao_social="RECORD",
+            parceiro=self.pdv,
+            cargo_funcao="VENDEDOR",
+            situacao_empresa="Desativado",
+            situacao_funcional="Desativado",
+            situacao_contrato="Desalocado",
+            ativo=False,
+        )
+        agora = timezone.now()
+        VendaOSAB.objects.create(
+            pedido="P-DESAT",
+            pdv_nome="RECORD",
+            matricula_vendedor="TT807399",
+            data_abertura=agora,
+            parceiro=self.pdv,
+        )
+        mascara = montar_mascara_pdv(self.pdv, agora.year, agora.month)
+        self.assertIn("TTs desativadas com vendas no mês", mascara)
+        self.assertIn("TT807399 · ANDRE SOUZA", mascara)
+        recuperar = mascara.split("📴")[0]
+        self.assertNotIn("TT807399", recuperar)
+
     def test_filtro_tt_nome_cargo(self):
         from gestao.pipelines.osab import linhas_capilaridade_pdv
 
