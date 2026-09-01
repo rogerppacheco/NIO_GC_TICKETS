@@ -192,6 +192,12 @@ DFV_POWERBI_NNE_MODEL_ID = int(os.environ.get("DFV_POWERBI_NNE_MODEL_ID", "60641
 DFV_POWERBI_TIMEOUT_SECONDS = float(os.environ.get("DFV_POWERBI_TIMEOUT_SECONDS", "18") or "18")
 DFV_POWERBI_CACHE_TTL_SECONDS = int(os.environ.get("DFV_POWERBI_CACHE_TTL_SECONDS", "600") or "600")
 
+# Formulário Google Forms do projeto consulta-viabilidade-vtal (mesmo link da tela de login)
+VIABILIDADE_FORMS_URL = os.environ.get(
+    "VIABILIDADE_FORMS_URL",
+    "https://docs.google.com/forms/d/e/1FAIpQLScnXtSMB3EMutB88IfAg3ihGxUj60nAM6BZqmt4m24TsyPoAw/viewform",
+).strip()
+
 # --- WhatsApp: Evolution API + n8n (mesmo padrão do site-record) ---
 EVOLUTION_API_URL = os.environ.get("EVOLUTION_API_URL", "").strip()
 EVOLUTION_API_KEY = os.environ.get("EVOLUTION_API_KEY", "").strip()

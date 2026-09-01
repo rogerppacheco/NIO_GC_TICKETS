@@ -14,12 +14,33 @@
     <span class="consulta-tag">CEP · CDOE</span>
   </a>
 
-  <a class="consulta-card" href="{% url 'consulta_viabilidade' %}">
-    <span class="consulta-ico">📍</span>
-    <h2>Viabilidade VTAL</h2>
-    <p>Consulte o retorno de viabilidade por CEP e número da fachada.</p>
+  <div class="consulta-card consulta-card-vtal">
+    <a class="consulta-card-main" href="{% url 'consulta_viabilidade' %}">
+      <span class="consulta-ico">📍</span>
+      <h2>Viabilidade VTAL</h2>
+      <p>Consulte o retorno de viabilidade por CEP e número da fachada.</p>
+      {% if vtal_ultima_importacao %}
+        <p class="consulta-sync">Última sincronização: {{ vtal_ultima_importacao|date:"d/m/Y H:i" }}</p>
+      {% endif %}
+    </a>
+    {% if vtal_forms_url %}
+    <a
+      class="consulta-forms-access"
+      href="{{ vtal_forms_url }}"
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Abrir formulário de viabilidade no Google Forms"
+    >
+      <span class="consulta-forms-icon" aria-hidden="true">📋</span>
+      <span class="consulta-forms-body">
+        <span class="consulta-forms-label">Formulário de Viabilidade</span>
+        <span class="consulta-forms-hint">Abrir no Google Forms — preencher ou revisar</span>
+      </span>
+      <span class="consulta-forms-action" aria-hidden="true">↗</span>
+    </a>
+    {% endif %}
     <span class="consulta-tag">Forms VTAL</span>
-  </a>
+  </div>
 
   <a class="consulta-card" href="{% url 'repositorio_lista' %}">
     <span class="consulta-ico">📚</span>

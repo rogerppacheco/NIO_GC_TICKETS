@@ -59,4 +59,12 @@ def nav_counts(request):
 
         ctx["modo_teste"] = modo_teste_ativo()
         ctx["modo_teste_sessao"] = modo_teste_sessao(request)
+
+    try:
+        from tickets.consultas.vtal_service import contexto_portal_vtal
+
+        ctx.update(contexto_portal_vtal())
+    except Exception:
+        ctx.setdefault("vtal_forms_url", "")
+        ctx.setdefault("vtal_ultima_importacao", None)
     return ctx

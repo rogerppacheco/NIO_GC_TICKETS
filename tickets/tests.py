@@ -958,3 +958,16 @@ class DfvRegioesBrasilTests(SimpleTestCase):
         self.assertEqual(regiao_por_uf("SP").code, "SP")
 
 
+class VtalPortalCardTests(SimpleTestCase):
+    def test_contexto_traz_url_do_forms(self):
+        from django.test import override_settings
+
+        from tickets.consultas.vtal_service import contexto_portal_vtal
+
+        url = "https://docs.google.com/forms/d/e/exemplo/viewform"
+        with override_settings(VIABILIDADE_FORMS_URL=url):
+            ctx = contexto_portal_vtal()
+        self.assertEqual(ctx["vtal_forms_url"], url)
+        self.assertIn("vtal_ultima_importacao", ctx)
+
+

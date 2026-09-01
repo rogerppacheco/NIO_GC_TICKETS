@@ -10,8 +10,16 @@
     {% elif fonte %}
       <p class="help">Base: {{ fonte.nome }}</p>
     {% endif %}
+    {% if vtal_ultima_importacao %}
+      <p class="help">Última sincronização da planilha: <strong>{{ vtal_ultima_importacao|date:"d/m/Y H:i" }}</strong></p>
+    {% endif %}
   </div>
-  <a class="btn btn-secondary" href="{% url 'portal_inicio' %}">← Início</a>
+  <div style="display:flex;flex-direction:column;gap:0.5rem;align-items:flex-end">
+    {% if vtal_forms_url %}
+      <a class="btn btn-primary" href="{{ vtal_forms_url }}" target="_blank" rel="noopener noreferrer">Abrir formulário</a>
+    {% endif %}
+    <a class="btn btn-secondary" href="{% url 'portal_inicio' %}">← Início</a>
+  </div>
 </div>
 
 {% include "tickets/consultas/_consultas_nav.html" with consulta_ativa="viabilidade" %}

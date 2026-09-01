@@ -10,10 +10,12 @@ class VtalFonteDados(models.Model):
     ordem = models.PositiveSmallIntegerField(default=0)
     import_last_sheet_row_number = models.IntegerField(default=0)
     import_last_sheet_row_count = models.IntegerField(default=0)
+    import_last_full_sync = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         managed = False
         db_table = "viabilidade_fontedados"
+        app_label = "tickets"
         ordering = ["ordem", "nome"]
 
     def __str__(self) -> str:
@@ -64,7 +66,23 @@ class VtalDadosViabilidade(models.Model):
     class Meta:
         managed = False
         db_table = "viabilidade_dadosviabilidade"
+        app_label = "tickets"
         ordering = ["-carimbo_data_hora", "-id"]
 
     def __str__(self) -> str:
         return f"CEP {self.cep} · nº {self.numero_fachada}"
+
+
+class VtalSystemStatus(models.Model):
+    """Status da importação Google Sheets no app consulta-viabilidade-vtal."""
+
+    import_end_time = models.DateTimeField(null=True, blank=True)
+    import_last_full_sync = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "viabilidade_systemstatus"
+        app_label = "tickets"
+
+    def __str__(self) -> str:
+        return "Status da importação VTAL"

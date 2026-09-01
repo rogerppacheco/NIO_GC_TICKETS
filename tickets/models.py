@@ -702,3 +702,10 @@ class ProcessoLink(models.Model):
 
     def __str__(self) -> str:
         return self.titulo
+
+
+from tickets.consultas.vtal_models import (  # noqa: E402, F401
+    VtalDadosViabilidade,
+    VtalFonteDados,
+    VtalSystemStatus,
+)

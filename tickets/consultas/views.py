@@ -27,6 +27,7 @@ from .dfv_powerbi_service import (
 from .helpers import wpp_para_html
 from .vtal_service import (
     consultar_viabilidade,
+    contexto_portal_vtal,
     fontes_vtal_ativas,
     normalizar_cep,
     normalizar_fachada,
@@ -241,17 +242,15 @@ def consulta_viabilidade(request: HttpRequest) -> HttpResponse:
             except Exception:
                 erro = "Falha ao consultar a base VTAL."
 
-    return render(
-        request,
-        "tickets/consultas/viabilidade.html",
-        {
-            "vtal_ok": vtal_ok,
-            "fontes": fontes,
-            "fonte": fonte,
-            "cep": cep,
-            "numero_fachada": numero_fachada,
-            "resultados": resultados,
-            "erro": erro,
-            "buscou": buscou,
-        },
-    )
+    ctx = {
+        "vtal_ok": vtal_ok,
+        "fontes": fontes,
+        "fonte": fonte,
+        "cep": cep,
+        "numero_fachada": numero_fachada,
+        "resultados": resultados,
+        "erro": erro,
+        "buscou": buscou,
+    }
+    ctx.update(contexto_portal_vtal())
+    return render(request, "tickets/consultas/viabilidade.html", ctx)
