@@ -7,7 +7,7 @@
 <div class="hero">
   <div>
     <h1>Resultados</h1>
-    <p>Parcial (imagem), acumulado do mês {{ mes|stringformat:"02d" }}/{{ ano }} e ranking de VB.</p>
+    <p>Parcial (Excel → imagem), acumulado do mês {{ mes|stringformat:"02d" }}/{{ ano }} e ranking de VB.</p>
   </div>
 </div>
 
@@ -23,20 +23,111 @@
 
   {% if aba == "parcial" %}
   <div class="tab-panel is-active" role="tabpanel">
-    <p class="help" style="margin:0 0 0.85rem">Anexe o print e envie para um PDV ou para todos do escopo. O texto curto vai como legenda da imagem.</p>
-    {% if pode_enviar %}
-    <form method="post" enctype="multipart/form-data" class="form-grid">
+    <div class="parcial-intro">
+      <p class="help" style="margin:0">
+        Importe a base Excel da dashboard (<strong>Total / D-7</strong>), gere a imagem automaticamente e envie nos turnos
+        <strong>12h · 15h · 18h</strong>.
+        {% if parcial_dados %}
+        Base ativa: {{ parcial_dados.qtd_pdvs }} PDV(s) · {{ parcial_dados.total_pp }} VB · ∆ D-7 {{ parcial_dados.delta_pp|stringformat:"+d" }}
+        · turno {{ parcial_dados.rotulo_turno }}
+        {% if ultimo_parcial %} · importada {{ ultimo_parcial.criado_em|date:"d/m H:i" }}{% endif %}.
+        {% else %}
+        Turno sugerido agora: <strong>{{ parcial_turno }}</strong>.
+        {% endif %}
+      </p>
+    </div>
+
+    {% if pode_editar %}
+    <form method="post" enctype="multipart/form-data" class="form-grid parcial-import" style="margin-top:0.85rem">
       {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
-      <div class="full">{{ form.arquivo.label_tag }}{{ form.arquivo }}<div class="help">{{ form.arquivo.help_text }}</div></div>
-      <div class="full">{{ form.caption.label_tag }}{{ form.caption }}</div>
-      <div>{{ form.parceiro.label_tag }}{{ form.parceiro }}</div>
-      <div class="full" style="display:flex;gap:0.5rem;flex-wrap:wrap">
-        <button class="btn btn-primary" type="submit" name="action" value="enviar_parcial">Enviar neste PDV</button>
-        <button class="btn btn-secondary" type="submit" name="action" value="enviar_parcial_todos">Enviar a todos</button>
-      </div>
+      <input type="hidden" name="action" value="importar_parcial">
+      <div>{{ form.arquivo.label_tag }}{{ form.arquivo }}<div class="help">{{ form.arquivo.help_text }}</div></div>
+      <div>{{ form.turno.label_tag }}{{ form.turno }}<div class="help">{{ form.turno.help_text }}</div></div>
+      <div class="full"><button class="btn btn-primary" type="submit">Importar base e gerar prévia</button></div>
     </form>
-    {% else %}
-    <p class="help">Configure o WhatsApp (Evolution) para enviar o parcial.</p>
+    {% endif %}
+
+    {% if parcial_dados %}
+    <div class="parcial-envio parcial-envio-wide" style="margin-top:1rem">
+      <div class="parcial-preview-grid">
+        <div class="parcial-preview-wrap">
+          <p class="help" style="margin:0 0 0.5rem"><strong>Gerência</strong> — total PP · top/pior 5 (∆ D-7)</p>
+          <img
+            class="ranking-preview-img parcial-preview-img"
+            src="{% url 'gestao_parcial_preview' %}?escopo={{ gestao_escopo|default:'meus' }}&visao=gerencia&_={{ ultimo_parcial.criado_em|date:'U' }}"
+            alt="Parcial gerência — preview"
+            loading="lazy">
+        </div>
+        <div class="parcial-preview-wrap">
+          <p class="help" style="margin:0 0 0.5rem"><strong>{% if eh_gestor %}Carteira PP{% else %}Minha carteira{% endif %}</strong> — total · PDV a PDV</p>
+          <img
+            class="ranking-preview-img parcial-preview-img"
+            src="{% url 'gestao_parcial_preview' %}?escopo={{ gestao_escopo|default:'meus' }}&visao=carteira&_={{ ultimo_parcial.criado_em|date:'U' }}"
+            alt="Parcial carteira — preview"
+            loading="lazy">
+        </div>
+      </div>
+
+      <div class="parcial-envio-form">
+        <form method="post" class="form-grid" id="form-parcial-envio">
+          {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+          <div class="full">
+            {{ form.caption.label_tag }}{{ form.caption }}
+            <div class="help">{{ form.caption.help_text }}</div>
+          </div>
+          <div>
+            <label>Legenda gerência (WhatsApp)</label>
+            <div class="wpp-bubble parcial-preview">{{ msg_parcial_gerencia }}</div>
+          </div>
+          <div>
+            <label>Legenda carteira (WhatsApp)</label>
+            <div class="wpp-bubble parcial-preview">{{ msg_parcial_carteira }}</div>
+          </div>
+
+          {% if pode_enviar %}
+          <div class="full parcial-acoes">
+            <button class="btn btn-primary" type="submit" name="action" value="enviar_parcial_carteira">
+              Enviar para minha carteira
+            </button>
+            {% if eh_gestor %}
+            <button class="btn btn-secondary" type="submit" name="action" value="enviar_parcial_grupos">
+              Enviar aos grupos dos parceiros
+            </button>
+            {% endif %}
+          </div>
+
+          {% if eh_gestor %}
+          <div class="full">
+            <label for="destinatario-parcial">Grupo gerência / diretoria</label>
+            <select name="destinatario" id="destinatario-parcial">
+              <option value="">Escolha o grupo consolidado…</option>
+              {% for g in grupos_parcial %}
+                <option value="{{ g.id }}"{% if ranking_grupo_padrao and g.id == ranking_grupo_padrao.id %} selected{% endif %}>
+                  {% if g.ranking_consolidado %}{{ g.nome }} · consolidado{% else %}{{ g.parceiro.nome }} — {{ g.nome }}{% endif %}
+                </option>
+              {% endfor %}
+            </select>
+            <p class="help">Grupos com flag <strong>Resultados</strong> (ex.: Parceiros_PP_Nio).</p>
+          </div>
+          <div class="full">
+            <button class="btn btn-primary" type="submit" name="action" value="enviar_parcial_gerencia">
+              Enviar visão gerência
+            </button>
+          </div>
+
+          <div class="full parcial-envio-avulso">
+            {{ form.parceiro.label_tag }}{{ form.parceiro }}
+            <button class="btn btn-ghost" type="submit" name="action" value="enviar_parcial_pdv">Enviar só este PDV</button>
+          </div>
+          {% endif %}
+          {% else %}
+          <p class="help">Configure o WhatsApp (Evolution) para enviar. Enquanto isso, use as prévias acima.</p>
+          {% endif %}
+        </form>
+      </div>
+    </div>
+    {% elif not pode_editar %}
+    <p class="help" style="margin-top:0.85rem">Aguardando importação da base pelo gestor.</p>
     {% endif %}
   </div>
   {% endif %}

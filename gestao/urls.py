@@ -9,6 +9,7 @@ urlpatterns = [
     path("osab/", views.osab_view, name="gestao_osab"),
     path("resultados/", views.resultados_view, name="gestao_resultados"),
     path("resultados/ranking-preview/", views.ranking_preview, name="gestao_ranking_preview"),
+    path("resultados/parcial-preview/", views.parcial_preview, name="gestao_parcial_preview"),
     path("resultados/vb-sem-municipio.xlsx", views.exportar_vb_sem_municipio, name="gestao_vb_sem_municipio"),
     path("modo-teste/", views.toggle_modo_teste_view, name="gestao_modo_teste"),
     path("capilaridade/", views.capilaridade_view, name="gestao_capilaridade"),

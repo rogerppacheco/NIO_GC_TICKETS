@@ -736,6 +736,46 @@ a.tab { text-decoration: none; display: inline-block; }
   padding: 0.85rem 1rem; font-size: 0.95rem; line-height: 1.55;
   font-family: var(--font); white-space: normal; overflow-wrap: anywhere;
 }
+.parcial-preview {
+  white-space: pre-wrap;
+  min-height: 8rem;
+  margin: 0;
+  max-height: 14rem;
+  overflow: auto;
+}
+.parcial-envio-wide {
+  display: grid;
+  gap: 1rem;
+}
+@media (min-width: 960px) {
+  .parcial-envio-wide {
+    grid-template-columns: 1.15fr 0.85fr;
+    align-items: start;
+  }
+}
+.parcial-preview-grid {
+  display: grid;
+  gap: 0.85rem;
+}
+.parcial-preview-wrap .parcial-preview-img,
+.parcial-preview-wrap .ranking-preview-img {
+  width: 100%;
+  max-width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.parcial-acoes {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.parcial-envio-avulso {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
 .wpp-bubble + .wpp-bubble { margin-top: 0.65rem; }
 .vtal-card.status-viavel-total,
 .vtal-card.status-viavel-parcial {

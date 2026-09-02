@@ -11,7 +11,7 @@ from django.utils import timezone
 from tickets.models import Parceiro
 
 from ..models import CadastroTerceiro, ConfiguracaoOSAB, PracaBTU, VendaOSAB
-from ..periodo import hoje
+from ..periodo import hoje, periodo_ativo
 from .osab import STATUS_IGNORADOS
 
 RANKING_INICIO = date(2026, 9, 2)
@@ -214,6 +214,120 @@ def mensagem_acumulado_consolidada(resumo: dict) -> str:
     if not resumo["linhas"]:
         partes.append("_Nenhum PDV no escopo._")
     return "\n".join(partes)
+
+
+PDV_LEGENDA_GENERICO = "time"
+
+# Frases curtas, comerciais, uma por dia (ciclo pelo calendário).
+FRASES_COMERCIAIS = (
+    "Quem vende cedo, puxa o mês.",
+    "Meta não espera. Resultado se constrói agora.",
+    "Cada VL conta. Foco no fechamento.",
+    "O dia é curto. A meta não perdoa.",
+    "Gross no radar: instala quem já vendeu.",
+    "Ritmo de venda define o ranking.",
+    "Não deixa para amanhã o pedido de hoje.",
+    "Execução no PDV. Resultado no consolidado.",
+    "Um pedido a mais muda o atingimento.",
+    "Foco no cliente. Conversão na meta.",
+    "Quem prospecta, fecha. Quem espera, fica para trás.",
+    "Atingimento se ganha no campo, não na planilha.",
+    "Hoje é dia de virar o jogo.",
+    "Venda com urgência. Entrega com qualidade.",
+    "O mês se decide nos dias comuns.",
+    "Pressão boa: meta na frente, time junto.",
+    "Menos desculpa. Mais pedido no sistema.",
+    "BTU ou padrão: o que importa é converter.",
+    "Fecha cedo, projeta alto.",
+    "Resultado comercial não negocia com o relógio.",
+    "A meta do mês começa neste turno.",
+    "Quem acelera agora, comemora no fechamento.",
+    "Cliente na frente. Número no bolso.",
+    "Consistência vence o dia. O dia vence o mês.",
+    "Sem ritmo, sem ranking. Bora vender.",
+    "Gap se fecha com visita, não com discurso.",
+    "Hoje vale por dois se a execução vier forte.",
+    "Não é sorte. É volume com qualidade.",
+    "Acompanhe o D0. Corrija no D1.",
+    "Meta é compromisso. Resultado é escolha.",
+    "Venda agora. Gross depois. Comissão no fim.",
+    "O PDV que age, sobe no ranking.",
+    "Faltam dias. Sobram oportunidades.",
+    "Quem controla o pipeline, controla a meta.",
+    "Parcial de hoje é o consolidado de amanhã.",
+    "Energia no time. Foco no número.",
+    "Cada recusa é uma nova abordagem.",
+    "Fecha com argumento. Ganha no mix.",
+    "Não disperse. Meta, cliente, próximo pedido.",
+    "O comercial que executa, atinge.",
+    "Comece pelo difícil. O fácil vem no fluxo.",
+    "Resultado é a soma das visitas de hoje.",
+    "Sempre tem um pedido extra no próximo contato.",
+    "A meta respeita quem respeita o relógio.",
+    "Bora virar o percentual. Um VL de cada vez.",
+)
+
+
+def saudacao_horario(hora: int) -> tuple[str, str]:
+    if hora < 12:
+        return "☀️", "Bom dia"
+    if hora < 18:
+        return "🌤️", "Boa tarde"
+    return "🌙", "Boa noite"
+
+
+def frase_comercial_do_dia(data: date) -> str:
+    return FRASES_COMERCIAIS[data.toordinal() % len(FRASES_COMERCIAIS)]
+
+
+def mensagem_parcial(
+    *,
+    pdv: str = PDV_LEGENDA_GENERICO,
+    agora: datetime | None = None,
+    ano: int | None = None,
+    mes: int | None = None,
+) -> str:
+    """Legenda da imagem de meta do mês: saudação + frase do dia + convite."""
+    agora = agora or timezone.localtime()
+    data = agora.date() if isinstance(agora, datetime) else hoje()
+    hora = agora.hour if isinstance(agora, datetime) else timezone.localtime().hour
+    if ano is None or mes is None:
+        ano_ativo, mes_ativo = periodo_ativo()
+        ano = ano if ano is not None else ano_ativo
+        mes = mes if mes is not None else mes_ativo
+    emoji, saudacao = saudacao_horario(hora)
+    nome = (pdv or PDV_LEGENDA_GENERICO).strip() or PDV_LEGENDA_GENERICO
+    frase = frase_comercial_do_dia(data)
+    return "\n".join(
+        [
+            f"{emoji} {saudacao}, *{nome}*!",
+            "",
+            f"🎯 *Meta do mês — {mes:02d}/{ano}*",
+            "",
+            f"_{frase}_",
+            "",
+            "Segue o acompanhamento. Foco no resultado.",
+        ]
+    )
+
+
+def caption_parcial_envio(
+    caption: str,
+    parceiro,
+    *,
+    agora: datetime | None = None,
+    ano: int | None = None,
+    mes: int | None = None,
+) -> str:
+    """Usa a legenda editada ou gera uma; *time* vira o nome do PDV."""
+    nome = (getattr(parceiro, "nome", None) or PDV_LEGENDA_GENERICO).strip() or PDV_LEGENDA_GENERICO
+    texto = (caption or "").strip()
+    if not texto:
+        return mensagem_parcial(pdv=nome, agora=agora, ano=ano, mes=mes)
+    marcador = f"*{PDV_LEGENDA_GENERICO}*"
+    if marcador in texto:
+        texto = texto.replace(marcador, f"*{nome}*", 1)
+    return texto
 
 
 def janela_dia_anterior(data_envio: date) -> tuple[date, date]:

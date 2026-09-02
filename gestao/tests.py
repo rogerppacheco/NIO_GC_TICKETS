@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
 from unittest import skipUnless
@@ -2229,8 +2229,68 @@ class ResultadosTests(TestCase):
         self.assertContains(r, "Parcial de vendas")
         self.assertContains(r, "Acumulado do mês")
         self.assertContains(r, "Ranking de VB")
+        self.assertContains(r, "Importe a base Excel")
+        self.assertContains(r, "12h")
         r2 = self.client.get(reverse("gestao_resultados"), {"aba": "ranking"})
         self.assertContains(r2, "ranking-preview-img")
+
+    def test_parcial_excel_e_imagens(self):
+        from gestao.parcial_imagem import imagem_parcial_gerencia, imagem_parcial_pdv
+        from gestao.pipelines.parcial_vendas import (
+            mensagem_parcial_gerencia,
+            montar_parcial,
+            processar_parcial_excel,
+            turno_parcial,
+        )
+
+        self.assertEqual(turno_parcial(11), (12, "12h"))
+        self.assertEqual(turno_parcial(14), (15, "15h"))
+        self.assertEqual(turno_parcial(16), (18, "18h"))
+        self.assertEqual(turno_parcial(20), (18, "18h"))
+
+        arquivo = _xlsx(
+            [["INOVA MG", 45, 38]],
+            ["PDV", "TOTAL", "D-7"],
+        )
+        resumo = processar_parcial_excel(arquivo, "parcial.xlsx", [self.pdv], turno=15, ano=2026, mes=9)
+        self.assertEqual(resumo["total_pp"], 45)
+        self.assertEqual(resumo["delta_pp"], 7)
+        self.assertEqual(resumo["rotulo_turno"], "15h")
+        self.assertEqual(len(resumo["linhas"]), 1)
+
+        png, nome = imagem_parcial_gerencia(resumo)
+        self.assertTrue(png.startswith(b"\x89PNG"))
+        self.assertIn("Gerencia", nome)
+
+        linha = resumo["linhas"][0]
+        png_pdv, _ = imagem_parcial_pdv(linha, resumo)
+        self.assertTrue(png_pdv.startswith(b"\x89PNG"))
+
+        msg = mensagem_parcial_gerencia(resumo)
+        self.assertIn("Total: *45*", msg)
+        self.assertIn("INOVA MG", msg)
+
+    def test_importar_parcial_pela_tela(self):
+        arquivo = _xlsx(
+            [["INOVA MG", 30, 25]],
+            ["PDV", "VENDAS", "D7"],
+        )
+        r = self.client.post(
+            reverse("gestao_resultados"),
+            {
+                "action": "importar_parcial",
+                "escopo": "todos",
+                "turno": "15",
+                "arquivo": arquivo,
+            },
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(
+            LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.PARCIAL, ok=True).exists()
+        )
+        r2 = self.client.get(reverse("gestao_parcial_preview"), {"visao": "gerencia"})
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2["Content-Type"], "image/png")
 
     def test_imagem_ranking_gera_png(self):
         from gestao.pipelines.resultados import montar_ranking
@@ -2246,6 +2306,49 @@ class ResultadosTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r["Content-Type"], "image/png")
         self.assertTrue(r.content.startswith(b"\x89PNG"))
+
+    def test_mensagem_parcial_saudacao_e_frase_do_dia(self):
+        from gestao.pipelines.resultados import (
+            FRASES_COMERCIAIS,
+            caption_parcial_envio,
+            frase_comercial_do_dia,
+            mensagem_parcial,
+            saudacao_horario,
+        )
+
+        self.assertEqual(len(set(FRASES_COMERCIAIS)), len(FRASES_COMERCIAIS))
+        self.assertGreaterEqual(len(FRASES_COMERCIAIS), 31)
+        self.assertEqual(saudacao_horario(8), ("☀️", "Bom dia"))
+        self.assertEqual(saudacao_horario(12), ("🌤️", "Boa tarde"))
+        self.assertEqual(saudacao_horario(18), ("🌙", "Boa noite"))
+
+        manha = self._dt(2026, 9, 2, 8)
+        msg = mensagem_parcial(pdv="INOVA MG", agora=manha, ano=2026, mes=9)
+        self.assertIn("Bom dia, *INOVA MG*!", msg)
+        self.assertIn("🎯 *Meta do mês — 09/2026*", msg)
+        self.assertIn("Segue o acompanhamento. Foco no resultado.", msg)
+        self.assertIn(f"_{frase_comercial_do_dia(manha.date())}_", msg)
+        self.assertEqual(msg.count("\n\n"), 3)
+
+        tarde = mensagem_parcial(pdv="time", agora=self._dt(2026, 9, 2, 15), ano=2026, mes=9)
+        self.assertIn("Boa tarde, *time*!", tarde)
+        noite = mensagem_parcial(pdv="time", agora=self._dt(2026, 9, 2, 21), ano=2026, mes=9)
+        self.assertIn("Boa noite, *time*!", noite)
+
+        d1, d2 = date(2026, 9, 2), date(2026, 9, 3)
+        self.assertNotEqual(frase_comercial_do_dia(d1), frase_comercial_do_dia(d2))
+        self.assertEqual(frase_comercial_do_dia(d1), frase_comercial_do_dia(d1))
+
+        gerada = mensagem_parcial(agora=manha, ano=2026, mes=9)
+        personalizada = caption_parcial_envio(gerada, self.pdv, agora=manha, ano=2026, mes=9)
+        self.assertIn("*INOVA MG*", personalizada)
+        self.assertNotIn("*time*", personalizada)
+        self.assertEqual(
+            caption_parcial_envio("Texto livre", self.pdv),
+            "Texto livre",
+        )
+        vazia = caption_parcial_envio("", self.pdv, agora=manha, ano=2026, mes=9)
+        self.assertIn("Bom dia, *INOVA MG*!", vazia)
 
     def test_import_osab_persiste_municipio(self):
         hoje = timezone.localdate()

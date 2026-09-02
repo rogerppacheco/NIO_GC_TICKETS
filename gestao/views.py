@@ -53,8 +53,10 @@ from .messaging.envio import (
     enviar_recompra_lote,
     enviar_venda_indevida,
     enviar_venda_indevida_lote,
-    enviar_parcial,
-    enviar_parcial_todos,
+    enviar_parcial_carteira,
+    enviar_parcial_gerencia,
+    enviar_parcial_grupos,
+    enviar_parcial_pdv,
     enviar_acumulado_pdv,
     enviar_acumulado_todos,
     enviar_ranking,
@@ -110,11 +112,20 @@ from .pipelines.calendario import (
 )
 from .pipelines.osab import calcular_osab, persistir_capilaridade, processar_osab, relatorios_osab_atuais
 from .pipelines.recompra import processar_recompra
+from .pipelines.parcial_vendas import (
+    HORARIOS_PARCIAL,
+    mensagem_parcial_gerencia,
+    mensagem_parcial_especialista,
+    processar_parcial_excel,
+    sub_parcial,
+    turno_parcial,
+)
 from .pipelines.resultados import (
     cadastrar_praca_btu,
     gaps_ranking,
     linhas_acumulado,
     mensagem_acumulado_consolidada,
+    mensagem_parcial,
     montar_ranking,
 )
 from .pipelines.tarefas import processar_tarefas
@@ -496,6 +507,25 @@ def osab_view(request: HttpRequest) -> HttpResponse:
     )
 
 
+def _grupos_parcial(parceiros: list[Parceiro]):
+    return _grupos_ranking(parceiros)
+
+
+def _parcial_dados(request) -> dict | None:
+    lote = (
+        LoteImportacao.objects.filter(
+            tipo=LoteImportacao.Tipo.PARCIAL,
+            ok=True,
+            criado_por=request.user,
+        )
+        .order_by("-criado_em")
+        .first()
+    )
+    if not lote or not lote.resumo:
+        return None
+    return lote.resumo
+
+
 def _grupos_ranking(parceiros: list[Parceiro]):
     ids = [p.pk for p in parceiros]
     return (
@@ -623,13 +653,44 @@ def ranking_preview(request: HttpRequest) -> HttpResponse:
 
 
 @login_required
+def parcial_preview(request: HttpRequest) -> HttpResponse:
+    from .parcial_imagem import imagem_parcial_carteira, imagem_parcial_gerencia
+
+    visao = (request.GET.get("visao") or "gerencia").strip().lower()
+    dados = _parcial_dados(request)
+    if not dados:
+        return HttpResponse("Importe a base Excel primeiro.", status=404)
+    if visao == "carteira":
+        if eh_gestor(request.user):
+            sub = sub_parcial(dados["linhas"], dados, titulo="Carteira PP")
+            png, _ = imagem_parcial_carteira(sub, titulo="Carteira PP")
+        else:
+            from .pipelines.parcial_vendas import linhas_especialista
+
+            linhas = linhas_especialista(dados, request.user.id)
+            sub = sub_parcial(linhas or dados["linhas"], dados, titulo="Minha carteira")
+            png, _ = imagem_parcial_carteira(sub, titulo="Minha carteira")
+    else:
+        png, _ = imagem_parcial_gerencia(dados)
+    return HttpResponse(png, content_type="image/png")
+
+
+@login_required
 def resultados_view(request: HttpRequest) -> HttpResponse:
     ano, mes = periodo_ativo()
     visiveis = list(_parceiros(request))
+    _, rotulo_turno = turno_parcial()
+    parcial_dados = _parcial_dados(request)
+    grupos_parcial = list(_grupos_parcial(visiveis))
     form = ParcialResultadoForm(
         request.POST or None,
         request.FILES or None,
         parceiros=Parceiro.objects.filter(pk__in=[p.pk for p in visiveis]),
+        grupos=Destinatario.objects.filter(pk__in=[g.pk for g in grupos_parcial]),
+        initial={
+            "caption": mensagem_parcial(ano=ano, mes=mes),
+            "turno": str(turno_parcial()[0]),
+        },
     )
     form_btu = PracaBTUForm(request.POST or None)
     form_gdp = GdpImportForm()
@@ -686,45 +747,102 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             if apagada:
                 messages.success(request, "Praça BTU removida.")
             return _voltar(request, "gestao_resultados", extra="aba=ranking")
-        if action in {"enviar_parcial", "enviar_parcial_todos"} and _pode_enviar(request):
+        if action == "importar_parcial" and _pode_importar(request):
             form = ParcialResultadoForm(
                 request.POST,
                 request.FILES,
                 parceiros=Parceiro.objects.filter(pk__in=[p.pk for p in visiveis]),
+                grupos=Destinatario.objects.filter(pk__in=[g.pk for g in grupos_parcial]),
             )
-            if not form.is_valid():
-                messages.error(request, "Anexe uma imagem PNG, JPG ou WEBP.")
-                return _voltar(request, "gestao_resultados")
-            arquivo = form.cleaned_data["arquivo"]
-            arquivo.seek(0)
-            conteudo = arquivo.read()
-            caption = form.cleaned_data.get("caption") or ""
-            if action == "enviar_parcial":
-                parceiro = form.cleaned_data.get("parceiro")
-                if not parceiro:
-                    messages.error(request, "Escolha o PDV para enviar o parcial.")
+            if form.is_valid():
+                arquivo = form.cleaned_data.get("arquivo")
+                if not arquivo:
+                    messages.error(request, "Envie a base Excel com PDV, total e D-7.")
                     return _voltar(request, "gestao_resultados")
+                try:
+                    resumo = processar_parcial_excel(
+                        arquivo,
+                        arquivo.name,
+                        visiveis,
+                        turno=form.turno_int(),
+                        ano=ano,
+                        mes=mes,
+                    )
+                    _lote(request, LoteImportacao.Tipo.PARCIAL, arquivo.name, True, resumo)
+                    aviso = ""
+                    if resumo.get("sem_cadastro"):
+                        aviso = f" {len(resumo['sem_cadastro'])} PDV(s) da planilha sem cadastro."
+                    messages.success(
+                        request,
+                        f"Base importada: {resumo['qtd_pdvs']} PDV(s) · total {resumo['total_pp']} VB · "
+                        f"∆ D-7 {resumo['delta_pp']:+d} · turno {resumo['rotulo_turno']}.{aviso}",
+                    )
+                except Exception as exc:
+                    _lote(request, LoteImportacao.Tipo.PARCIAL, arquivo.name, False, {}, str(exc))
+                    messages.error(request, f"Falha ao importar parcial: {exc}")
+            else:
+                messages.error(request, "Envie a base Excel com PDV, total e D-7.")
+            return _voltar(request, "gestao_resultados")
+        if action in {
+            "enviar_parcial_gerencia",
+            "enviar_parcial_carteira",
+            "enviar_parcial_grupos",
+            "enviar_parcial_pdv",
+        } and _pode_enviar(request):
+            dados = _parcial_dados(request)
+            if not dados:
+                messages.error(request, "Importe a base Excel antes de enviar.")
+                return _voltar(request, "gestao_resultados")
+            caption = (request.POST.get("caption") or "").strip()
+            if action == "enviar_parcial_gerencia":
+                dest_raw = (request.POST.get("destinatario") or "").strip()
+                dest_id = int(dest_raw) if dest_raw.isdigit() else None
                 _flash_resumo(
                     request,
-                    "Parcial",
-                    enviar_parcial(
-                        parceiro,
+                    "Parcial gerência",
+                    enviar_parcial_gerencia(
+                        dados,
                         request.user,
-                        arquivo_bytes=conteudo,
-                        nome_arquivo=arquivo.name,
-                        caption=caption,
+                        destinatario_id=dest_id,
+                        parceiros=visiveis,
+                        caption_extra=caption,
+                    ),
+                )
+            elif action == "enviar_parcial_carteira":
+                _flash_resumo(
+                    request,
+                    "Parcial carteira",
+                    enviar_parcial_carteira(
+                        visiveis,
+                        request.user,
+                        dados,
+                        caption_extra=caption,
+                    ),
+                )
+            elif action == "enviar_parcial_grupos":
+                _flash_resumo(
+                    request,
+                    "Parcial grupos",
+                    enviar_parcial_grupos(
+                        visiveis,
+                        request.user,
+                        dados,
+                        caption_extra=caption,
                     ),
                 )
             else:
+                parceiro = get_object_or_404(
+                    Parceiro.objects.filter(pk__in=[p.pk for p in visiveis]),
+                    pk=request.POST.get("parceiro"),
+                )
                 _flash_resumo(
                     request,
-                    "Parcial (todos)",
-                    enviar_parcial_todos(
-                        visiveis,
+                    "Parcial PDV",
+                    enviar_parcial_pdv(
+                        parceiro,
                         request.user,
-                        arquivo_bytes=conteudo,
-                        nome_arquivo=arquivo.name,
-                        caption=caption,
+                        dados,
+                        caption_extra=caption,
                     ),
                 )
             return _voltar(request, "gestao_resultados")
@@ -777,6 +895,23 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
         aba = "parcial"
     grupos_ranking = list(_grupos_ranking(visiveis))
     grupo_pp_wa = _buscar_grupo_pp_wa() if not grupos_ranking else None
+    msg_parcial_gerencia = mensagem_parcial_gerencia(parcial_dados) if parcial_dados else ""
+    msg_parcial_carteira = ""
+    if parcial_dados:
+        if eh_gestor(request.user):
+            sub = sub_parcial(parcial_dados["linhas"], parcial_dados, titulo="Carteira PP")
+        else:
+            from .pipelines.parcial_vendas import linhas_especialista
+
+            sub = sub_parcial(
+                linhas_especialista(parcial_dados, request.user.id) or parcial_dados["linhas"],
+                parcial_dados,
+                titulo="Minha carteira",
+            )
+        msg_parcial_carteira = mensagem_parcial_especialista(sub)
+    ultimo_parcial = LoteImportacao.objects.filter(
+        tipo=LoteImportacao.Tipo.PARCIAL, ok=True, criado_por=request.user
+    ).first()
     return render(
         request,
         "gestao/resultados.html",
@@ -792,6 +927,13 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             "ranking": ranking,
             "gaps_ranking": gaps_ranking(ranking),
             "grupos_ranking": grupos_ranking,
+            "grupos_parcial": grupos_parcial,
+            "parcial_dados": parcial_dados,
+            "parcial_turno": rotulo_turno,
+            "parcial_horarios": HORARIOS_PARCIAL,
+            "msg_parcial_gerencia": msg_parcial_gerencia,
+            "msg_parcial_carteira": msg_parcial_carteira,
+            "ultimo_parcial": ultimo_parcial,
             "ranking_grupo_padrao": _grupo_ranking_padrao(grupos_ranking),
             "grupo_pp_wa": grupo_pp_wa,
             "pracas_btu": pracas_ativas,

@@ -28,6 +28,7 @@ class LoteImportacao(models.Model):
         RECOMPRA = "recompra", "Recompra"
         GDP = "gdp", "GDP / praças BTU"
         METAS = "metas", "Metas (acompanhamento)"
+        PARCIAL = "parcial", "Parcial de vendas"
 
     tipo = models.CharField(max_length=20, choices=Tipo.choices, db_index=True)
     arquivo_nome = models.CharField(max_length=255)

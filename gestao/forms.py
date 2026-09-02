@@ -7,6 +7,7 @@ from django import forms
 from tickets.models import Parceiro
 
 from .models import Destinatario
+from .pipelines.parcial_vendas import HORARIOS_PARCIAL, ROTULOS_TURNO
 
 
 class DestinatarioForm(forms.ModelForm):
@@ -133,36 +134,67 @@ class GrossForm(forms.Form):
 
 class ParcialResultadoForm(forms.Form):
     arquivo = forms.FileField(
-        label="Imagem",
-        help_text="PNG, JPG ou WEBP. Envio para um PDV ou para todos do escopo.",
+        label="Base Excel",
+        required=False,
+        help_text=(
+            "Exporte da dashboard: colunas PDV, vendas totais do mês e referência D-7 "
+            "(TOTAL / REALIZADO e D-7 ou VENDAS_D7). .xlsx, .xls ou .xlsb."
+        ),
+    )
+    turno = forms.ChoiceField(
+        label="Horário do parcial",
+        choices=[(str(h), f"{ROTULOS_TURNO[h]} — parcial do turno") for h in HORARIOS_PARCIAL],
+        required=False,
+        help_text="12h, 15h ou 18h. Se vazio, usa o turno atual.",
     )
     caption = forms.CharField(
-        label="Texto / legenda",
+        label="Legenda complementar",
         required=False,
-        max_length=900,
+        max_length=1024,
         widget=forms.Textarea(
-            attrs={"rows": 3, "placeholder": "Texto curto que vai junto da imagem."}
+            attrs={
+                "rows": 6,
+                "placeholder": "Opcional — a legenda principal é gerada automaticamente.",
+            }
         ),
+        help_text="Saudação, frase do dia e dados do parcial. *time* vira o nome do PDV nos envios individuais.",
     )
     parceiro = forms.ModelChoiceField(
         queryset=Parceiro.objects.none(),
         required=False,
-        label="PDV",
+        label="PDV (envio avulso)",
+    )
+    destinatario = forms.ModelChoiceField(
+        queryset=Destinatario.objects.none(),
+        required=False,
+        label="Grupo gerência / parceiros",
     )
 
-    def __init__(self, *args, parceiros=None, **kwargs):
+    def __init__(self, *args, parceiros=None, grupos=None, **kwargs):
         super().__init__(*args, **kwargs)
         qs = parceiros if parceiros is not None else Parceiro.objects.filter(ativo=True)
         self.fields["parceiro"].queryset = qs
+        self.fields["destinatario"].queryset = grupos or Destinatario.objects.none()
 
     def clean_arquivo(self):
-        arquivo = self.cleaned_data["arquivo"]
+        arquivo = self.cleaned_data.get("arquivo")
+        if not arquivo:
+            return arquivo
         nome = (arquivo.name or "").lower()
-        if not any(nome.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp")):
-            raise forms.ValidationError("Use uma imagem PNG, JPG ou WEBP.")
-        if arquivo.size and arquivo.size > 8 * 1024 * 1024:
-            raise forms.ValidationError("A imagem deve ter no máximo 8 MB.")
+        if not nome.endswith((".xlsx", ".xls", ".xlsb")):
+            raise forms.ValidationError("Use a base em Excel (.xlsx, .xls ou .xlsb).")
+        if arquivo.size and arquivo.size > 12 * 1024 * 1024:
+            raise forms.ValidationError("A planilha deve ter no máximo 12 MB.")
         return arquivo
+
+    def turno_int(self) -> int | None:
+        raw = self.cleaned_data.get("turno")
+        if not raw:
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
 
 
 class PracaBTUForm(forms.Form):
