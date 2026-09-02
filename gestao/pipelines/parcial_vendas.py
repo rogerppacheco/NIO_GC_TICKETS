@@ -62,6 +62,37 @@ def _int_valor(valor) -> int:
         return 0
 
 
+def _linha_parceiro(parceiro: Parceiro, *, vendas: int = 0, d7: int = 0) -> dict:
+    esp_nome = "—"
+    esp_id = None
+    if parceiro.especialista_id:
+        esp_id = parceiro.especialista_id
+        user = parceiro.especialista
+        esp_nome = (user.get_full_name() or user.username or "—").strip()
+    return {
+        "parceiro_id": parceiro.pk,
+        "pdv": (parceiro.nome or "").strip(),
+        "vendas": vendas,
+        "d7": d7,
+        "delta": vendas - d7,
+        "especialista_id": esp_id,
+        "especialista": esp_nome,
+    }
+
+
+def _completar_parceiros_escopo(
+    linhas: list[dict],
+    mapa_parceiros: dict[int, Parceiro],
+) -> list[dict]:
+    """PDVs do escopo ausentes na planilha entram com zero."""
+    vistos = {l["parceiro_id"] for l in linhas}
+    out = list(linhas)
+    for pid, parceiro in sorted(mapa_parceiros.items(), key=lambda x: (x[1].nome or "").upper()):
+        if pid not in vistos:
+            out.append(_linha_parceiro(parceiro))
+    return out
+
+
 def processar_parcial_excel(
     arquivo,
     nome_arquivo: str,
@@ -100,7 +131,7 @@ def processar_parcial_excel(
         mapa_parceiros = {p.pk: p for p in lista}
 
     indice = indice_parceiros()
-    linhas: list[dict] = []
+    por_id: dict[int, dict] = {}
     sem_cadastro: list[str] = []
     for _, row in df.iterrows():
         nome_pdv = texto(row.get("pdv"))
@@ -116,32 +147,28 @@ def processar_parcial_excel(
             continue
         parceiro = mapa_parceiros.get(pid)
         if parceiro is None and escopo_ids is not None:
-            parceiro = Parceiro.objects.filter(pk=pid).first()
-        esp_nome = "—"
-        esp_id = None
-        if parceiro and parceiro.especialista_id:
-            esp_id = parceiro.especialista_id
-            esp_nome = (
-                parceiro.especialista.get_full_name()
-                or parceiro.especialista.username
-                or "—"
-            )
-        linhas.append(
-            {
+            parceiro = Parceiro.objects.filter(pk=pid).select_related("especialista").first()
+        if parceiro:
+            por_id[pid] = _linha_parceiro(parceiro, vendas=vendas, d7=d7)
+        else:
+            por_id[pid] = {
                 "parceiro_id": pid,
-                "pdv": (parceiro.nome if parceiro else nome_pdv).strip(),
+                "pdv": nome_pdv.strip(),
                 "vendas": vendas,
                 "d7": d7,
                 "delta": vendas - d7,
-                "especialista_id": esp_id,
-                "especialista": esp_nome.strip(),
+                "especialista_id": None,
+                "especialista": "—",
             }
-        )
+
+    linhas = list(por_id.values())
+    if mapa_parceiros:
+        linhas = _completar_parceiros_escopo(linhas, mapa_parceiros)
 
     if not linhas:
         raise ValueError(
-            "Nenhum PDV do escopo encontrado na planilha. "
-            f"{len(sem_cadastro)} linha(s) sem cadastro."
+            "Nenhum PDV no escopo. "
+            f"{len(sem_cadastro)} linha(s) da planilha sem cadastro."
         )
 
     return montar_parcial(
@@ -153,6 +180,16 @@ def processar_parcial_excel(
         sem_cadastro=sem_cadastro,
         arquivo=nome_arquivo,
     )
+
+
+def _top_e_piores(linhas: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Top 5 e piores 5 sem repetir PDV (piores vêm do restante após o top)."""
+    ordenado = sorted(linhas, key=lambda l: (-l["delta"], l["pdv"].upper()))
+    top5 = ordenado[:5]
+    ids_top = {l["parceiro_id"] for l in top5}
+    restantes = [l for l in linhas if l.get("parceiro_id") not in ids_top]
+    pior5 = sorted(restantes, key=lambda l: (l["delta"], l["pdv"].upper()))[:5]
+    return top5, pior5
 
 
 def montar_parcial(
@@ -168,9 +205,7 @@ def montar_parcial(
 ) -> dict:
     agora = agora or timezone.localtime()
     data_ref = agora.date() if isinstance(agora, datetime) else hoje()
-    ordenado_delta = sorted(linhas, key=lambda l: (-l["delta"], l["pdv"].upper()))
-    top5 = ordenado_delta[:5]
-    pior5 = sorted(linhas, key=lambda l: (l["delta"], l["pdv"].upper()))[:5]
+    top5, pior5 = _top_e_piores(linhas)
     total_pp = sum(l["vendas"] for l in linhas)
     total_d7 = sum(l["d7"] for l in linhas)
     return {
@@ -214,7 +249,7 @@ def sub_parcial(
 ) -> dict:
     total = sum(l["vendas"] for l in linhas)
     total_d7 = sum(l["d7"] for l in linhas)
-    ordenado = sorted(linhas, key=lambda l: (-l["delta"], l["pdv"].upper()))
+    top5, pior5 = _top_e_piores(linhas)
     return {
         **{k: base[k] for k in ("ano", "mes", "turno", "rotulo_turno", "data_ref", "arquivo")},
         "titulo": titulo,
@@ -222,8 +257,8 @@ def sub_parcial(
         "total_pp": total,
         "total_d7": total_d7,
         "delta_pp": total - total_d7,
-        "top5": ordenado[:5],
-        "pior5": sorted(linhas, key=lambda l: (l["delta"], l["pdv"].upper()))[:5],
+        "top5": top5,
+        "pior5": pior5,
         "qtd_pdvs": len(linhas),
         "sem_cadastro": [],
     }

@@ -143,6 +143,12 @@ def _desenhar_linha_dados(
     return y + ALT_LINHA
 
 
+def _altura_tabela_simples(qtd_linhas: int, *, com_total: bool = False) -> int:
+    linhas = max(qtd_linhas, 1)
+    extra = ALT_LINHA if com_total else 0
+    return 36 + linhas * ALT_LINHA + extra + 12
+
+
 def _desenhar_tabela_simples(
     draw: ImageDraw.ImageDraw,
     *,
@@ -155,11 +161,13 @@ def _desenhar_tabela_simples(
     font_head,
     font_cell,
     total: dict | None = None,
+    vazio_msg: str = "Sem dados.",
 ) -> int:
     largura = _largura_cols(cols)
-    n = len(itens) + (1 if total else 0)
-    n = max(n, 1)
-    altura = 36 + n * ALT_LINHA + (FOOTER_H if total else 0) + 8
+    qtd = len(itens) if itens else 1
+    if total and itens:
+        qtd += 1
+    altura = _altura_tabela_simples(len(itens) if itens else 1, com_total=bool(total and itens))
     draw.rounded_rectangle((x, y, x + largura, y + altura), radius=10, outline=LINE, fill=BG)
     draw.rectangle((x, y, x + largura, y + 28), fill=BRAND)
     draw.text((x + 10, y + 5), titulo_secao, fill=(255, 255, 255), font=font_titulo)
@@ -172,7 +180,7 @@ def _desenhar_tabela_simples(
     draw.line((x + 6, y + 52, x + largura - 6, y + 52), fill=LINE)
 
     if not itens:
-        draw.text((x + 10, y + 58), "Sem dados.", fill=MUTED, font=font_cell)
+        draw.text((x + 10, y + 58), vazio_msg, fill=MUTED, font=font_cell)
         return y + altura
 
     y_row = y + 54
@@ -206,6 +214,101 @@ def _desenhar_tabela_simples(
             fundo=BRAND_SOFT,
         )
     return y + altura
+
+
+def _desenhar_total_pp(
+    draw: ImageDraw.ImageDraw,
+    *,
+    x: int,
+    y: int,
+    dados: dict,
+    cols: list[tuple[str, int]],
+    font_head,
+) -> int:
+    largura = _largura_cols(cols)
+    altura = ALT_LINHA + 16
+    draw.rounded_rectangle((x, y, x + largura, y + altura), radius=10, outline=LINE, fill=BG)
+    _desenhar_linha_dados(
+        draw,
+        x=x,
+        y=y + 6,
+        largura=largura,
+        item={
+            "pdv": "TOTAL PP",
+            "vendas": dados.get("total_pp", 0),
+            "d7": dados.get("total_d7", 0),
+            "delta": dados.get("delta_pp", 0),
+        },
+        cols=cols,
+        font_cell=font_head,
+        fundo=BRAND_SOFT,
+    )
+    return y + altura
+
+
+def imagem_parcial_gerencia(dados: dict) -> tuple[bytes, str]:
+    font_banner = _fonte(24, negrito=True)
+    font_sub = _fonte(13)
+    font_titulo = _fonte(14, negrito=True)
+    font_head = _fonte(12, negrito=True)
+    font_cell = _fonte(12)
+
+    cols = COLS
+    top5 = dados.get("top5") or []
+    pior5 = dados.get("pior5") or []
+    tab_w = _largura_cols(cols)
+    largura = tab_w + 2 * PAD
+    altura = (
+        HEADER_H
+        + _altura_tabela_simples(max(len(top5), 1))
+        + 12
+        + _altura_tabela_simples(len(pior5) if pior5 else 1)
+        + 12
+        + ALT_LINHA + 16
+        + PAD
+    )
+
+    img = Image.new("RGB", (largura, altura), BG)
+    draw = ImageDraw.Draw(img)
+    _desenhar_header(
+        draw,
+        largura=largura,
+        titulo="Parcial de vendas · Gerência PP",
+        subtitulo=_subtitulo(dados),
+        metricas=_metricas_totais(dados),
+        font_banner=font_banner,
+        font_sub=font_sub,
+    )
+
+    y = HEADER_H
+    y = _desenhar_tabela_simples(
+        draw,
+        x=PAD,
+        y=y,
+        titulo_secao="▲ Top 5 — ∆ absoluto D-7",
+        itens=top5,
+        cols=cols,
+        font_titulo=font_titulo,
+        font_head=font_head,
+        font_cell=font_cell,
+    )
+    y += 12
+    y = _desenhar_tabela_simples(
+        draw,
+        x=PAD,
+        y=y,
+        titulo_secao="▼ Piores 5 — ∆ absoluto D-7",
+        itens=pior5,
+        cols=cols,
+        font_titulo=font_titulo,
+        font_head=font_head,
+        font_cell=font_cell,
+        vazio_msg="Nenhum PDV adicional (≤5 no escopo).",
+    )
+    y += 12
+    _desenhar_total_pp(draw, x=PAD, y=y, dados=dados, cols=cols, font_head=font_head)
+
+    return _salvar_png(img, dados, "Gerencia")
 
 
 def _altura_grupo(qtd_pdvs: int) -> int:
@@ -280,80 +383,6 @@ def _desenhar_por_especialista(
             fundo=BRAND_SOFT,
         )
     return y_cur + 8
-
-
-def imagem_parcial_gerencia(dados: dict) -> tuple[bytes, str]:
-    font_banner = _fonte(24, negrito=True)
-    font_sub = _fonte(13)
-    font_titulo = _fonte(14, negrito=True)
-    font_head = _fonte(12, negrito=True)
-    font_cell = _fonte(12)
-
-    cols = COLS
-    top5 = dados.get("top5") or []
-    pior5 = dados.get("pior5") or []
-    tot_top = {
-        "rotulo": "TOTAL (top 5)",
-        "vendas": sum(i["vendas"] for i in top5),
-        "d7": sum(i["d7"] for i in top5),
-        "delta": sum(i["delta"] for i in top5),
-    }
-    tot_pior = {
-        "rotulo": "TOTAL (piores 5)",
-        "vendas": sum(i["vendas"] for i in pior5),
-        "d7": sum(i["d7"] for i in pior5),
-        "delta": sum(i["delta"] for i in pior5),
-    }
-    tab_w = _largura_cols(cols)
-    largura = tab_w + 2 * PAD
-    altura = (
-        HEADER_H
-        + 36 + len(top5) * ALT_LINHA + FOOTER_H + 8
-        + 12
-        + 36 + len(pior5) * ALT_LINHA + FOOTER_H + 8
-        + PAD
-    )
-
-    img = Image.new("RGB", (largura, altura), BG)
-    draw = ImageDraw.Draw(img)
-    _desenhar_header(
-        draw,
-        largura=largura,
-        titulo="Parcial de vendas · Gerência PP",
-        subtitulo=_subtitulo(dados),
-        metricas=_metricas_totais(dados),
-        font_banner=font_banner,
-        font_sub=font_sub,
-    )
-
-    y = HEADER_H
-    y = _desenhar_tabela_simples(
-        draw,
-        x=PAD,
-        y=y,
-        titulo_secao="▲ Top 5 — ∆ absoluto D-7",
-        itens=top5,
-        cols=cols,
-        font_titulo=font_titulo,
-        font_head=font_head,
-        font_cell=font_cell,
-        total=tot_top if top5 else None,
-    )
-    y += 12
-    _desenhar_tabela_simples(
-        draw,
-        x=PAD,
-        y=y,
-        titulo_secao="▼ Piores 5 — ∆ absoluto D-7",
-        itens=pior5,
-        cols=cols,
-        font_titulo=font_titulo,
-        font_head=font_head,
-        font_cell=font_cell,
-        total=tot_pior if pior5 else None,
-    )
-
-    return _salvar_png(img, dados, "Gerencia")
 
 
 def imagem_parcial_especialistas(dados: dict, *, titulo: str = "Carteira PP") -> tuple[bytes, str]:

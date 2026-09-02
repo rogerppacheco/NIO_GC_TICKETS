@@ -2274,6 +2274,49 @@ class ResultadosTests(TestCase):
         msg = caption_imagem_parcial(resumo, sufixo="Gerência PP")
         self.assertIn("Parcial", msg)
 
+    def test_top_e_piores_sem_repetir(self):
+        from gestao.pipelines.parcial_vendas import _top_e_piores
+
+        linhas = [
+            {"parceiro_id": 1, "pdv": "A", "vendas": 6, "d7": 0, "delta": 6},
+            {"parceiro_id": 2, "pdv": "B", "vendas": 5, "d7": 1, "delta": 4},
+            {"parceiro_id": 3, "pdv": "C", "vendas": 2, "d7": 0, "delta": 2},
+            {"parceiro_id": 4, "pdv": "VISION", "vendas": 3, "d7": 6, "delta": -3},
+        ]
+        top, pior = _top_e_piores(linhas)
+        self.assertEqual(len(top), 4)
+        self.assertEqual(pior, [])
+
+        linhas6 = linhas + [
+            {"parceiro_id": 5, "pdv": "E", "vendas": 1, "d7": 0, "delta": 1},
+            {"parceiro_id": 6, "pdv": "F", "vendas": 0, "d7": 0, "delta": 0},
+        ]
+        top6, pior6 = _top_e_piores(linhas6)
+        self.assertEqual(len(top6), 5)
+        self.assertEqual(len(pior6), 1)
+        self.assertEqual(pior6[0]["pdv"], "VISION")
+        ids_top = {l["parceiro_id"] for l in top6}
+        ids_pior = {l["parceiro_id"] for l in pior6}
+        self.assertFalse(ids_top & ids_pior)
+
+    def test_parcial_completa_ausentes_com_zero(self):
+        from gestao.pipelines.parcial_vendas import processar_parcial_excel
+
+        outro = Parceiro.objects.create(codigo_pdv="r2", nome="POINT CELL")
+        arquivo = _xlsx(
+            [["INOVA MG", 45, 38]],
+            ["PDV", "TOTAL", "D-7"],
+        )
+        resumo = processar_parcial_excel(
+            arquivo, "parcial.xlsx", [self.pdv, outro], turno=15, ano=2026, mes=9
+        )
+        self.assertEqual(resumo["qtd_pdvs"], 2)
+        self.assertEqual(resumo["total_pp"], 45)
+        linha_zero = next(l for l in resumo["linhas"] if l["pdv"] == "POINT CELL")
+        self.assertEqual(linha_zero["vendas"], 0)
+        self.assertEqual(linha_zero["d7"], 0)
+        self.assertEqual(linha_zero["delta"], 0)
+
     def test_importar_parcial_pela_tela(self):
         arquivo = _xlsx(
             [["INOVA MG", 30, 25]],
