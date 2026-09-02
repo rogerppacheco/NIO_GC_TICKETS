@@ -1,26 +1,49 @@
 {% extends "base.html" %}
 {% block title %}Resultados · Gestão{% endblock %}
-{% block body_class %}page-resultados{% endblock %}
-{% block main_class %}wrap wrap-resultados{% endblock %}
+{% block body_class %}page-resultados page-gestao-sidebar{% endblock %}
+{% block main_class %}wrap wrap-resultados wrap-gestao-sidebar{% endblock %}
 {% block content %}
-{% include "gestao/_escopo.html" %}
-<div class="hero">
-  <div>
-    <h1>Resultados</h1>
-    <p>Parcial (Excel → imagem), acumulado do mês {{ mes|stringformat:"02d" }}/{{ ano }} e ranking de VB.</p>
-  </div>
-</div>
+<div class="gestao-page-shell">
+  <aside class="gestao-page-sidebar" aria-label="Navegação">
+    {% include "gestao/_nav_sidebar.html" %}
+    <div class="gestao-sidebar-block">
+      {% include "gestao/_escopo.html" %}
+    </div>
+    <nav class="gestao-sidebar-block gestao-sidebar-tabs" aria-label="Resultados">
+      <span class="gestao-sidebar-label">Resultados</span>
+      <a class="gestao-sidebar-tab{% if aba == 'parcial' %} is-on{% endif %}"
+         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial">Parcial de vendas</a>
+      <a class="gestao-sidebar-tab{% if aba == 'acumulado' %} is-on{% endif %}"
+         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=acumulado">Acumulado do mês</a>
+      <a class="gestao-sidebar-tab{% if aba == 'ranking' %} is-on{% endif %}"
+         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=ranking">Ranking de VB</a>
+    </nav>
+    {% if aba == "parcial" and parcial_dados %}
+    <nav class="gestao-sidebar-block gestao-sidebar-tabs" aria-label="Parcial">
+      <span class="gestao-sidebar-label">Parcial</span>
+      <a class="gestao-sidebar-tab{% if parcial_sub == 'gerencia' %} is-on{% endif %}"
+         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=gerencia">Gerência</a>
+      {% if eh_gestor %}
+      <a class="gestao-sidebar-tab{% if parcial_sub == 'consolidado' %} is-on{% endif %}"
+         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=consolidado">Carteira PP</a>
+      {% endif %}
+      <a class="gestao-sidebar-tab{% if parcial_sub == 'especialistas' %} is-on{% endif %}"
+         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=especialistas">Especialistas</a>
+      <a class="gestao-sidebar-tab{% if parcial_sub == 'parceiros' %} is-on{% endif %}"
+         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=parceiros">Parceiros</a>
+    </nav>
+    {% endif %}
+  </aside>
 
-<div class="panel resultados-tabs-panel">
-  <div class="tabs resultados-tabs" role="tablist">
-    <a class="tab{% if aba == 'parcial' %} is-active{% endif %}"
-       href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial" role="tab">Parcial de vendas</a>
-    <a class="tab{% if aba == 'acumulado' %} is-active{% endif %}"
-       href="?escopo={{ gestao_escopo|default:'meus' }}&aba=acumulado" role="tab">Acumulado do mês</a>
-    <a class="tab{% if aba == 'ranking' %} is-active{% endif %}"
-       href="?escopo={{ gestao_escopo|default:'meus' }}&aba=ranking" role="tab">Ranking de VB</a>
-  </div>
+  <div class="gestao-page-main">
+    <div class="hero hero-compact">
+      <div>
+        <h1>Resultados</h1>
+        <p class="help" style="margin:0.15rem 0 0">Parcial (Excel → imagem), acumulado {{ mes|stringformat:"02d" }}/{{ ano }} e ranking VB.</p>
+      </div>
+    </div>
 
+    <div class="panel resultados-tabs-panel">
   {% if aba == "parcial" %}
   <div class="tab-panel is-active" role="tabpanel">
     <div class="parcial-intro">
@@ -31,6 +54,9 @@
         Base ativa: {{ parcial_dados.qtd_pdvs }} PDV(s) · {{ parcial_dados.total_pp }} VB · ∆ D-7 {{ parcial_dados.delta_pp|stringformat:"+d" }}
         · turno {{ parcial_dados.rotulo_turno }}
         {% if ultimo_parcial %} · importada {{ ultimo_parcial.criado_em|date:"d/m H:i" }}{% endif %}.
+        {% if parcial_sub == "gerencia" and eh_gestor and gestao_escopo != "todos" %}
+        <span class="help">Gerência usa todos os PDVs da gerência PP.</span>
+        {% endif %}
         {% else %}
         Turno sugerido agora: <strong>{{ parcial_turno }}</strong>.
         {% endif %}
@@ -38,7 +64,7 @@
     </div>
 
     {% if pode_editar %}
-    <form method="post" enctype="multipart/form-data" class="form-grid parcial-import" style="margin-top:0.85rem">
+    <form method="post" enctype="multipart/form-data" class="form-grid parcial-import parcial-import-compact" style="margin-top:0.85rem">
       {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       <input type="hidden" name="action" value="importar_parcial">
       <div>{{ form.arquivo.label_tag }}{{ form.arquivo }}<div class="help">{{ form.arquivo.help_text }}</div></div>
@@ -48,22 +74,10 @@
     {% endif %}
 
     {% if parcial_dados %}
-    <div class="parcial-subtabs tabs" role="tablist" style="margin-top:1rem">
-      <a class="tab{% if parcial_sub == 'gerencia' %} is-active{% endif %}"
-         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=gerencia" role="tab">Gerência</a>
-      {% if eh_gestor %}
-      <a class="tab{% if parcial_sub == 'consolidado' %} is-active{% endif %}"
-         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=consolidado" role="tab">Carteira PP</a>
-      {% endif %}
-      <a class="tab{% if parcial_sub == 'especialistas' %} is-active{% endif %}"
-         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=especialistas" role="tab">Especialistas</a>
-      <a class="tab{% if parcial_sub == 'parceiros' %} is-active{% endif %}"
-         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=parceiros" role="tab">Parceiros</a>
-    </div>
 
     {% if parcial_sub == "gerencia" and eh_gestor %}
-    <div class="parcial-card-envio">
-      <div class="parcial-card-preview">
+    <div class="parcial-card-envio parcial-card-envio-full">
+      <div class="parcial-card-preview parcial-card-preview-full">
         <img class="parcial-preview-img"
           src="{% url 'gestao_parcial_preview' %}?escopo={{ gestao_escopo|default:'meus' }}&visao=gerencia&_={{ ultimo_parcial.criado_em|date:'U' }}"
           alt="Parcial gerência" loading="lazy">
@@ -72,7 +86,7 @@
       <form method="post" class="parcial-card-acao">
         {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
         <input type="hidden" name="parcial_sub" value="gerencia">
-        <p class="help" style="margin:0">Top/pior 5 · total PP · envio só da imagem.</p>
+        <p class="help" style="margin:0">Top/bottom 5 · total PP · envio só da imagem.</p>
         <select name="destinatario" required>
           <option value="">Grupo gerência…</option>
           {% for g in grupos_parcial %}
@@ -88,8 +102,8 @@
     {% endif %}
 
     {% if parcial_sub == "consolidado" and eh_gestor %}
-    <div class="parcial-card-envio">
-      <div class="parcial-card-preview">
+    <div class="parcial-card-envio parcial-card-envio-full">
+      <div class="parcial-card-preview parcial-card-preview-full">
         <img class="parcial-preview-img"
           src="{% url 'gestao_parcial_preview' %}?escopo={{ gestao_escopo|default:'meus' }}&visao=consolidado&_={{ ultimo_parcial.criado_em|date:'U' }}"
           alt="Carteira PP consolidada" loading="lazy">
@@ -394,5 +408,7 @@
     </div>
   </div>
   {% endif %}
+    </div>
+  </div>
 </div>
 {% endblock %}

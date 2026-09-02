@@ -297,7 +297,7 @@ def imagem_parcial_gerencia(dados: dict) -> tuple[bytes, str]:
         draw,
         x=PAD,
         y=y,
-        titulo_secao="▼ Piores 5 — ∆ absoluto D-7",
+        titulo_secao="▼ Bottom 5 — ∆ absoluto D-7",
         itens=pior5,
         cols=cols,
         font_titulo=font_titulo,

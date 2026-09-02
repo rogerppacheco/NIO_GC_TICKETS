@@ -116,6 +116,7 @@ from .pipelines.recompra import processar_recompra
 from .pipelines.parcial_vendas import (
     HORARIOS_PARCIAL,
     agrupar_por_especialista,
+    aplicar_escopo_parcial,
     linha_pdv,
     processar_parcial_excel,
     sub_parcial,
@@ -524,7 +525,17 @@ def _grupos_parcial(parceiros: list[Parceiro]):
     return _grupos_ranking(parceiros)
 
 
-def _parcial_dados(request) -> dict | None:
+def _escopo_parcial(request, *, visao: str | None = None) -> str:
+    sub = _parcial_sub(request)
+    vis = (visao or "").strip().lower()
+    if eh_gestor(request.user) and (
+        vis in {"gerencia", "consolidado"} or sub in {"gerencia", "consolidado"}
+    ):
+        return "todos"
+    return escopo_gestao(request)
+
+
+def _parcial_dados(request, *, visao: str | None = None) -> dict | None:
     lote = (
         LoteImportacao.objects.filter(
             tipo=LoteImportacao.Tipo.PARCIAL,
@@ -536,7 +547,8 @@ def _parcial_dados(request) -> dict | None:
     )
     if not lote or not lote.resumo:
         return None
-    return lote.resumo
+    parceiros = list(parceiros_gestao(request.user, _escopo_parcial(request, visao=visao)))
+    return aplicar_escopo_parcial(lote.resumo, parceiros)
 
 
 def _grupos_ranking(parceiros: list[Parceiro]):
@@ -675,7 +687,7 @@ def parcial_preview(request: HttpRequest) -> HttpResponse:
     )
 
     visao = (request.GET.get("visao") or "gerencia").strip().lower()
-    dados = _parcial_dados(request)
+    dados = _parcial_dados(request, visao=visao)
     if not dados:
         return HttpResponse("Importe a base Excel primeiro.", status=404)
     cache = request.GET.get("_") or ""
@@ -800,10 +812,15 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                     messages.error(request, "Envie a base Excel com PDV, total e D-7.")
                     return _voltar(request, "gestao_resultados", extra="aba=parcial&parcial_sub=gerencia")
                 try:
+                    parceiros_import = (
+                        list(parceiros_gestao(request.user, "todos"))
+                        if eh_gestor(request.user)
+                        else visiveis
+                    )
                     resumo = processar_parcial_excel(
                         arquivo,
                         arquivo.name,
-                        visiveis,
+                        parceiros_import,
                         turno=form.turno_int(),
                         ano=ano,
                         mes=mes,

@@ -182,6 +182,28 @@ def processar_parcial_excel(
     )
 
 
+def aplicar_escopo_parcial(dados: dict, parceiros: list) -> dict:
+    """Recalcula totais/top/bottom para o escopo atual (ausentes entram com zero)."""
+    mapa = {p.pk: p for p in parceiros}
+    por_id = {l["parceiro_id"]: l for l in dados.get("linhas") or []}
+    linhas: list[dict] = []
+    for pid in sorted(mapa.keys(), key=lambda x: (mapa[x].nome or "").upper()):
+        linhas.append(por_id[pid] if pid in por_id else _linha_parceiro(mapa[pid]))
+    top5, pior5 = _top_e_piores(linhas)
+    total_pp = sum(l["vendas"] for l in linhas)
+    total_d7 = sum(l["d7"] for l in linhas)
+    return {
+        **dados,
+        "linhas": linhas,
+        "top5": top5,
+        "pior5": pior5,
+        "total_pp": total_pp,
+        "total_d7": total_d7,
+        "delta_pp": total_pp - total_d7,
+        "qtd_pdvs": len(linhas),
+    }
+
+
 def _top_e_piores(linhas: list[dict]) -> tuple[list[dict], list[dict]]:
     """Top 5 e piores 5 sem repetir PDV (piores vêm do restante após o top)."""
     ordenado = sorted(linhas, key=lambda l: (-l["delta"], l["pdv"].upper()))
@@ -323,7 +345,7 @@ def mensagem_parcial_gerencia(dados: dict) -> str:
             f"{i}. {item['pdv']} — {item['vendas']} ({_fmt_delta(item['delta'])} vs D-7)"
         )
     partes.append("")
-    partes.append("*Piores 5 (∆ absoluto D-7)*")
+    partes.append("*Bottom 5 (∆ absoluto D-7)*")
     for i, item in enumerate(dados.get("pior5") or [], start=1):
         partes.append(
             f"{i}. {item['pdv']} — {item['vendas']} ({_fmt_delta(item['delta'])} vs D-7)"

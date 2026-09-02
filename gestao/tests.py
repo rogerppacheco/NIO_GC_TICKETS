@@ -2299,6 +2299,33 @@ class ResultadosTests(TestCase):
         ids_pior = {l["parceiro_id"] for l in pior6}
         self.assertFalse(ids_top & ids_pior)
 
+    def test_parcial_aplica_escopo_todos(self):
+        from gestao.pipelines.parcial_vendas import aplicar_escopo_parcial, montar_parcial
+
+        outro = Parceiro.objects.create(codigo_pdv="r3", nome="OUTRO PDV")
+        base = montar_parcial(
+            [
+                {
+                    "parceiro_id": self.pdv.pk,
+                    "pdv": self.pdv.nome,
+                    "vendas": 10,
+                    "d7": 8,
+                    "delta": 2,
+                    "especialista_id": None,
+                    "especialista": "—",
+                }
+            ],
+            ano=2026,
+            mes=9,
+            turno=15,
+            rotulo_turno="15h",
+        )
+        expandido = aplicar_escopo_parcial(base, [self.pdv, outro])
+        self.assertEqual(expandido["qtd_pdvs"], 2)
+        self.assertEqual(expandido["total_pp"], 10)
+        linha_zero = next(l for l in expandido["linhas"] if l["pdv"] == "OUTRO PDV")
+        self.assertEqual(linha_zero["vendas"], 0)
+
     def test_parcial_completa_ausentes_com_zero(self):
         from gestao.pipelines.parcial_vendas import processar_parcial_excel
 
