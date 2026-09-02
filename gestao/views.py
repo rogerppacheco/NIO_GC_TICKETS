@@ -525,6 +525,17 @@ def _grupos_parcial(parceiros: list[Parceiro]):
     return _grupos_ranking(parceiros)
 
 
+def _parceiros_parcial(request, *, visao: str | None = None) -> list[Parceiro]:
+    """Gerência/consolidado sempre usam todos os PDVs da gerência PP."""
+    sub = _parcial_sub(request)
+    vis = (visao or "").strip().lower()
+    if eh_gestor(request.user) and (
+        vis in {"gerencia", "consolidado"} or sub in {"gerencia", "consolidado"}
+    ):
+        return list(parceiros_gestao(request.user, "todos"))
+    return list(parceiros_gestao(request.user, escopo_gestao(request)))
+
+
 def _escopo_parcial(request, *, visao: str | None = None) -> str:
     sub = _parcial_sub(request)
     vis = (visao or "").strip().lower()
@@ -547,7 +558,7 @@ def _parcial_dados(request, *, visao: str | None = None) -> dict | None:
     )
     if not lote or not lote.resumo:
         return None
-    parceiros = list(parceiros_gestao(request.user, _escopo_parcial(request, visao=visao)))
+    parceiros = _parceiros_parcial(request, visao=visao)
     return aplicar_escopo_parcial(lote.resumo, parceiros)
 
 
@@ -953,6 +964,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
     parcial_sub = _parcial_sub(request)
     parcial_especialistas = []
     parcial_pdvs = []
+    parcial_gerencia_linhas = []
     if parcial_dados:
         todos_grupos = agrupar_por_especialista(parcial_dados.get("linhas") or [])
         if eh_gestor(request.user):
@@ -967,6 +979,11 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             if pid in ids_visiveis:
                 parcial_pdvs.append(linha)
         parcial_pdvs.sort(key=lambda l: l.get("pdv", "").upper())
+        if parcial_sub == "gerencia" and eh_gestor(request.user):
+            parcial_gerencia_linhas = sorted(
+                parcial_dados.get("linhas") or [],
+                key=lambda l: (-l.get("delta", 0), l.get("pdv", "").upper()),
+            )
     ultimo_parcial = LoteImportacao.objects.filter(
         tipo=LoteImportacao.Tipo.PARCIAL, ok=True, criado_por=request.user
     ).first()
@@ -990,6 +1007,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             "parcial_sub": parcial_sub,
             "parcial_especialistas": parcial_especialistas,
             "parcial_pdvs": parcial_pdvs,
+            "parcial_gerencia_linhas": parcial_gerencia_linhas,
             "parcial_turno": rotulo_turno,
             "parcial_horarios": HORARIOS_PARCIAL,
             "ultimo_parcial": ultimo_parcial,

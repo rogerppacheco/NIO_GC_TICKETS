@@ -99,6 +99,38 @@
       </form>
       {% endif %}
     </div>
+    {% if parcial_gerencia_linhas %}
+    <div class="parcial-todos-pdvs">
+      <h3>Todos os PDVs da gerência PP ({{ parcial_gerencia_linhas|length }})</h3>
+      <p class="help" style="margin:0 0 0.5rem">Lista completa ordenada por ∆ D-7. A imagem do WhatsApp leva só top/bottom 5.</p>
+      <div class="table-scroll parcial-todos-scroll">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>PDV</th>
+              <th>Total</th>
+              <th>D-7</th>
+              <th>∆</th>
+              <th>Especialista</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for linha in parcial_gerencia_linhas %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td>{{ linha.pdv }}</td>
+              <td>{{ linha.vendas }}</td>
+              <td>{{ linha.d7 }}</td>
+              <td>{{ linha.delta|stringformat:"+d" }}</td>
+              <td>{{ linha.especialista }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
     {% endif %}
 
     {% if parcial_sub == "consolidado" and eh_gestor %}
