@@ -526,22 +526,21 @@ def _grupos_parcial(parceiros: list[Parceiro]):
 
 
 def _parceiros_parcial(request, *, visao: str | None = None) -> list[Parceiro]:
-    """Gerência/consolidado sempre usam todos os PDVs da gerência PP."""
+    """Gerência/consolidado e escopo todos usam todos os PDVs da gerência."""
     sub = _parcial_sub(request)
     vis = (visao or "").strip().lower()
-    if eh_gestor(request.user) and (
-        vis in {"gerencia", "consolidado"} or sub in {"gerencia", "consolidado"}
-    ):
+    if vis in {"gerencia", "consolidado"} or sub in {"gerencia", "consolidado"}:
         return list(parceiros_gestao(request.user, "todos"))
-    return list(parceiros_gestao(request.user, escopo_gestao(request)))
+    esc = escopo_gestao(request)
+    if esc == "todos":
+        return list(parceiros_gestao(request.user, "todos"))
+    return list(parceiros_gestao(request.user, esc))
 
 
 def _escopo_parcial(request, *, visao: str | None = None) -> str:
     sub = _parcial_sub(request)
     vis = (visao or "").strip().lower()
-    if eh_gestor(request.user) and (
-        vis in {"gerencia", "consolidado"} or sub in {"gerencia", "consolidado"}
-    ):
+    if vis in {"gerencia", "consolidado"} or sub in {"gerencia", "consolidado"}:
         return "todos"
     return escopo_gestao(request)
 
@@ -823,10 +822,17 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                     messages.error(request, "Envie a base Excel com PDV, total e D-7.")
                     return _voltar(request, "gestao_resultados", extra="aba=parcial&parcial_sub=gerencia")
                 try:
+                    parceiros_todos = list(parceiros_gestao(request.user, "todos"))
+                    escopo = escopo_gestao(request)
                     parceiros_import = (
-                        list(parceiros_gestao(request.user, "todos"))
-                        if eh_gestor(request.user)
+                        parceiros_todos
+                        if eh_gestor(request.user) or escopo == "todos"
                         else visiveis
+                    )
+                    ids_gerencia = (
+                        {p.pk for p in parceiros_todos}
+                        if eh_gestor(request.user) or escopo == "todos"
+                        else None
                     )
                     resumo = processar_parcial_excel(
                         arquivo,
@@ -835,6 +841,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                         turno=form.turno_int(),
                         ano=ano,
                         mes=mes,
+                        ids_gerencia=ids_gerencia,
                     )
                     _lote(request, LoteImportacao.Tipo.PARCIAL, arquivo.name, True, resumo)
                     aviso = ""

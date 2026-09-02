@@ -2344,6 +2344,42 @@ class ResultadosTests(TestCase):
         self.assertEqual(linha_zero["d7"], 0)
         self.assertEqual(linha_zero["delta"], 0)
 
+    def test_parcial_import_lê_excel_da_gerencia_inteira(self):
+        from gestao.pipelines.parcial_vendas import aplicar_escopo_parcial, processar_parcial_excel
+
+        User = get_user_model()
+        esp = User.objects.create_user("esp1", "e@x.com", "x")
+        PerfilStaff.objects.create(user=esp, papel=PerfilStaff.Papel.ESPECIALISTA, gerencia="PP")
+        PerfilStaff.objects.filter(user=self.gestor).update(gerencia="PP")
+        self.pdv.especialista = self.gestor
+        self.pdv.save()
+        outro = Parceiro.objects.create(codigo_pdv="r9", nome="FABRETTI", especialista=esp)
+
+        arquivo = _xlsx(
+            [
+                ["INOVA MG", 10, 8],
+                ["FABRETTI", 20, 15],
+            ],
+            ["PDV", "TOTAL", "D-7"],
+        )
+        todos = list(__import__("tickets.acesso", fromlist=["parceiros_gestao"]).parceiros_gestao(self.gestor, "todos"))
+        ids_g = {p.pk for p in todos}
+        resumo = processar_parcial_excel(
+            arquivo,
+            "parcial.xlsx",
+            [self.pdv],
+            ids_gerencia=ids_g,
+            turno=15,
+            ano=2026,
+            mes=9,
+        )
+        self.assertIn(str(outro.pk), resumo.get("vendas_por_id", {}))
+        expandido = aplicar_escopo_parcial(resumo, todos)
+        fabretti = next(l for l in expandido["linhas"] if l["pdv"] == "FABRETTI")
+        self.assertEqual(fabretti["vendas"], 20)
+        self.assertEqual(expandido["total_pp"], 30)
+        self.assertIn("FABRETTI", [l["pdv"] for l in expandido["top5"]])
+
     def test_importar_parcial_pela_tela(self):
         arquivo = _xlsx(
             [["INOVA MG", 30, 25]],

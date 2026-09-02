@@ -57,6 +57,9 @@
         {% if parcial_sub == "gerencia" and eh_gestor and gestao_escopo != "todos" %}
         <span class="help">Gerência usa todos os PDVs da gerência PP.</span>
         {% endif %}
+        {% if parcial_sub == "gerencia" and not parcial_dados.vendas_por_id %}
+        <strong class="help" style="color:var(--warn)"> Reimporte o Excel (com escopo Todos) para o top/bottom refletir vendas de todos os PDVs.</strong>
+        {% endif %}
         {% else %}
         Turno sugerido agora: <strong>{{ parcial_turno }}</strong>.
         {% endif %}

@@ -101,6 +101,7 @@ def processar_parcial_excel(
     turno: int | None = None,
     ano: int | None = None,
     mes: int | None = None,
+    ids_gerencia: set[int] | None = None,
 ) -> dict:
     """Importa base Excel da dashboard: PDV, vendas acumuladas e referência D-7."""
     df = ler_planilha(arquivo, nome_arquivo)
@@ -129,6 +130,7 @@ def processar_parcial_excel(
         lista = list(parceiros)
         escopo_ids = {p.pk for p in lista}
         mapa_parceiros = {p.pk: p for p in lista}
+    ids_gerencia = ids_gerencia or set()
 
     indice = indice_parceiros()
     por_id: dict[int, dict] = {}
@@ -144,9 +146,10 @@ def processar_parcial_excel(
             sem_cadastro.append(nome_pdv)
             continue
         if escopo_ids is not None and pid not in escopo_ids:
-            continue
+            if pid not in ids_gerencia:
+                continue
         parceiro = mapa_parceiros.get(pid)
-        if parceiro is None and escopo_ids is not None:
+        if parceiro is None and (escopo_ids is not None or pid in ids_gerencia):
             parceiro = Parceiro.objects.filter(pk=pid).select_related("especialista").first()
         if parceiro:
             por_id[pid] = _linha_parceiro(parceiro, vendas=vendas, d7=d7)
@@ -161,6 +164,7 @@ def processar_parcial_excel(
                 "especialista": "—",
             }
 
+    vendas_por_id = dict(por_id)
     linhas = list(por_id.values())
     if mapa_parceiros:
         linhas = _completar_parceiros_escopo(linhas, mapa_parceiros)
@@ -171,7 +175,7 @@ def processar_parcial_excel(
             f"{len(sem_cadastro)} linha(s) da planilha sem cadastro."
         )
 
-    return montar_parcial(
+    out = montar_parcial(
         linhas,
         ano=ano,
         mes=mes,
@@ -180,15 +184,38 @@ def processar_parcial_excel(
         sem_cadastro=sem_cadastro,
         arquivo=nome_arquivo,
     )
+    out["vendas_por_id"] = {str(k): v for k, v in vendas_por_id.items()}
+    return out
+
+
+def _mapa_vendas_parcial(dados: dict) -> dict[int, dict]:
+    bruto = dados.get("vendas_por_id")
+    if bruto:
+        out: dict[int, dict] = {}
+        for k, v in bruto.items():
+            pid = int(k) if not isinstance(k, int) else k
+            out[pid] = v
+        return out
+    return {l["parceiro_id"]: l for l in dados.get("linhas") or []}
 
 
 def aplicar_escopo_parcial(dados: dict, parceiros: list) -> dict:
     """Recalcula totais/top/bottom para o escopo atual (ausentes entram com zero)."""
     mapa = {p.pk: p for p in parceiros}
-    por_id = {l["parceiro_id"]: l for l in dados.get("linhas") or []}
+    por_id = _mapa_vendas_parcial(dados)
     linhas: list[dict] = []
     for pid in sorted(mapa.keys(), key=lambda x: (mapa[x].nome or "").upper()):
-        linhas.append(por_id[pid] if pid in por_id else _linha_parceiro(mapa[pid]))
+        if pid in por_id:
+            linha = dict(por_id[pid])
+            if not linha.get("especialista_id") and mapa[pid].especialista_id:
+                linha = _linha_parceiro(
+                    mapa[pid],
+                    vendas=linha.get("vendas", 0),
+                    d7=linha.get("d7", 0),
+                )
+            linhas.append(linha)
+        else:
+            linhas.append(_linha_parceiro(mapa[pid]))
     top5, pior5 = _top_e_piores(linhas)
     total_pp = sum(l["vendas"] for l in linhas)
     total_d7 = sum(l["d7"] for l in linhas)
