@@ -2380,6 +2380,48 @@ class ResultadosTests(TestCase):
         self.assertEqual(expandido["total_pp"], 30)
         self.assertIn("FABRETTI", [l["pdv"] for l in expandido["top5"]])
 
+    def test_agrupar_por_especialista_volume_e_nome_curto(self):
+        from gestao.pipelines.parcial_vendas import agrupar_por_especialista, nome_especialista_curto
+
+        self.assertEqual(nome_especialista_curto("CAIO VINICIUS SILVA DE GRAAFF"), "CAIO GRAAFF")
+        self.assertEqual(nome_especialista_curto("Rogério Pereira Pacheco"), "Rogério Pacheco")
+
+        linhas = [
+            {
+                "parceiro_id": 1,
+                "pdv": "PDV A",
+                "vendas": 5,
+                "d7": 0,
+                "delta": 5,
+                "especialista_id": 1,
+                "especialista": "Ana Silva Costa",
+            },
+            {
+                "parceiro_id": 2,
+                "pdv": "PDV B",
+                "vendas": 10,
+                "d7": 0,
+                "delta": 10,
+                "especialista_id": 2,
+                "especialista": "Bruno Santos Lima",
+            },
+            {
+                "parceiro_id": 3,
+                "pdv": "PDV C",
+                "vendas": 3,
+                "d7": 0,
+                "delta": 3,
+                "especialista_id": 1,
+                "especialista": "Ana Silva Costa",
+            },
+        ]
+        grupos = agrupar_por_especialista(linhas)
+        self.assertEqual(grupos[0]["especialista"], "Bruno Lima")
+        self.assertEqual(grupos[0]["total_vendas"], 10)
+        self.assertEqual(grupos[1]["especialista"], "Ana Costa")
+        self.assertEqual(grupos[1]["total_vendas"], 8)
+        self.assertEqual(grupos[1]["linhas"][0]["vendas"], 5)
+
     def test_importar_parcial_pela_tela(self):
         arquivo = _xlsx(
             [["INOVA MG", 30, 25]],

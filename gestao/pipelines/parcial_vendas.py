@@ -313,8 +313,17 @@ def sub_parcial(
     }
 
 
+def nome_especialista_curto(nome: str) -> str:
+    partes = (nome or "").strip().split()
+    if not partes:
+        return "Sem especialista"
+    if len(partes) == 1:
+        return partes[0]
+    return f"{partes[0]} {partes[-1]}"
+
+
 def agrupar_por_especialista(linhas: list[dict]) -> list[dict]:
-    """Agrupa PDVs por especialista (ordem alfabética do nome)."""
+    """Agrupa PDVs por especialista (ordenado por volume total da carteira)."""
     buckets: dict[str, list[dict]] = {}
     rotulos: dict[str, str] = {}
     for linha in linhas:
@@ -322,19 +331,22 @@ def agrupar_por_especialista(linhas: list[dict]) -> list[dict]:
         rotulos[chave] = (linha.get("especialista") or "Sem especialista").strip() or "Sem especialista"
         buckets.setdefault(chave, []).append(linha)
     grupos = []
-    for chave in sorted(rotulos, key=lambda k: rotulos[k].upper()):
-        items = sorted(buckets[chave], key=lambda l: (-l.get("vendas", 0), l.get("pdv", "").upper()))
+    for chave, items in buckets.items():
+        nome_completo = rotulos[chave]
+        ordenado = sorted(items, key=lambda l: (-l.get("vendas", 0), l.get("pdv", "").upper()))
         grupos.append(
             {
                 "especialista_id": None if chave == "sem" else int(chave),
-                "especialista": rotulos[chave],
-                "linhas": items,
-                "total_vendas": sum(l["vendas"] for l in items),
-                "total_d7": sum(l["d7"] for l in items),
-                "delta": sum(l["delta"] for l in items),
-                "qtd_pdvs": len(items),
+                "especialista": nome_especialista_curto(nome_completo),
+                "especialista_completo": nome_completo,
+                "linhas": ordenado,
+                "total_vendas": sum(l["vendas"] for l in ordenado),
+                "total_d7": sum(l["d7"] for l in ordenado),
+                "delta": sum(l["delta"] for l in ordenado),
+                "qtd_pdvs": len(ordenado),
             }
         )
+    grupos.sort(key=lambda g: (-g["total_vendas"], g["especialista"].upper()))
     return grupos
 
 

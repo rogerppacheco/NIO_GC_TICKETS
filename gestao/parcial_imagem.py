@@ -22,11 +22,11 @@ NEG = (196, 64, 54)
 PAD = 20
 ALT_LINHA = 30
 ALT_ESP = 26
-HEADER_H = 96
+HEADER_H = 72
 FOOTER_H = 34
 
 COLS = [
-    ("PDV", 220),
+    ("Parceiro", 220),
     ("TOTAL", 68),
     ("D-7", 68),
     ("∆", 58),
@@ -89,29 +89,18 @@ def _subtitulo(dados: dict) -> str:
     return f"{data_txt} · Mês {mes:02d}/{ano} · corte {rotulo}" if ano and mes else rotulo
 
 
-def _metricas_totais(dados: dict) -> str:
-    return (
-        f"Total: {dados.get('total_pp', 0)} VB · "
-        f"D-7: {dados.get('total_d7', 0)} · "
-        f"∆ {_fmt_delta(int(dados.get('delta_pp') or 0))} · "
-        f"{dados.get('qtd_pdvs', 0)} PDV(s)"
-    )
-
-
 def _desenhar_header(
     draw: ImageDraw.ImageDraw,
     *,
     largura: int,
     titulo: str,
     subtitulo: str,
-    metricas: str,
     font_banner,
     font_sub,
 ) -> None:
     draw.rectangle((0, 0, largura, HEADER_H), fill=BRAND)
     draw.text((PAD, 14), titulo, fill=(255, 255, 255), font=font_banner)
     draw.text((PAD, 48), subtitulo, fill=(220, 240, 236), font=font_sub)
-    draw.text((PAD, 70), metricas, fill=(200, 230, 224), font=font_sub)
 
 
 def _desenhar_linha_dados(
@@ -143,10 +132,16 @@ def _desenhar_linha_dados(
     return y + ALT_LINHA
 
 
-def _altura_tabela_simples(qtd_linhas: int, *, com_total: bool = False) -> int:
+def _altura_tabela_simples(
+    qtd_linhas: int,
+    *,
+    com_total: bool = False,
+    sem_cabecalho_cols: bool = False,
+) -> int:
     linhas = max(qtd_linhas, 1)
     extra = ALT_LINHA if com_total else 0
-    return 36 + linhas * ALT_LINHA + extra + 12
+    cab = 0 if sem_cabecalho_cols else 22
+    return 36 + cab + linhas * ALT_LINHA + extra + 12
 
 
 def _desenhar_tabela_simples(
@@ -162,28 +157,35 @@ def _desenhar_tabela_simples(
     font_cell,
     total: dict | None = None,
     vazio_msg: str = "Sem dados.",
+    sem_cabecalho_cols: bool = False,
 ) -> int:
     largura = _largura_cols(cols)
     qtd = len(itens) if itens else 1
     if total and itens:
         qtd += 1
-    altura = _altura_tabela_simples(len(itens) if itens else 1, com_total=bool(total and itens))
+    altura = _altura_tabela_simples(
+        len(itens) if itens else 1,
+        com_total=bool(total and itens),
+        sem_cabecalho_cols=sem_cabecalho_cols,
+    )
     draw.rounded_rectangle((x, y, x + largura, y + altura), radius=10, outline=LINE, fill=BG)
     draw.rectangle((x, y, x + largura, y + 28), fill=BRAND)
     draw.text((x + 10, y + 5), titulo_secao, fill=(255, 255, 255), font=font_titulo)
 
-    y_head = y + 32
-    x_cur = x + 8
-    for rotulo, larg in cols:
-        draw.text((x_cur, y_head), rotulo, fill=MUTED, font=font_head)
-        x_cur += larg
-    draw.line((x + 6, y + 52, x + largura - 6, y + 52), fill=LINE)
+    if sem_cabecalho_cols:
+        y_row = y + 32
+    else:
+        y_head = y + 32
+        x_cur = x + 8
+        for rotulo, larg in cols:
+            draw.text((x_cur, y_head), rotulo, fill=MUTED, font=font_head)
+            x_cur += larg
+        draw.line((x + 6, y + 52, x + largura - 6, y + 52), fill=LINE)
+        y_row = y + 54
 
     if not itens:
-        draw.text((x + 10, y + 58), vazio_msg, fill=MUTED, font=font_cell)
+        draw.text((x + 10, y_row + 4), vazio_msg, fill=MUTED, font=font_cell)
         return y + altura
-
-    y_row = y + 54
     for idx, item in enumerate(itens):
         y_row = _desenhar_linha_dados(
             draw,
@@ -262,7 +264,7 @@ def imagem_parcial_gerencia(dados: dict) -> tuple[bytes, str]:
         HEADER_H
         + _altura_tabela_simples(max(len(top5), 1))
         + 12
-        + _altura_tabela_simples(len(pior5) if pior5 else 1)
+        + _altura_tabela_simples(len(pior5) if pior5 else 1, sem_cabecalho_cols=True)
         + 12
         + ALT_LINHA + 16
         + PAD
@@ -273,9 +275,8 @@ def imagem_parcial_gerencia(dados: dict) -> tuple[bytes, str]:
     _desenhar_header(
         draw,
         largura=largura,
-        titulo="Parcial de vendas · Gerência PP",
+        titulo="Parcial de vendas · Parceiros PP",
         subtitulo=_subtitulo(dados),
-        metricas=_metricas_totais(dados),
         font_banner=font_banner,
         font_sub=font_sub,
     )
@@ -304,6 +305,7 @@ def imagem_parcial_gerencia(dados: dict) -> tuple[bytes, str]:
         font_head=font_head,
         font_cell=font_cell,
         vazio_msg="Nenhum PDV adicional (≤5 no escopo).",
+        sem_cabecalho_cols=True,
     )
     y += 12
     _desenhar_total_pp(draw, x=PAD, y=y, dados=dados, cols=cols, font_head=font_head)
@@ -311,14 +313,26 @@ def imagem_parcial_gerencia(dados: dict) -> tuple[bytes, str]:
     return _salvar_png(img, dados, "Gerencia")
 
 
-def _altura_grupo(qtd_pdvs: int) -> int:
-    return ALT_ESP + 22 + max(qtd_pdvs, 0) * ALT_LINHA + 4
+def _altura_grupo(
+    qtd_pdvs: int,
+    *,
+    com_subtotal: bool = False,
+    sem_cabecalho_esp: bool = False,
+) -> int:
+    cab_esp = 0 if sem_cabecalho_esp else ALT_ESP
+    subtotal = ALT_LINHA if com_subtotal else 0
+    return cab_esp + 22 + max(qtd_pdvs, 0) * ALT_LINHA + subtotal + 4
 
 
 def _altura_por_especialistas(grupos: list[dict]) -> int:
+    multi = len(grupos) > 1
     total = 52 + FOOTER_H
     for g in grupos:
-        total += _altura_grupo(len(g.get("linhas") or []))
+        total += _altura_grupo(
+            len(g.get("linhas") or []),
+            com_subtotal=multi,
+            sem_cabecalho_esp=not multi,
+        )
     return total
 
 
@@ -333,6 +347,8 @@ def _desenhar_por_especialista(
     font_head,
     font_cell,
     total_pp: dict | None = None,
+    ocultar_cabecalho_esp: bool = False,
+    subtotal_por_grupo: bool = True,
 ) -> int:
     largura = _largura_cols(cols)
     y_cur = y + 8
@@ -344,14 +360,15 @@ def _desenhar_por_especialista(
     y_cur += 24
 
     for grupo in grupos:
-        draw.rectangle((x + 6, y_cur, x + largura - 6, y_cur + ALT_ESP), fill=BRAND)
-        draw.text(
-            (x + 10, y_cur + 5),
-            _truncar(str(grupo.get("especialista") or "Sem especialista"), 36).upper(),
-            fill=(255, 255, 255),
-            font=font_esp,
-        )
-        y_cur += ALT_ESP
+        if not ocultar_cabecalho_esp:
+            draw.rectangle((x + 6, y_cur, x + largura - 6, y_cur + ALT_ESP), fill=BRAND)
+            draw.text(
+                (x + 10, y_cur + 5),
+                _truncar(str(grupo.get("especialista") or "Sem especialista"), 36).upper(),
+                fill=(255, 255, 255),
+                font=font_esp,
+            )
+            y_cur += ALT_ESP
         for idx, item in enumerate(grupo.get("linhas") or []):
             y_cur = _desenhar_linha_dados(
                 draw,
@@ -362,6 +379,22 @@ def _desenhar_por_especialista(
                 cols=cols,
                 font_cell=font_cell,
                 fundo=ALT_ROW if idx % 2 == 1 else None,
+            )
+        if subtotal_por_grupo and grupo.get("linhas"):
+            y_cur = _desenhar_linha_dados(
+                draw,
+                x=x,
+                y=y_cur,
+                largura=largura,
+                item={
+                    "pdv": "TOTAL",
+                    "vendas": grupo.get("total_vendas", 0),
+                    "d7": grupo.get("total_d7", 0),
+                    "delta": grupo.get("delta", 0),
+                },
+                cols=cols,
+                font_cell=font_head,
+                fundo=BRAND_SOFT,
             )
         y_cur += 4
 
@@ -395,6 +428,7 @@ def imagem_parcial_especialistas(dados: dict, *, titulo: str = "Carteira PP") ->
 
     linhas = dados.get("linhas") or []
     grupos = agrupar_por_especialista(linhas)
+    multi = len(grupos) > 1
     cols = COLS
     tab_w = _largura_cols(cols)
     largura = tab_w + 2 * PAD
@@ -407,7 +441,6 @@ def imagem_parcial_especialistas(dados: dict, *, titulo: str = "Carteira PP") ->
         largura=largura,
         titulo=f"Parcial · {titulo}",
         subtitulo=_subtitulo(dados),
-        metricas=_metricas_totais(dados),
         font_banner=font_banner,
         font_sub=font_sub,
     )
@@ -427,6 +460,8 @@ def imagem_parcial_especialistas(dados: dict, *, titulo: str = "Carteira PP") ->
         font_esp=font_esp,
         font_head=font_head,
         font_cell=font_cell,
+        ocultar_cabecalho_esp=not multi,
+        subtotal_por_grupo=multi,
         total_pp={
             "rotulo": "TOTAL PP",
             "vendas": dados.get("total_pp", 0),
@@ -450,7 +485,7 @@ def imagem_parcial_especialista(grupo: dict, dados: dict) -> tuple[bytes, str]:
     tab_w = _largura_cols(cols)
     largura = tab_w + 2 * PAD
     linhas = grupo.get("linhas") or []
-    altura = HEADER_H + _altura_grupo(len(linhas)) + FOOTER_H + PAD + 24
+    altura = HEADER_H + _altura_grupo(len(linhas), sem_cabecalho_esp=True) + FOOTER_H + PAD + 24
 
     img = Image.new("RGB", (largura, altura), BG)
     draw = ImageDraw.Draw(img)
@@ -460,12 +495,6 @@ def imagem_parcial_especialista(grupo: dict, dados: dict) -> tuple[bytes, str]:
         largura=largura,
         titulo=f"Parcial · {_truncar(esp, 32)}",
         subtitulo=_subtitulo(dados),
-        metricas=(
-            f"Total: {grupo.get('total_vendas', 0)} VB · "
-            f"D-7: {grupo.get('total_d7', 0)} · "
-            f"∆ {_fmt_delta(int(grupo.get('delta') or 0))} · "
-            f"{grupo.get('qtd_pdvs', 0)} PDV(s)"
-        ),
         font_banner=font_banner,
         font_sub=font_sub,
     )
@@ -485,6 +514,8 @@ def imagem_parcial_especialista(grupo: dict, dados: dict) -> tuple[bytes, str]:
         font_esp=font_esp,
         font_head=font_head,
         font_cell=font_cell,
+        ocultar_cabecalho_esp=True,
+        subtotal_por_grupo=False,
         total_pp={
             "rotulo": "TOTAL CARTEIRA",
             "vendas": grupo.get("total_vendas", 0),
@@ -517,7 +548,6 @@ def imagem_parcial_pdv(linha: dict, dados: dict) -> tuple[bytes, str]:
         largura=largura,
         titulo=f"Parcial · {_truncar(pdv, 28)}",
         subtitulo=_subtitulo(dados),
-        metricas=f"Especialista: {linha.get('especialista') or '—'}",
         font_banner=font_banner,
         font_sub=font_sub,
     )

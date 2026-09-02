@@ -1207,7 +1207,7 @@ def enviar_parcial_gerencia(
     if not destinos:
         return ResumoEnvio(erros=1, detalhes=["Grupo inválido ou sem flag Resultados."])
     png, nome = imagem_parcial_gerencia(dados)
-    caption = caption_imagem_parcial(dados, sufixo="Gerência PP")
+    caption = caption_imagem_parcial(dados, sufixo="Parceiros PP")
     return _enviar_parcial_imagem(
         png=png,
         nome=nome,
