@@ -147,18 +147,6 @@ class ParcialResultadoForm(forms.Form):
         required=False,
         help_text="12h, 15h ou 18h. Se vazio, usa o turno atual.",
     )
-    caption = forms.CharField(
-        label="Legenda complementar",
-        required=False,
-        max_length=1024,
-        widget=forms.Textarea(
-            attrs={
-                "rows": 6,
-                "placeholder": "Opcional — a legenda principal é gerada automaticamente.",
-            }
-        ),
-        help_text="Saudação, frase do dia e dados do parcial. *time* vira o nome do PDV nos envios individuais.",
-    )
     parceiro = forms.ModelChoiceField(
         queryset=Parceiro.objects.none(),
         required=False,

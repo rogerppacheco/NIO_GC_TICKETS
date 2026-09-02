@@ -2230,15 +2230,15 @@ class ResultadosTests(TestCase):
         self.assertContains(r, "Acumulado do mês")
         self.assertContains(r, "Ranking de VB")
         self.assertContains(r, "Importe a base Excel")
-        self.assertContains(r, "12h")
+        self.assertContains(r, "Especialistas")
         r2 = self.client.get(reverse("gestao_resultados"), {"aba": "ranking"})
         self.assertContains(r2, "ranking-preview-img")
 
     def test_parcial_excel_e_imagens(self):
-        from gestao.parcial_imagem import imagem_parcial_gerencia, imagem_parcial_pdv
+        from gestao.parcial_imagem import imagem_parcial_gerencia, imagem_parcial_pdv, imagem_parcial_especialistas
         from gestao.pipelines.parcial_vendas import (
-            mensagem_parcial_gerencia,
-            montar_parcial,
+            agrupar_por_especialista,
+            caption_imagem_parcial,
             processar_parcial_excel,
             turno_parcial,
         )
@@ -2266,9 +2266,13 @@ class ResultadosTests(TestCase):
         png_pdv, _ = imagem_parcial_pdv(linha, resumo)
         self.assertTrue(png_pdv.startswith(b"\x89PNG"))
 
-        msg = mensagem_parcial_gerencia(resumo)
-        self.assertIn("Total: *45*", msg)
-        self.assertIn("INOVA MG", msg)
+        grupos = agrupar_por_especialista(resumo["linhas"])
+        self.assertEqual(len(grupos), 1)
+        png_esp, _ = imagem_parcial_especialistas(resumo, titulo="Carteira PP")
+        self.assertTrue(png_esp.startswith(b"\x89PNG"))
+
+        msg = caption_imagem_parcial(resumo, sufixo="Gerência PP")
+        self.assertIn("Parcial", msg)
 
     def test_importar_parcial_pela_tela(self):
         arquivo = _xlsx(

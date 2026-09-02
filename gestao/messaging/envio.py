@@ -1152,16 +1152,50 @@ def _destino_grupo(destinatario_id: int, parceiros: list[Parceiro] | None = None
     ]
 
 
+def _enviar_parcial_imagem(
+    *,
+    png: bytes,
+    nome: str,
+    caption: str,
+    destinos: list[DestinoEnvio],
+    parceiro: Parceiro | None,
+    user: AbstractBaseUser | None,
+) -> ResumoEnvio:
+    return _enviar_com_anexo(
+        tipo=EnvioWhatsApp.Tipo.PARCIAL,
+        mensagem=caption,
+        caption=caption,
+        destinos=destinos,
+        parceiro=parceiro,
+        user=user,
+        arquivo_bytes=png,
+        nome_arquivo=nome,
+        flag="envio_resultados",
+    )
+
+
+def _destino_especialista(especialista_id: int) -> list[DestinoEnvio]:
+    from django.contrib.auth import get_user_model
+
+    user = get_user_model().objects.filter(pk=especialista_id).first()
+    if not user:
+        return []
+    jid = whatsapp_do_usuario(user)
+    if not jid:
+        return []
+    nome = (user.get_full_name() or user.username or "Especialista").strip()
+    return [DestinoEnvio(jid=jid, nome=nome)]
+
+
 def enviar_parcial_gerencia(
     dados: dict,
     user: AbstractBaseUser | None,
     *,
     destinatario_id: int | None = None,
     parceiros: list[Parceiro] | None = None,
-    caption_extra: str = "",
 ) -> ResumoEnvio:
     from ..parcial_imagem import imagem_parcial_gerencia
-    from ..pipelines.parcial_vendas import mensagem_parcial_gerencia
+    from ..pipelines.parcial_vendas import caption_imagem_parcial
 
     if not dados or not dados.get("linhas"):
         return ResumoEnvio(erros=1, detalhes=["Importe a base Excel antes de enviar."])
@@ -1172,20 +1206,49 @@ def enviar_parcial_gerencia(
     destinos = _destino_grupo(destinatario_id, parceiros)
     if not destinos:
         return ResumoEnvio(erros=1, detalhes=["Grupo inválido ou sem flag Resultados."])
-    texto = mensagem_parcial_gerencia(dados)
-    if caption_extra.strip():
-        texto = f"{caption_extra.strip()}\n\n{texto}"
     png, nome = imagem_parcial_gerencia(dados)
-    return _enviar_com_anexo(
-        tipo=EnvioWhatsApp.Tipo.PARCIAL,
-        mensagem=texto,
-        caption=texto[:1024],
+    caption = caption_imagem_parcial(dados, sufixo="Gerência PP")
+    return _enviar_parcial_imagem(
+        png=png,
+        nome=nome,
+        caption=caption,
         destinos=destinos,
         parceiro=None,
         user=user,
-        arquivo_bytes=png,
-        nome_arquivo=nome,
-        flag="envio_resultados",
+    )
+
+
+def enviar_parcial_especialista(
+    dados: dict,
+    user: AbstractBaseUser | None,
+    *,
+    especialista_id: int,
+) -> ResumoEnvio:
+    from ..parcial_imagem import imagem_parcial_especialista
+    from ..pipelines.parcial_vendas import agrupar_por_especialista, caption_imagem_parcial
+
+    if not dados or not dados.get("linhas"):
+        return ResumoEnvio(erros=1, detalhes=["Importe a base Excel antes de enviar."])
+    grupo = next(
+        (g for g in agrupar_por_especialista(dados["linhas"]) if g.get("especialista_id") == especialista_id),
+        None,
+    )
+    if not grupo:
+        return ResumoEnvio(erros=1, detalhes=["Especialista sem PDVs na base importada."])
+    if user is not None and not eh_gestor(user) and user.id != especialista_id:
+        return ResumoEnvio(erros=1, detalhes=["Sem permissão para enviar a carteira deste especialista."])
+    destinos = _destino_especialista(especialista_id)
+    if not destinos:
+        return ResumoEnvio(erros=1, detalhes=["WhatsApp do especialista não cadastrado."])
+    png, nome = imagem_parcial_especialista(grupo, dados)
+    caption = caption_imagem_parcial(dados, sufixo=grupo["especialista"])
+    return _enviar_parcial_imagem(
+        png=png,
+        nome=nome,
+        caption=caption,
+        destinos=destinos,
+        parceiro=None,
+        user=user,
     )
 
 
@@ -1193,63 +1256,14 @@ def enviar_parcial_carteira(
     parceiros: list[Parceiro],
     user: AbstractBaseUser | None,
     dados: dict,
-    *,
-    caption_extra: str = "",
 ) -> ResumoEnvio:
-    """Envia visão de carteira para cada especialista (ou gestor no próprio WhatsApp)."""
-    from ..parcial_imagem import imagem_parcial_carteira
-    from ..pipelines.parcial_vendas import (
-        linhas_especialista,
-        mensagem_parcial_especialista,
-        sub_parcial,
-    )
-
-    if not dados or not dados.get("linhas"):
-        return ResumoEnvio(erros=1, detalhes=["Importe a base Excel antes de enviar."])
-    total = ResumoEnvio()
-    if user is not None and eh_gestor(user):
-        sub = sub_parcial(list(dados["linhas"]), dados, titulo="Carteira PP")
-        png, nome = imagem_parcial_carteira(sub, titulo="Carteira PP")
-        texto = mensagem_parcial_especialista(sub)
-        if caption_extra.strip():
-            texto = f"{caption_extra.strip()}\n\n{texto}"
-        destinos = destinos_para_envio(user, "envio_resultados")
-        parte = _enviar_com_anexo(
-            tipo=EnvioWhatsApp.Tipo.PARCIAL,
-            mensagem=texto,
-            caption=texto[:1024],
-            destinos=destinos,
-            parceiro=None,
-            user=user,
-            arquivo_bytes=png,
-            nome_arquivo=nome,
-            flag="envio_resultados",
-        )
-        total.enviados += parte.enviados
-        total.erros += parte.erros
-        total.ignorados += parte.ignorados
-        total.detalhes.append(f"— Carteira PP: {parte.enviados} ok / {parte.erros} erro")
-        return total
-
-    linhas = linhas_especialista(dados, user.id if user else None)
-    if not linhas:
-        return ResumoEnvio(ignorados=1, detalhes=["Nenhum PDV seu na base importada."])
-    sub = sub_parcial(linhas, dados, titulo="Minha carteira")
-    png, nome = imagem_parcial_carteira(sub, titulo="Minha carteira")
-    texto = mensagem_parcial_especialista(sub)
-    if caption_extra.strip():
-        texto = f"{caption_extra.strip()}\n\n{texto}"
-    destinos = destinos_para_envio(user, "envio_resultados")
-    return _enviar_com_anexo(
-        tipo=EnvioWhatsApp.Tipo.PARCIAL,
-        mensagem=texto,
-        caption=texto[:1024],
-        destinos=destinos,
-        parceiro=None,
-        user=user,
-        arquivo_bytes=png,
-        nome_arquivo=nome,
-        flag="envio_resultados",
+    """Envia a carteira do usuário logado (especialista)."""
+    if user is None:
+        return ResumoEnvio(erros=1, detalhes=["Usuário inválido."])
+    return enviar_parcial_especialista(
+        dados,
+        user,
+        especialista_id=user.id,
     )
 
 
@@ -1257,12 +1271,10 @@ def enviar_parcial_grupos(
     parceiros: list[Parceiro],
     user: AbstractBaseUser | None,
     dados: dict,
-    *,
-    caption_extra: str = "",
 ) -> ResumoEnvio:
-    """Envia card individual para o grupo de cada PDV no escopo."""
+    """Envia imagem individual para o grupo de cada PDV no escopo."""
     from ..parcial_imagem import imagem_parcial_pdv
-    from ..pipelines.parcial_vendas import linha_pdv, mensagem_parcial_pdv
+    from ..pipelines.parcial_vendas import caption_imagem_parcial, linha_pdv
 
     if not dados or not dados.get("linhas"):
         return ResumoEnvio(erros=1, detalhes=["Importe a base Excel antes de enviar."])
@@ -1274,19 +1286,14 @@ def enviar_parcial_grupos(
             total.detalhes.append(f"— {parceiro.nome}: fora da base importada.")
             continue
         png, nome = imagem_parcial_pdv(linha, dados)
-        texto = mensagem_parcial_pdv(linha, dados)
-        if caption_extra.strip():
-            texto = f"{caption_extra.strip()}\n\n{texto}"
-        parte = _enviar_com_anexo(
-            tipo=EnvioWhatsApp.Tipo.PARCIAL,
-            mensagem=texto,
-            caption=texto[:1024],
+        caption = caption_imagem_parcial(dados, sufixo=parceiro.nome)
+        parte = _enviar_parcial_imagem(
+            png=png,
+            nome=nome,
+            caption=caption,
             destinos=destinos_para_envio(user, "envio_resultados", parceiro),
             parceiro=parceiro,
             user=user,
-            arquivo_bytes=png,
-            nome_arquivo=nome,
-            flag="envio_resultados",
         )
         total.enviados += parte.enviados
         total.erros += parte.erros
@@ -1302,27 +1309,20 @@ def enviar_parcial_pdv(
     parceiro: Parceiro,
     user: AbstractBaseUser | None,
     dados: dict,
-    *,
-    caption_extra: str = "",
 ) -> ResumoEnvio:
     from ..parcial_imagem import imagem_parcial_pdv
-    from ..pipelines.parcial_vendas import linha_pdv, mensagem_parcial_pdv
+    from ..pipelines.parcial_vendas import caption_imagem_parcial, linha_pdv
 
     linha = linha_pdv(dados, parceiro.pk)
     if not linha:
         return ResumoEnvio(ignorados=1, detalhes=[f"{parceiro.nome}: fora da base importada."])
     png, nome = imagem_parcial_pdv(linha, dados)
-    texto = mensagem_parcial_pdv(linha, dados)
-    if caption_extra.strip():
-        texto = f"{caption_extra.strip()}\n\n{texto}"
-    return _enviar_com_anexo(
-        tipo=EnvioWhatsApp.Tipo.PARCIAL,
-        mensagem=texto,
-        caption=texto[:1024],
+    caption = caption_imagem_parcial(dados, sufixo=parceiro.nome)
+    return _enviar_parcial_imagem(
+        png=png,
+        nome=nome,
+        caption=caption,
         destinos=destinos_para_envio(user, "envio_resultados", parceiro),
         parceiro=parceiro,
         user=user,
-        arquivo_bytes=png,
-        nome_arquivo=nome,
-        flag="envio_resultados",
     )

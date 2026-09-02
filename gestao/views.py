@@ -53,6 +53,7 @@ from .messaging.envio import (
     enviar_recompra_lote,
     enviar_venda_indevida,
     enviar_venda_indevida_lote,
+    enviar_parcial_especialista,
     enviar_parcial_carteira,
     enviar_parcial_gerencia,
     enviar_parcial_grupos,
@@ -114,8 +115,8 @@ from .pipelines.osab import calcular_osab, persistir_capilaridade, processar_osa
 from .pipelines.recompra import processar_recompra
 from .pipelines.parcial_vendas import (
     HORARIOS_PARCIAL,
-    mensagem_parcial_gerencia,
-    mensagem_parcial_especialista,
+    agrupar_por_especialista,
+    linha_pdv,
     processar_parcial_excel,
     sub_parcial,
     turno_parcial,
@@ -125,7 +126,6 @@ from .pipelines.resultados import (
     gaps_ranking,
     linhas_acumulado,
     mensagem_acumulado_consolidada,
-    mensagem_parcial,
     montar_ranking,
 )
 from .pipelines.tarefas import processar_tarefas
@@ -507,6 +507,19 @@ def osab_view(request: HttpRequest) -> HttpResponse:
     )
 
 
+def _parcial_sub(request) -> str:
+    sub = (request.GET.get("parcial_sub") or request.POST.get("parcial_sub") or "").strip().lower()
+    if sub not in {"gerencia", "consolidado", "especialistas", "parceiros"}:
+        sub = "gerencia" if eh_gestor(request.user) else "especialistas"
+    if sub in {"gerencia", "consolidado"} and not eh_gestor(request.user):
+        sub = "especialistas"
+    return sub
+
+
+def _parcial_extra(request) -> str:
+    return f"aba=parcial&parcial_sub={_parcial_sub(request)}"
+
+
 def _grupos_parcial(parceiros: list[Parceiro]):
     return _grupos_ranking(parceiros)
 
@@ -654,24 +667,54 @@ def ranking_preview(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def parcial_preview(request: HttpRequest) -> HttpResponse:
-    from .parcial_imagem import imagem_parcial_carteira, imagem_parcial_gerencia
+    from .parcial_imagem import (
+        imagem_parcial_especialista,
+        imagem_parcial_especialistas,
+        imagem_parcial_gerencia,
+        imagem_parcial_pdv,
+    )
 
     visao = (request.GET.get("visao") or "gerencia").strip().lower()
     dados = _parcial_dados(request)
     if not dados:
         return HttpResponse("Importe a base Excel primeiro.", status=404)
-    if visao == "carteira":
-        if eh_gestor(request.user):
-            sub = sub_parcial(dados["linhas"], dados, titulo="Carteira PP")
-            png, _ = imagem_parcial_carteira(sub, titulo="Carteira PP")
-        else:
-            from .pipelines.parcial_vendas import linhas_especialista
+    cache = request.GET.get("_") or ""
 
-            linhas = linhas_especialista(dados, request.user.id)
-            sub = sub_parcial(linhas or dados["linhas"], dados, titulo="Minha carteira")
-            png, _ = imagem_parcial_carteira(sub, titulo="Minha carteira")
+    if visao == "consolidado":
+        sub = sub_parcial(dados["linhas"], dados, titulo="Carteira PP")
+        png, _ = imagem_parcial_especialistas(sub, titulo="Carteira PP")
+    elif visao == "especialista":
+        esp_raw = (request.GET.get("esp") or "").strip()
+        if not esp_raw.isdigit():
+            return HttpResponse("Especialista inválido.", status=400)
+        grupo = next(
+            (
+                g
+                for g in agrupar_por_especialista(dados["linhas"])
+                if g.get("especialista_id") == int(esp_raw)
+            ),
+            None,
+        )
+        if not grupo:
+            return HttpResponse("Especialista sem PDVs na base.", status=404)
+        png, _ = imagem_parcial_especialista(grupo, dados)
+    elif visao == "pdv":
+        pdv_raw = (request.GET.get("pdv") or "").strip()
+        if not pdv_raw.isdigit():
+            return HttpResponse("PDV inválido.", status=400)
+        linha = linha_pdv(dados, int(pdv_raw))
+        if not linha:
+            return HttpResponse("PDV fora da base.", status=404)
+        png, _ = imagem_parcial_pdv(linha, dados)
+    elif visao == "carteira":
+        from .pipelines.parcial_vendas import linhas_especialista
+
+        linhas = linhas_especialista(dados, request.user.id)
+        sub = sub_parcial(linhas or dados["linhas"], dados, titulo="Minha carteira")
+        png, _ = imagem_parcial_especialistas(sub, titulo="Minha carteira")
     else:
         png, _ = imagem_parcial_gerencia(dados)
+    del cache
     return HttpResponse(png, content_type="image/png")
 
 
@@ -687,10 +730,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
         request.FILES or None,
         parceiros=Parceiro.objects.filter(pk__in=[p.pk for p in visiveis]),
         grupos=Destinatario.objects.filter(pk__in=[g.pk for g in grupos_parcial]),
-        initial={
-            "caption": mensagem_parcial(ano=ano, mes=mes),
-            "turno": str(turno_parcial()[0]),
-        },
+        initial={"turno": str(turno_parcial()[0])},
     )
     form_btu = PracaBTUForm(request.POST or None)
     form_gdp = GdpImportForm()
@@ -758,7 +798,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                 arquivo = form.cleaned_data.get("arquivo")
                 if not arquivo:
                     messages.error(request, "Envie a base Excel com PDV, total e D-7.")
-                    return _voltar(request, "gestao_resultados")
+                    return _voltar(request, "gestao_resultados", extra="aba=parcial&parcial_sub=gerencia")
                 try:
                     resumo = processar_parcial_excel(
                         arquivo,
@@ -782,18 +822,18 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                     messages.error(request, f"Falha ao importar parcial: {exc}")
             else:
                 messages.error(request, "Envie a base Excel com PDV, total e D-7.")
-            return _voltar(request, "gestao_resultados")
+            return _voltar(request, "gestao_resultados", extra="aba=parcial&parcial_sub=gerencia")
         if action in {
             "enviar_parcial_gerencia",
             "enviar_parcial_carteira",
+            "enviar_parcial_especialista",
             "enviar_parcial_grupos",
             "enviar_parcial_pdv",
         } and _pode_enviar(request):
             dados = _parcial_dados(request)
             if not dados:
                 messages.error(request, "Importe a base Excel antes de enviar.")
-                return _voltar(request, "gestao_resultados")
-            caption = (request.POST.get("caption") or "").strip()
+                return _voltar(request, "gestao_resultados", extra=_parcial_extra(request))
             if action == "enviar_parcial_gerencia":
                 dest_raw = (request.POST.get("destinatario") or "").strip()
                 dest_id = int(dest_raw) if dest_raw.isdigit() else None
@@ -805,30 +845,33 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                         request.user,
                         destinatario_id=dest_id,
                         parceiros=visiveis,
-                        caption_extra=caption,
                     ),
                 )
             elif action == "enviar_parcial_carteira":
                 _flash_resumo(
                     request,
                     "Parcial carteira",
-                    enviar_parcial_carteira(
-                        visiveis,
-                        request.user,
-                        dados,
-                        caption_extra=caption,
-                    ),
+                    enviar_parcial_carteira(visiveis, request.user, dados),
                 )
+            elif action == "enviar_parcial_especialista":
+                esp_raw = (request.POST.get("especialista") or "").strip()
+                if not esp_raw.isdigit():
+                    messages.error(request, "Especialista inválido.")
+                else:
+                    _flash_resumo(
+                        request,
+                        "Parcial especialista",
+                        enviar_parcial_especialista(
+                            dados,
+                            request.user,
+                            especialista_id=int(esp_raw),
+                        ),
+                    )
             elif action == "enviar_parcial_grupos":
                 _flash_resumo(
                     request,
                     "Parcial grupos",
-                    enviar_parcial_grupos(
-                        visiveis,
-                        request.user,
-                        dados,
-                        caption_extra=caption,
-                    ),
+                    enviar_parcial_grupos(visiveis, request.user, dados),
                 )
             else:
                 parceiro = get_object_or_404(
@@ -838,14 +881,9 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                 _flash_resumo(
                     request,
                     "Parcial PDV",
-                    enviar_parcial_pdv(
-                        parceiro,
-                        request.user,
-                        dados,
-                        caption_extra=caption,
-                    ),
+                    enviar_parcial_pdv(parceiro, request.user, dados),
                 )
-            return _voltar(request, "gestao_resultados")
+            return _voltar(request, "gestao_resultados", extra=_parcial_extra(request))
         if action == "enviar_acumulado_pdv" and _pode_enviar(request):
             parceiro = get_object_or_404(_parceiros(request), pk=request.POST.get("parceiro"))
             _flash_resumo(
@@ -895,20 +933,23 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
         aba = "parcial"
     grupos_ranking = list(_grupos_ranking(visiveis))
     grupo_pp_wa = _buscar_grupo_pp_wa() if not grupos_ranking else None
-    msg_parcial_gerencia = mensagem_parcial_gerencia(parcial_dados) if parcial_dados else ""
-    msg_parcial_carteira = ""
+    parcial_sub = _parcial_sub(request)
+    parcial_especialistas = []
+    parcial_pdvs = []
     if parcial_dados:
+        todos_grupos = agrupar_por_especialista(parcial_dados.get("linhas") or [])
         if eh_gestor(request.user):
-            sub = sub_parcial(parcial_dados["linhas"], parcial_dados, titulo="Carteira PP")
+            parcial_especialistas = todos_grupos
         else:
-            from .pipelines.parcial_vendas import linhas_especialista
-
-            sub = sub_parcial(
-                linhas_especialista(parcial_dados, request.user.id) or parcial_dados["linhas"],
-                parcial_dados,
-                titulo="Minha carteira",
-            )
-        msg_parcial_carteira = mensagem_parcial_especialista(sub)
+            parcial_especialistas = [
+                g for g in todos_grupos if g.get("especialista_id") == request.user.id
+            ]
+        ids_visiveis = {p.pk for p in visiveis}
+        for linha in parcial_dados.get("linhas") or []:
+            pid = linha.get("parceiro_id")
+            if pid in ids_visiveis:
+                parcial_pdvs.append(linha)
+        parcial_pdvs.sort(key=lambda l: l.get("pdv", "").upper())
     ultimo_parcial = LoteImportacao.objects.filter(
         tipo=LoteImportacao.Tipo.PARCIAL, ok=True, criado_por=request.user
     ).first()
@@ -929,10 +970,11 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             "grupos_ranking": grupos_ranking,
             "grupos_parcial": grupos_parcial,
             "parcial_dados": parcial_dados,
+            "parcial_sub": parcial_sub,
+            "parcial_especialistas": parcial_especialistas,
+            "parcial_pdvs": parcial_pdvs,
             "parcial_turno": rotulo_turno,
             "parcial_horarios": HORARIOS_PARCIAL,
-            "msg_parcial_gerencia": msg_parcial_gerencia,
-            "msg_parcial_carteira": msg_parcial_carteira,
             "ultimo_parcial": ultimo_parcial,
             "ranking_grupo_padrao": _grupo_ranking_padrao(grupos_ranking),
             "grupo_pp_wa": grupo_pp_wa,

@@ -229,6 +229,38 @@ def sub_parcial(
     }
 
 
+def agrupar_por_especialista(linhas: list[dict]) -> list[dict]:
+    """Agrupa PDVs por especialista (ordem alfabética do nome)."""
+    buckets: dict[str, list[dict]] = {}
+    rotulos: dict[str, str] = {}
+    for linha in linhas:
+        chave = str(linha.get("especialista_id") or "sem")
+        rotulos[chave] = (linha.get("especialista") or "Sem especialista").strip() or "Sem especialista"
+        buckets.setdefault(chave, []).append(linha)
+    grupos = []
+    for chave in sorted(rotulos, key=lambda k: rotulos[k].upper()):
+        items = sorted(buckets[chave], key=lambda l: (-l.get("vendas", 0), l.get("pdv", "").upper()))
+        grupos.append(
+            {
+                "especialista_id": None if chave == "sem" else int(chave),
+                "especialista": rotulos[chave],
+                "linhas": items,
+                "total_vendas": sum(l["vendas"] for l in items),
+                "total_d7": sum(l["d7"] for l in items),
+                "delta": sum(l["delta"] for l in items),
+                "qtd_pdvs": len(items),
+            }
+        )
+    return grupos
+
+
+def caption_imagem_parcial(dados: dict, *, sufixo: str = "") -> str:
+    mes, ano = dados.get("mes"), dados.get("ano")
+    rotulo = dados.get("rotulo_turno") or "—"
+    base = f"📊 Parcial · {mes:02d}/{ano} · {rotulo}" if mes and ano else f"📊 Parcial · {rotulo}"
+    return f"{base} · {sufixo}" if sufixo else base
+
+
 def linha_pdv(dados: dict, parceiro_id: int) -> dict | None:
     for linha in dados.get("linhas") or []:
         if linha.get("parceiro_id") == parceiro_id:
