@@ -72,12 +72,14 @@
         <div class="help">
           {{ r.qtd_pedido }} pedido(s) · {{ r.qtd_linha }} linha(s) ·
           {{ r.criado_em|date:"d/m H:i" }}
-          {% if r.arquivo %} · <a href="{{ r.arquivo.url }}" target="_blank" rel="noopener">baixar xlsx</a>{% endif %}
         </div>
       </div>
       <div class="fila-actions">
         <textarea id="com-{{ r.id }}" hidden>{{ r.mensagem }}</textarea>
         <button class="btn btn-primary" type="button" data-copy-target="com-{{ r.id }}">Copiar</button>
+        {% if r.arquivo %}
+        <a class="btn btn-secondary" href="{{ r.arquivo.url }}" download target="_blank" rel="noopener">📥 Baixar Planilha</a>
+        {% endif %}
         {% if pode_enviar %}
         <form method="post">
           {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}

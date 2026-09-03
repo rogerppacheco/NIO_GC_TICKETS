@@ -4,6 +4,7 @@ import io
 import re
 import tempfile
 import unicodedata
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -116,6 +117,131 @@ def _to_float(valor) -> float:
 
 def _fmt_moeda(v: float) -> str:
     return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _classificar_coluna(nome_coluna: str) -> str:
+    norm = _norm_texto(str(nome_coluna)).replace("_", " ")
+    if any(k in norm for k in ["VALOR", "COMISSAO", "TOTAL", "PRECO", "RECEITA", "FATURAMENTO", "VALOR UNITARIO"]):
+        return "moeda"
+    if any(k in norm for k in ["DATA", "DT ", "EMISSAO", "ATIVACAO", "TRANSICAO", "CANCELAMENTO", "CRIADO"]):
+        return "data"
+    if any(k in norm for k in ["CNPJ", "CPF", "HANA", "FORNECEDOR", "DOCUMENTO", "ITEM", "CENTRO", "CONTRATO", "MATRICULA", "ORDEM", "PEDIDO", "CEP", "TELEFONE"]):
+        return "codigo"
+    return "texto"
+
+
+def gerar_planilha_comissionamento_formatada(pedido_df: pd.DataFrame, linha_df: pd.DataFrame) -> bytes:
+    """Gera workbook XLSX com apresentação executiva: cabeçalhos navy, bordas, zebra striping e formatação de células."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    ws_pedido = wb.active
+    ws_pedido.title = "PEDIDO"
+    ws_linha = wb.create_sheet(title="LINHA_A_LINHA")
+
+    fill_header = PatternFill(start_color="1A365D", end_color="1A365D", fill_type="solid")
+    font_header = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    fill_zebra = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+    font_data = Font(name="Calibri", size=10, color="1E293B")
+
+    borda_fina = Border(
+        left=Side(style="thin", color="E2E8F0"),
+        right=Side(style="thin", color="E2E8F0"),
+        top=Side(style="thin", color="E2E8F0"),
+        bottom=Side(style="thin", color="E2E8F0"),
+    )
+
+    def _formatar_aba(ws, df: pd.DataFrame):
+        ws.views.sheetView[0].showGridLines = True
+        ws.freeze_panes = "A2"
+
+        if df is None or df.empty:
+            ws.append(["Nenhum registro para este PDV."])
+            return
+
+        cols = list(df.columns)
+        ws.append(cols)
+        ws.row_dimensions[1].height = 28
+        tipos_col = [_classificar_coluna(c) for c in cols]
+
+        for col_idx in range(1, len(cols) + 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.fill = fill_header
+            cell.font = font_header
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = borda_fina
+
+        max_larguras = {i: len(str(c)) for i, c in enumerate(cols, start=1)}
+
+        for row_idx, (_, row_data) in enumerate(df.iterrows(), start=2):
+            ws.row_dimensions[row_idx].height = 20
+            is_zebra = (row_idx % 2 == 1)
+
+            for col_idx, (_, val) in enumerate(zip(cols, row_data), start=1):
+                tipo = tipos_col[col_idx - 1]
+                cell = ws.cell(row=row_idx, column=col_idx)
+                cell.font = font_data
+                cell.border = borda_fina
+                if is_zebra:
+                    cell.fill = fill_zebra
+
+                if pd.isna(val) or val is None:
+                    cell.value = ""
+                    continue
+
+                tam_str = 10
+                if tipo == "moeda":
+                    num_val = _to_float(val)
+                    cell.value = num_val
+                    cell.number_format = "R$ #,##0.00"
+                    cell.alignment = Alignment(horizontal="right", vertical="center")
+                    tam_str = len(f"R$ {num_val:,.2f}")
+                elif tipo == "data":
+                    if isinstance(val, (datetime, pd.Timestamp)):
+                        cell.value = val.to_pydatetime().replace(tzinfo=None) if hasattr(val, "to_pydatetime") else val
+                        cell.number_format = "DD/MM/YYYY"
+                    elif isinstance(val, date):
+                        cell.value = val
+                        cell.number_format = "DD/MM/YYYY"
+                    else:
+                        cell.value = str(val).strip()
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                    tam_str = 12
+                elif tipo == "codigo":
+                    val_str = str(val).strip()
+                    if val_str.endswith(".0"):
+                        val_str = val_str[:-2]
+                    cell.value = val_str
+                    cell.number_format = "@"
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                    tam_str = len(val_str)
+                else:
+                    if isinstance(val, (int, float)) and not isinstance(val, bool):
+                        cell.value = val
+                        cell.alignment = Alignment(horizontal="right", vertical="center")
+                        tam_str = len(str(val))
+                    else:
+                        val_str = str(val).strip()
+                        cell.value = val_str
+                        cell.alignment = Alignment(horizontal="left", vertical="center")
+                        tam_str = len(val_str)
+
+                if tam_str > max_larguras.get(col_idx, 0):
+                    max_larguras[col_idx] = tam_str
+
+        for col_idx in range(1, len(cols) + 1):
+            col_letter = get_column_letter(col_idx)
+            largura = max(13, min(max_larguras.get(col_idx, 10) + 4, 50))
+            ws.column_dimensions[col_letter].width = largura
+
+    _formatar_aba(ws_pedido, pedido_df)
+    _formatar_aba(ws_linha, linha_df)
+
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
 
 
 def montar_mensagem(caminho_anexo: Path | str, pdv_nome: str, limite_pedidos: int = 15) -> tuple[str, float, float]:
@@ -283,15 +409,11 @@ def processar_comissionamento(arquivo, nome: str, lote: LoteImportacao) -> dict:
                 sem_linhas += 1
                 continue
 
-            buf = io.BytesIO()
-            with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-                pedido_pdv.to_excel(writer, index=False, sheet_name="PEDIDO")
-                linha_pdv.to_excel(writer, index=False, sheet_name="LINHA_A_LINHA")
-            buf.seek(0)
+            conteudo_xlsx = gerar_planilha_comissionamento_formatada(pedido_pdv, linha_pdv)
             nome_saida = f"{base_nome}_{_sanitizar_nome(pdv_nome)}.xlsx"
 
             with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp_out:
-                tmp_out.write(buf.getvalue())
+                tmp_out.write(conteudo_xlsx)
                 caminho_out = Path(tmp_out.name)
             try:
                 mensagem, total_pedido, total_comissao = montar_mensagem(caminho_out, pdv_nome)
@@ -309,7 +431,7 @@ def processar_comissionamento(arquivo, nome: str, lote: LoteImportacao) -> dict:
                 mensagem=mensagem,
                 detalhes={"razoes": info["razoes"]},
             )
-            rel.arquivo.save(nome_saida, ContentFile(buf.getvalue()), save=True)
+            rel.arquivo.save(nome_saida, ContentFile(conteudo_xlsx), save=True)
             gerados += 1
 
         return {

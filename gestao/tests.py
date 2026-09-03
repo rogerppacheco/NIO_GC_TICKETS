@@ -1840,6 +1840,39 @@ class ComissionamentoTests(TestCase):
         self.assertIn("No corpo do email retirar assinatura e não escrever nada no corpo do email", rel.mensagem)
         self.assertIn("E o assunto do email deverá ser", rel.mensagem)
 
+        import openpyxl
+        rel.arquivo.open("rb")
+        wb = openpyxl.load_workbook(rel.arquivo)
+        self.assertIn("PEDIDO", wb.sheetnames)
+        self.assertIn("LINHA_A_LINHA", wb.sheetnames)
+        ws_pedido = wb["PEDIDO"]
+        self.assertEqual(ws_pedido.cell(1, 1).fill.start_color.rgb, "001A365D")
+        self.assertEqual(ws_pedido.cell(1, 1).font.color.rgb, "00FFFFFF")
+        self.assertTrue(ws_pedido.views.sheetView[0].showGridLines)
+
+    def test_botao_baixar_planilha_presente_na_view(self):
+        from django.contrib.auth import get_user_model
+        from gestao.models import LoteImportacao, RelatorioComissionamento
+        from gestao.pipelines.comissionamento import processar_comissionamento
+        from tickets.models import PerfilStaff
+
+        User = get_user_model()
+        user = User.objects.create_superuser("admin_comiss", "admin@teste.com", "senha123")
+        PerfilStaff.objects.create(user=user, papel=PerfilStaff.Papel.GESTOR)
+        self.pdv.especialista = user
+        self.pdv.save(update_fields=["especialista"])
+        self.client.force_login(user)
+
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.COMISSIONAMENTO,
+            arquivo_nome="ciclo.xlsx",
+            ok=True,
+        )
+        processar_comissionamento(self._ciclo_xlsx(), "ciclo.xlsx", lote)
+        resp = self.client.get("/gestao/comissionamento/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "📥 Baixar Planilha")
+
     def test_exige_razoes_configuradas(self):
         from gestao.models import LoteImportacao
         from gestao.pipelines.comissionamento import processar_comissionamento
