@@ -189,6 +189,30 @@ def montar_mensagem(caminho_anexo: Path | str, pdv_nome: str, limite_pedidos: in
     else:
         msg.append("\nNão foi possível montar resumo de SUB_EVENTO/COMISSAO (colunas ausentes).")
 
+    empresa_assunto = ""
+    ciclo_assunto = ""
+    if not pedido_df.empty:
+        if c_razao:
+            s_razao = pedido_df[c_razao].dropna()
+            if not s_razao.empty:
+                empresa_assunto = str(s_razao.iloc[0]).strip()
+        if c_ciclo:
+            s_ciclo = pedido_df[c_ciclo].dropna()
+            if not s_ciclo.empty:
+                raw_c = str(s_ciclo.iloc[0]).strip()
+                ciclo_assunto = re.sub(r"^COMISS[ÃA]O\s*", "", raw_c, flags=re.IGNORECASE).strip()
+
+    empresa_final = empresa_assunto or pdv_nome
+    assunto_email = f"{empresa_final}_{ciclo_assunto}" if ciclo_assunto else f"{empresa_final}_[CICLO]"
+
+    msg.append(
+        "\nOrientação para envio do email: \n\n"
+        "Enviar o email para recebimentonfes@niointernet.com.br\n"
+        "Com cópia para: rogerio.pacheco@niointernet.com.br e PP-GestaodosParceiros@niointernet.com.br\n\n"
+        "No corpo do email retirar assinatura e não escrever nada no corpo do email \n"
+        f"E o assunto do email deverá ser {assunto_email}"
+    )
+
     return "\n".join(msg), total_valor_pedido, total_comissao
 
 

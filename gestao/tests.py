@@ -1546,6 +1546,49 @@ class DestinatarioEnvioTests(TestCase):
         self.assertEqual([d.jid for d in destinos], ["120363424950507669@g.us"])
         self.assertEqual(destinos[0].nome, "GERÊNCIA VISION")
 
+    def test_destinos_comissionamento_empresario(self):
+        from gestao.messaging.envio import destinos_para_envio
+        from tickets.models import ContatoParceiro
+
+        ContatoParceiro.objects.create(
+            parceiro=self.pdv,
+            nome="Empresário 1",
+            telefone="31999990001",
+            cargo=ContatoParceiro.Cargo.EMPRESARIO,
+        )
+        ContatoParceiro.objects.create(
+            parceiro=self.pdv,
+            nome="Backoffice",
+            telefone="31999990002",
+            cargo=ContatoParceiro.Cargo.BACKOFFICE,
+        )
+        destinos = destinos_para_envio(self.gestor, "envio_comissionamento", self.pdv)
+        self.assertEqual([d.jid for d in destinos], ["5531999990001"])
+        self.assertEqual(destinos[0].nome, "Empresário 1")
+
+    def test_destinos_comissionamento_fallback_telefone_ou_destinatario(self):
+        from gestao.messaging.envio import destinos_para_envio
+        from gestao.models import Destinatario
+
+        # 1. Sem contatos empresário, usa o telefone do parceiro
+        self.pdv.telefone = "31988887777"
+        self.pdv.save(update_fields=["telefone"])
+        destinos = destinos_para_envio(self.gestor, "envio_comissionamento", self.pdv)
+        self.assertEqual([d.jid for d in destinos], ["5531988887777"])
+
+        # 2. Sem telefone no parceiro, fallback para Destinatario legado
+        self.pdv.telefone = ""
+        self.pdv.save(update_fields=["telefone"])
+        Destinatario.objects.create(
+            parceiro=self.pdv,
+            nome="Grupo Comissao",
+            jid="120363comissao@g.us",
+            tipo=Destinatario.TipoDestino.GRUPO,
+            envio_comissionamento=True,
+        )
+        destinos2 = destinos_para_envio(self.gestor, "envio_comissionamento", self.pdv)
+        self.assertEqual([d.jid for d in destinos2], ["120363comissao@g.us"])
+
     def test_enviar_capilaridade_registra_log(self):
         from unittest.mock import MagicMock, patch
 
@@ -1768,6 +1811,12 @@ class ComissionamentoTests(TestCase):
         self.assertEqual(rel.qtd_linha, 1)
         self.assertTrue(rel.arquivo)
         self.assertIn("Comissionamento", rel.mensagem)
+        self.assertIn("Orientação para envio do email:", rel.mensagem)
+        self.assertIn("recebimentonfes@niointernet.com.br", rel.mensagem)
+        self.assertIn("rogerio.pacheco@niointernet.com.br", rel.mensagem)
+        self.assertIn("PP-GestaodosParceiros@niointernet.com.br", rel.mensagem)
+        self.assertIn("No corpo do email retirar assinatura e não escrever nada no corpo do email", rel.mensagem)
+        self.assertIn("E o assunto do email deverá ser", rel.mensagem)
 
     def test_exige_razoes_configuradas(self):
         from gestao.models import LoteImportacao

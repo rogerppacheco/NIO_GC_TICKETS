@@ -94,9 +94,11 @@ def destinos_para_envio(
     *,
     somente_grupos: bool = False,
 ) -> list[DestinoEnvio]:
-    """OSAB: empresário e/ou especialista. Demais: gestor usa Destinatários; especialista, o próprio WhatsApp."""
+    """OSAB/Comissionamento: empresário do parceiro. Demais: gestor usa Destinatários; especialista, o próprio WhatsApp."""
     if flag == "envio_osab" and parceiro is not None and not somente_grupos:
         return destinos_osab(user, parceiro)
+    if flag == "envio_comissionamento" and parceiro is not None and not somente_grupos:
+        return destinos_comissionamento(user, parceiro)
     if user is not None and not eh_gestor(user):
         jid = whatsapp_do_usuario(user)
         if not jid:
@@ -107,6 +109,61 @@ def destinos_para_envio(
         DestinoEnvio(jid=d.jid, nome=d.nome, parceiro=d.parceiro, destinatario=d)
         for d in destinatarios_para(flag, parceiro, somente_grupos=somente_grupos)
     ]
+
+
+def destinos_comissionamento(
+    user: AbstractBaseUser | None, parceiro: Parceiro
+) -> list[DestinoEnvio]:
+    """Comissionamento: empresário(s) cadastrado(s) no parceiro.
+    Sem empresário cadastrado, aplica fallback para o telefone do parceiro ou Destinatários configurados.
+    """
+    from ..destinatarios_especialista import jid_individual
+
+    destinos: list[DestinoEnvio] = []
+    vistos: set[str] = set()
+
+    def add(
+        jid: str,
+        nome: str,
+        *,
+        grupo: bool = False,
+        destinatario: Destinatario | None = None,
+    ) -> None:
+        chave = (jid or "").strip() if grupo else jid_individual(jid)
+        if not chave or chave in vistos:
+            return
+        vistos.add(chave)
+        destinos.append(
+            DestinoEnvio(
+                jid=chave, nome=nome, parceiro=parceiro, destinatario=destinatario
+            )
+        )
+
+    n_empresario = 0
+    for contato in parceiro.contatos.filter(ativo=True):
+        if contato.eh_empresario() and contato.telefone:
+            antes = len(destinos)
+            add(contato.telefone, contato.nome or "Empresário")
+            if len(destinos) > antes:
+                n_empresario += 1
+
+    if n_empresario == 0 and parceiro.telefone:
+        add(parceiro.telefone, parceiro.contato_nome or parceiro.nome or "Empresário")
+
+    if not destinos:
+        for dest in Destinatario.objects.filter(
+            parceiro=parceiro,
+            ativo=True,
+            envio_comissionamento=True,
+        ):
+            add(
+                dest.jid,
+                dest.nome,
+                grupo=(dest.tipo == Destinatario.TipoDestino.GRUPO),
+                destinatario=dest,
+            )
+
+    return destinos
 
 
 def destinos_osab(user: AbstractBaseUser | None, parceiro: Parceiro) -> list[DestinoEnvio]:
