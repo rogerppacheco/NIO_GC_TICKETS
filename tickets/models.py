@@ -112,7 +112,18 @@ class ContatoParceiro(models.Model):
     def eh_empresario(self) -> bool:
         texto = unicodedata.normalize("NFKD", self.cargo or "")
         texto = "".join(c for c in texto if not unicodedata.combining(c)).casefold().strip()
-        return texto == "empresario"
+        return texto in {
+            "empresario",
+            "empresaria",
+            "diretor",
+            "diretora",
+            "socio",
+            "socia",
+            "proprietario",
+            "proprietaria",
+            "dono",
+            "dona",
+        }
 
 
 class TipoDemanda(models.TextChoices):

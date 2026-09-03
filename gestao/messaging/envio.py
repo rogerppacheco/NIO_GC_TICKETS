@@ -164,6 +164,14 @@ def destinos_comissionamento(
                 destinatario=dest,
             )
 
+    if not destinos:
+        for dest in Destinatario.objects.filter(
+            parceiro=parceiro,
+            ativo=True,
+            tipo=Destinatario.TipoDestino.GRUPO,
+        ):
+            add(dest.jid, dest.nome, grupo=True, destinatario=dest)
+
     return destinos
 
 

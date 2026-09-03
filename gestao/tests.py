@@ -1589,6 +1589,28 @@ class DestinatarioEnvioTests(TestCase):
         destinos2 = destinos_para_envio(self.gestor, "envio_comissionamento", self.pdv)
         self.assertEqual([d.jid for d in destinos2], ["120363comissao@g.us"])
 
+    def test_destinos_comissionamento_diretora_e_empresaria(self):
+        from gestao.messaging.envio import destinos_para_envio
+        from tickets.models import ContatoParceiro
+
+        ContatoParceiro.objects.create(
+            parceiro=self.pdv,
+            nome="Anacleto",
+            telefone="33984590017",
+            cargo="Diretor",
+        )
+        ContatoParceiro.objects.create(
+            parceiro=self.pdv,
+            nome="Janaina",
+            telefone="33988310607",
+            cargo="Diretora",
+        )
+        destinos = destinos_para_envio(self.gestor, "envio_comissionamento", self.pdv)
+        self.assertEqual(
+            [d.jid for d in destinos],
+            ["5533984590017", "5533988310607"],
+        )
+
     def test_enviar_capilaridade_registra_log(self):
         from unittest.mock import MagicMock, patch
 
