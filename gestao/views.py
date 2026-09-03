@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from django.contrib.auth.decorators import login_required
-from django.http import HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
 from django.db.models import Q
@@ -1246,6 +1246,31 @@ def comissionamento_view(request: HttpRequest) -> HttpResponse:
     return _render_comissionamento(
         request, UploadBaseForm() if _pode_importar(request) else None
     )
+
+
+@login_required
+def comissionamento_download_view(request: HttpRequest, pk: int) -> HttpResponse:
+    visiveis = _parceiros(request)
+    rel = get_object_or_404(
+        RelatorioComissionamento.objects.filter(parceiro__in=visiveis),
+        pk=pk,
+    )
+    if not rel.arquivo:
+        raise Http404("Planilha não encontrada.")
+    try:
+        with rel.arquivo.open("rb") as f:
+            conteudo = f.read()
+    except Exception as exc:
+        raise Http404(f"Erro ao ler planilha: {exc}")
+
+    from pathlib import Path
+    nome = Path(rel.arquivo.name).name or f"comissionamento_{rel.pdv_nome}.xlsx"
+    resp = HttpResponse(
+        conteudo,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    resp["Content-Disposition"] = f'attachment; filename="{nome}"'
+    return resp
 
 
 def _render_comissionamento(request, form):

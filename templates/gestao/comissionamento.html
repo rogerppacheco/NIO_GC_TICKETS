@@ -78,7 +78,7 @@
         <textarea id="com-{{ r.id }}" hidden>{{ r.mensagem }}</textarea>
         <button class="btn btn-primary" type="button" data-copy-target="com-{{ r.id }}">Copiar</button>
         {% if r.arquivo %}
-        <a class="btn btn-secondary" href="{{ r.arquivo.url }}" download target="_blank" rel="noopener">📥 Baixar Planilha</a>
+        <a class="btn btn-secondary" href="{% url 'gestao_comissionamento_download' pk=r.id %}">📥 Baixar Planilha</a>
         {% endif %}
         {% if pode_enviar %}
         <form method="post">

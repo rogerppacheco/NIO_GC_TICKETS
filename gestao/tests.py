@@ -1873,6 +1873,23 @@ class ComissionamentoTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "📥 Baixar Planilha")
 
+        rel = RelatorioComissionamento.objects.get()
+        url_download = f"/gestao/comissionamento/{rel.id}/download/"
+        self.assertContains(resp, url_download)
+
+        resp_down = self.client.get(url_download)
+        self.assertEqual(resp_down.status_code, 200)
+        self.assertEqual(
+            resp_down["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        self.assertIn("attachment; filename=", resp_down["Content-Disposition"])
+
+        import io, openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(resp_down.content))
+        self.assertIn("PEDIDO", wb.sheetnames)
+        self.assertIn("LINHA_A_LINHA", wb.sheetnames)
+
     def test_exige_razoes_configuradas(self):
         from gestao.models import LoteImportacao
         from gestao.pipelines.comissionamento import processar_comissionamento

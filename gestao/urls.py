@@ -16,6 +16,7 @@ urlpatterns = [
     path("fpd/", views.fpd_view, name="gestao_fpd"),
     path("churn/", views.churn_view, name="gestao_churn"),
     path("comissionamento/", views.comissionamento_view, name="gestao_comissionamento"),
+    path("comissionamento/<int:pk>/download/", views.comissionamento_download_view, name="gestao_comissionamento_download"),
     path("tarefas/", views.tarefas_view, name="gestao_tarefas"),
     path("venda-indevida/", views.venda_indevida_view, name="gestao_venda_indevida"),
     path("recompra/", views.recompra_view, name="gestao_recompra"),
