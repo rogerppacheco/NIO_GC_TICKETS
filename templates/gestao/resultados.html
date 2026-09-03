@@ -46,61 +46,15 @@
     <div class="panel resultados-tabs-panel">
   {% if aba == "parcial" %}
   <div class="tab-panel is-active" role="tabpanel">
-    <div class="parcial-intro">
-      <p class="help" style="margin:0">
-        Importe a base Excel da dashboard (<strong>Total / D-7</strong>), gere a imagem automaticamente e envie nos turnos
-        <strong>12h · 15h · 18h</strong>.
-        {% if parcial_dados %}
-        Base ativa: {{ parcial_dados.qtd_pdvs }} PDV(s) · {{ parcial_dados.total_pp }} VB · ∆ D-7 {{ parcial_dados.delta_pp|stringformat:"+d" }}
-        · turno {{ parcial_dados.rotulo_turno }}
-        {% if ultimo_parcial %} · importada {{ ultimo_parcial.criado_em|date:"d/m H:i" }}{% endif %}.
-        {% if parcial_sub == "gerencia" and eh_gestor and gestao_escopo != "todos" %}
-        <span class="help">Gerência usa todos os PDVs da gerência PP.</span>
-        {% endif %}
-        {% if parcial_sub == "gerencia" and not parcial_dados.vendas_por_id %}
-        <strong class="help" style="color:var(--warn)"> Reimporte o Excel (com escopo Todos) para o top/bottom refletir vendas de todos os PDVs.</strong>
-        {% endif %}
-        {% else %}
-        Turno sugerido agora: <strong>{{ parcial_turno }}</strong>.
-        {% endif %}
-      </p>
-    </div>
-
-    {% if pode_editar %}
-    <form method="post" enctype="multipart/form-data" class="form-grid parcial-import parcial-import-compact" style="margin-top:0.85rem">
-      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
-      <input type="hidden" name="action" value="importar_parcial">
-      <div>{{ form.arquivo.label_tag }}{{ form.arquivo }}<div class="help">{{ form.arquivo.help_text }}</div></div>
-      <div>{{ form.turno.label_tag }}{{ form.turno }}<div class="help">{{ form.turno.help_text }}</div></div>
-      <div class="full"><button class="btn btn-primary" type="submit">Importar base e gerar prévia</button></div>
-    </form>
-    {% endif %}
-
+    <div class="parcial-workspace">
+      <div class="parcial-workspace-main">
     {% if parcial_dados %}
 
     {% if parcial_sub == "gerencia" and eh_gestor %}
-    <div class="parcial-card-envio parcial-card-envio-full">
-      <div class="parcial-card-preview parcial-card-preview-full">
-        <img class="parcial-preview-img"
-          src="{% url 'gestao_parcial_preview' %}?escopo={{ gestao_escopo|default:'meus' }}&visao=gerencia&_={{ ultimo_parcial.criado_em|date:'U' }}"
-          alt="Parcial gerência" loading="lazy">
-      </div>
-      {% if pode_enviar %}
-      <form method="post" class="parcial-card-acao">
-        {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
-        <input type="hidden" name="parcial_sub" value="gerencia">
-        <p class="help" style="margin:0">Top/bottom 5 · total PP · envio só da imagem.</p>
-        <select name="destinatario" required>
-          <option value="">Grupo gerência…</option>
-          {% for g in grupos_parcial %}
-            <option value="{{ g.id }}"{% if ranking_grupo_padrao and g.id == ranking_grupo_padrao.id %} selected{% endif %}>
-              {% if g.ranking_consolidado %}{{ g.nome }}{% else %}{{ g.parceiro.nome }} — {{ g.nome }}{% endif %}
-            </option>
-          {% endfor %}
-        </select>
-        <button class="btn btn-primary" type="submit" name="action" value="enviar_parcial_gerencia">Enviar imagem</button>
-      </form>
-      {% endif %}
+    <div class="parcial-card-preview parcial-card-preview-full">
+      <img class="parcial-preview-img"
+        src="{% url 'gestao_parcial_preview' %}?escopo={{ gestao_escopo|default:'meus' }}&visao=gerencia&_={{ ultimo_parcial.criado_em|date:'U' }}"
+        alt="Parcial gerência" loading="lazy">
     </div>
     {% if parcial_gerencia_linhas %}
     <div class="parcial-todos-pdvs">
@@ -137,22 +91,10 @@
     {% endif %}
 
     {% if parcial_sub == "consolidado" and eh_gestor %}
-    <div class="parcial-card-envio parcial-card-envio-full">
-      <div class="parcial-card-preview parcial-card-preview-full">
-        <img class="parcial-preview-img"
-          src="{% url 'gestao_parcial_preview' %}?escopo={{ gestao_escopo|default:'meus' }}&visao=consolidado&_={{ ultimo_parcial.criado_em|date:'U' }}"
-          alt="Carteira PP consolidada" loading="lazy">
-      </div>
-      <div class="parcial-card-acao">
-        <p class="help" style="margin:0">Especialista → parceiros · linha <strong>TOTAL PP</strong> no rodapé.</p>
-        {% if pode_enviar %}
-        <form method="post" style="margin-top:0.65rem">
-          {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
-          <input type="hidden" name="parcial_sub" value="consolidado">
-          <button class="btn btn-secondary" type="submit" name="action" value="enviar_parcial_grupos">Enviar a todos os grupos</button>
-        </form>
-        {% endif %}
-      </div>
+    <div class="parcial-card-preview parcial-card-preview-full">
+      <img class="parcial-preview-img"
+        src="{% url 'gestao_parcial_preview' %}?escopo={{ gestao_escopo|default:'meus' }}&visao=consolidado&_={{ ultimo_parcial.criado_em|date:'U' }}"
+        alt="Carteira PP consolidada" loading="lazy">
     </div>
     {% endif %}
 
@@ -188,13 +130,6 @@
 
     {% if parcial_sub == "parceiros" %}
     <div class="parcial-lista-envio">
-      {% if pode_enviar and eh_gestor and parcial_pdvs|length > 1 %}
-      <form method="post" class="parcial-bulk-envio">
-        {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
-        <input type="hidden" name="parcial_sub" value="parceiros">
-        <button class="btn btn-secondary" type="submit" name="action" value="enviar_parcial_grupos">Enviar imagem em todos os grupos</button>
-      </form>
-      {% endif %}
       {% for linha in parcial_pdvs %}
       <div class="parcial-card-envio">
         <div class="parcial-card-preview parcial-card-preview-sm">
@@ -222,8 +157,82 @@
     {% endif %}
 
     {% elif not pode_editar %}
-    <p class="help" style="margin-top:0.85rem">Aguardando importação da base pelo gestor.</p>
+    <p class="help">Aguardando importação da base pelo gestor.</p>
+    {% else %}
+    <p class="help">Importe a base Excel para ver a prévia da imagem.</p>
     {% endif %}
+      </div>
+
+      <aside class="parcial-workspace-aside">
+        <div class="parcial-intro">
+          <p class="help" style="margin:0">
+            Importe a base Excel da dashboard (<strong>Total / D-7</strong>), gere a imagem automaticamente e envie nos turnos
+            <strong>12h · 15h · 18h</strong>.
+            {% if parcial_dados %}
+            Base ativa: {{ parcial_dados.qtd_pdvs }} PDV(s) · {{ parcial_dados.total_pp }} VB · ∆ D-7 {{ parcial_dados.delta_pp|stringformat:"+d" }}
+            · turno {{ parcial_dados.rotulo_turno }}
+            {% if ultimo_parcial %} · importada {{ ultimo_parcial.criado_em|date:"d/m H:i" }}{% endif %}.
+            {% if parcial_sub == "gerencia" and eh_gestor and gestao_escopo != "todos" %}
+            <span class="help">Gerência usa todos os PDVs da gerência PP.</span>
+            {% endif %}
+            {% if parcial_sub == "gerencia" and not parcial_dados.vendas_por_id %}
+            <strong class="help" style="color:var(--warn)"> Reimporte o Excel (com escopo Todos) para o top/bottom refletir vendas de todos os PDVs.</strong>
+            {% endif %}
+            {% else %}
+            Turno sugerido agora: <strong>{{ parcial_turno }}</strong>.
+            {% endif %}
+          </p>
+        </div>
+
+        {% if pode_editar %}
+        <form method="post" enctype="multipart/form-data" class="form-grid parcial-import parcial-import-aside">
+          {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+          <input type="hidden" name="action" value="importar_parcial">
+          <div>{{ form.arquivo.label_tag }}{{ form.arquivo }}<div class="help">{{ form.arquivo.help_text }}</div></div>
+          <div>{{ form.turno.label_tag }}{{ form.turno }}<div class="help">{{ form.turno.help_text }}</div></div>
+          <div class="full"><button class="btn btn-primary" type="submit">Importar base e gerar prévia</button></div>
+        </form>
+        {% endif %}
+
+        {% if parcial_dados and parcial_sub == "gerencia" and eh_gestor and pode_enviar %}
+        <form method="post" class="parcial-aside-envio">
+          {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+          <input type="hidden" name="parcial_sub" value="gerencia">
+          <p class="help" style="margin:0">Top/bottom 5 · total PP · envio só da imagem.</p>
+          <select name="destinatario" required>
+            <option value="">Grupo gerência…</option>
+            {% for g in grupos_parcial %}
+              <option value="{{ g.id }}"{% if ranking_grupo_padrao and g.id == ranking_grupo_padrao.id %} selected{% endif %}>
+                {% if g.ranking_consolidado %}{{ g.nome }}{% else %}{{ g.parceiro.nome }} — {{ g.nome }}{% endif %}
+              </option>
+            {% endfor %}
+          </select>
+          <button class="btn btn-primary" type="submit" name="action" value="enviar_parcial_gerencia">Enviar imagem</button>
+        </form>
+        {% endif %}
+
+        {% if parcial_dados and parcial_sub == "consolidado" and eh_gestor %}
+        <div class="parcial-aside-envio">
+          <p class="help" style="margin:0">Especialista → parceiros · linha <strong>TOTAL PP</strong> no rodapé.</p>
+          {% if pode_enviar %}
+          <form method="post">
+            {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+            <input type="hidden" name="parcial_sub" value="consolidado">
+            <button class="btn btn-secondary" type="submit" name="action" value="enviar_parcial_grupos">Enviar a todos os grupos</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {% if parcial_dados and parcial_sub == "parceiros" and pode_enviar and eh_gestor and parcial_pdvs|length > 1 %}
+        <form method="post" class="parcial-aside-envio">
+          {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+          <input type="hidden" name="parcial_sub" value="parceiros">
+          <button class="btn btn-secondary" type="submit" name="action" value="enviar_parcial_grupos">Enviar imagem em todos os grupos</button>
+        </form>
+        {% endif %}
+      </aside>
+    </div>
   </div>
   {% endif %}
 
