@@ -1264,7 +1264,13 @@ def comissionamento_download_view(request: HttpRequest, pk: int) -> HttpResponse
         raise Http404(f"Erro ao ler planilha: {exc}")
 
     from pathlib import Path
-    nome = Path(rel.arquivo.name).name or f"comissionamento_{rel.pdv_nome}.xlsx"
+    import re
+
+    raw_name = Path(rel.arquivo.name).name or f"comissionamento_{rel.pdv_nome}.xlsx"
+    stem = Path(raw_name).stem
+    stem_limpo = re.sub(r"(_[a-zA-Z0-9]{7})+$", "", stem)
+    nome = f"{stem_limpo}.xlsx" if stem_limpo else f"comissionamento_{rel.pdv_nome}.xlsx"
+
     resp = HttpResponse(
         conteudo,
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

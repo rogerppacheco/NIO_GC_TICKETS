@@ -815,6 +815,10 @@ def enviar_comissionamento_pdv(
         arquivo_bytes, nome_arquivo = _ler_arquivo_relatorio(
             rel.arquivo, f"comissionamento_{parceiro.nome}.xlsx"
         )
+        stem = Path(nome_arquivo).stem
+        stem_limpo = re.sub(r"(_[a-zA-Z0-9]{7})+$", "", stem)
+        if stem_limpo:
+            nome_arquivo = f"{stem_limpo}.xlsx"
     except RuntimeError as exc:
         return ResumoEnvio(erros=1, detalhes=[str(exc)])
 
