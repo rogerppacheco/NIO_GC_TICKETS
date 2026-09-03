@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import mimetypes
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -760,6 +761,34 @@ def _caption_curta(rel: RelatorioComissionamento) -> str:
     )
 
 
+def formatar_mensagem_comissionamento(rel: RelatorioComissionamento) -> str:
+    msg = (rel.mensagem or "").strip()
+    if not msg:
+        return ""
+    if "Orientação para envio do email" in msg or "Orientaçaõ para envio do email" in msg:
+        return msg
+
+    m_razao = re.search(r"RAZ[ÃA]O SOCIAL:\s*(.+)", msg, flags=re.IGNORECASE)
+    empresa = m_razao.group(1).strip() if m_razao else ""
+    if not empresa or empresa == "-":
+        empresa = (rel.pdv_nome or (rel.parceiro.nome if rel.parceiro else "")).strip()
+
+    m_ciclo = re.search(r"REFER[ÊE]NCIA:\s*(?:COMISSAO\s*)?([^\n\r]+)", msg, flags=re.IGNORECASE)
+    ciclo = m_ciclo.group(1).strip() if m_ciclo else ""
+    ciclo = re.sub(r"^COMISS[ÃA]O\s*", "", ciclo, flags=re.IGNORECASE).strip()
+
+    assunto_email = f"{empresa}_{ciclo}" if ciclo and ciclo != "-" else f"{empresa}_[CICLO]"
+
+    bloco = (
+        "\n\nOrientação para envio do email: \n\n"
+        "Enviar o email para recebimentonfes@niointernet.com.br\n"
+        "Com cópia para: rogerio.pacheco@niointernet.com.br e PP-GestaodosParceiros@niointernet.com.br\n\n"
+        "No corpo do email retirar assinatura e não escrever nada no corpo do email \n"
+        f"E o assunto do email deverá ser {assunto_email}"
+    )
+    return msg + bloco
+
+
 def enviar_comissionamento_pdv(
     parceiro: Parceiro,
     user: AbstractBaseUser | None = None,
@@ -780,9 +809,15 @@ def enviar_comissionamento_pdv(
         )
     except RuntimeError as exc:
         return ResumoEnvio(erros=1, detalhes=[str(exc)])
+
+    mensagem_final = formatar_mensagem_comissionamento(rel)
+    if mensagem_final and mensagem_final != rel.mensagem:
+        rel.mensagem = mensagem_final
+        rel.save(update_fields=["mensagem"])
+
     return _enviar_com_anexo(
         tipo=EnvioWhatsApp.Tipo.COMISSIONAMENTO,
-        mensagem=rel.mensagem,
+        mensagem=mensagem_final or rel.mensagem,
         caption=_caption_curta(rel),
         destinos=destinos,
         parceiro=parceiro,
