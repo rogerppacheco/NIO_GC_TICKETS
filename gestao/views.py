@@ -41,6 +41,7 @@ from .messaging.envio import (
     enviar_capilaridade_todos,
     enviar_churn_pdv,
     enviar_comissionamento_lote,
+    enviar_comissionamento_lote_email,
     enviar_comissionamento_pdv,
     enviar_comissionamento_email_especialista,
     enviar_fpd_pdv,
@@ -1245,15 +1246,28 @@ def comissionamento_view(request: HttpRequest) -> HttpResponse:
             parceiro = get_object_or_404(_parceiros(request), pk=request.POST.get("parceiro"))
             _flash_resumo(request, "Comissionamento", enviar_comissionamento_pdv(parceiro, request.user))
             return _voltar(request, "gestao_comissionamento")
-        if action == "enviar_lote" and _pode_enviar(request):
+        if action in {"enviar_lote", "enviar_lote_whatsapp"} and _pode_enviar(request):
             lote_id = request.POST.get("lote")
             if not lote_id:
                 messages.error(request, "Informe o lote.")
             else:
                 _flash_resumo(
                     request,
-                    "Comissionamento (lote)",
+                    "Comissionamento (lote WhatsApp)",
                     enviar_comissionamento_lote(
+                        int(lote_id), request.user, parceiros=_parceiros(request)
+                    ),
+                )
+            return _voltar(request, "gestao_comissionamento")
+        if action == "enviar_lote_email":
+            lote_id = request.POST.get("lote")
+            if not lote_id:
+                messages.error(request, "Informe o lote.")
+            else:
+                _flash_resumo(
+                    request,
+                    "Comissionamento (lote E-mail)",
+                    enviar_comissionamento_lote_email(
                         int(lote_id), request.user, parceiros=_parceiros(request)
                     ),
                 )
@@ -1300,19 +1314,33 @@ def _render_comissionamento(request, form):
     from .messaging.envio import formatar_mensagem_comissionamento
 
     visiveis = _parceiros(request)
-    relatorios = list(
-        RelatorioComissionamento.objects.select_related("parceiro__especialista", "lote")
-        .filter(parceiro__in=visiveis)[:80]
+    lotes = list(
+        LoteImportacao.objects.filter(
+            tipo=LoteImportacao.Tipo.COMISSIONAMENTO, ok=True
+        ).order_by("-criado_em", "-id")[:15]
     )
+
+    lote_req = request.GET.get("lote")
+    lote_ativo_id = None
+    if lote_req and lote_req.isdigit():
+        lote_ativo_id = int(lote_req)
+    elif lotes:
+        lote_ativo_id = lotes[0].id
+
+    qs_rel = RelatorioComissionamento.objects.select_related(
+        "parceiro__especialista", "lote"
+    ).filter(parceiro__in=visiveis)
+
+    if lote_ativo_id:
+        qs_rel = qs_rel.filter(lote_id=lote_ativo_id)
+
+    relatorios = list(qs_rel[:80])
     for r in relatorios:
         msg_formatada = formatar_mensagem_comissionamento(r)
         if msg_formatada and msg_formatada != r.mensagem:
             r.mensagem = msg_formatada
             r.save(update_fields=["mensagem"])
 
-    lotes = LoteImportacao.objects.filter(
-        tipo=LoteImportacao.Tipo.COMISSIONAMENTO, ok=True
-    )[:15]
     return render(
         request,
         "gestao/comissionamento.html",
@@ -1320,6 +1348,7 @@ def _render_comissionamento(request, form):
             "form": form,
             "relatorios": relatorios,
             "lotes": lotes,
+            "lote_ativo": lote_ativo_id,
             "mapa_razoes": mapa_pdv_razoes(),
             "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),

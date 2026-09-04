@@ -45,19 +45,42 @@
   <p class="help" style="margin-bottom:1rem">Nenhum PDV com razão social cadastrada em Parceiros ainda.</p>
 {% endif %}
 
-{% if pode_enviar and lotes %}
+{% if lotes %}
 <div class="panel" style="margin-bottom:1rem">
-  <div class="panel-h"><h2>Reenviar lote</h2></div>
-  <div class="panel-b">
-    <form method="post" class="fila-toolbar" style="gap:0.6rem">
-      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
-      <input type="hidden" name="action" value="enviar_lote">
-      <select name="lote" class="fila-pick">
+  <div class="panel-h">
+    <h2>Reenviar lote</h2>
+    {% if lotes|length > 1 %}
+    <form method="get" style="display:flex;align-items:center;gap:0.4rem;margin:0">
+      {% if request.GET.escopo %}<input type="hidden" name="escopo" value="{{ request.GET.escopo }}">{% endif %}
+      <span class="help" style="margin:0">Exibir lote:</span>
+      <select name="lote" class="fila-pick" onchange="this.form.submit()">
         {% for l in lotes %}
-          <option value="{{ l.id }}">{{ l.criado_em|date:"d/m H:i" }} · {{ l.arquivo_nome }} · {{ l.resumo.pdvs|default:"?" }} PDV(s)</option>
+          <option value="{{ l.id }}" {% if l.id == lote_ativo %}selected{% endif %}>
+            {{ l.criado_em|date:"d/m H:i" }} · {{ l.arquivo_nome|truncatechars:35 }}
+          </option>
         {% endfor %}
       </select>
-      <button class="btn btn-secondary" type="submit">Enviar lote via WhatsApp</button>
+    </form>
+    {% endif %}
+  </div>
+  <div class="panel-b">
+    <form method="post" class="fila-toolbar" style="gap:0.6rem;flex-wrap:wrap">
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+      <select name="lote" class="fila-pick" style="min-width:280px">
+        {% for l in lotes %}
+          <option value="{{ l.id }}" {% if l.id == lote_ativo %}selected{% endif %}>
+            {{ l.criado_em|date:"d/m H:i" }} · {{ l.arquivo_nome }} · {{ l.resumo.pdvs|default:l.relatorios_comissionamento.count }} PDV(s)
+          </option>
+        {% endfor %}
+      </select>
+      {% if pode_enviar %}
+      <button class="btn btn-secondary" type="submit" name="action" value="enviar_lote">
+        📱 Enviar lote via WhatsApp
+      </button>
+      {% endif %}
+      <button class="btn btn-secondary" type="submit" name="action" value="enviar_lote_email">
+        ✉️ Enviar lote por E-mail (Especialistas)
+      </button>
     </form>
   </div>
 </div>

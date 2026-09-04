@@ -955,19 +955,8 @@ def enviar_comissionamento_email_especialista(
         assunto = f"Comissionamento — {empresa}"
 
     nome_esp_display = (especialista.get_full_name() or especialista.username or "Especialista").strip()
-    corpo_texto = msg.replace("*", "")
-    corpo_html = (
-        f'<div style="font-family: Arial, sans-serif; font-size: 14px; color: #1e293b; line-height: 1.6;">'
-        f'<p>Olá, <strong>{nome_esp_display}</strong>!</p>'
-        f'<p>Segue em anexo a planilha e abaixo os dados de comissionamento do parceiro <strong>{relatorio.pdv_nome}</strong>:</p>'
-        f'<hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 16px 0;">'
-        f'<div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 16px; white-space: pre-wrap; font-family: monospace; font-size: 13px;">'
-        f'{msg}'
-        f'</div>'
-        f'<hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 16px 0;">'
-        f'<p style="font-size: 12px; color: #64748b;">NIO GC Tickets · Gestão de Comissionamento</p>'
-        f'</div>'
-    )
+    corpo_texto = (mensagem_final or relatorio.mensagem or "").replace("\r\n", "\n").replace("\n", "\r\n").replace("*", "")
+    corpo_html = formatar_html_email_comissionamento(relatorio, nome_esp_display)
 
     ok, erro = enviar_email_com_anexos(
         [email_dest],
@@ -979,6 +968,100 @@ def enviar_comissionamento_email_especialista(
     if ok:
         return True, f"Planilha e texto de comissionamento enviados para {email_dest} com sucesso!"
     return False, f"Falha ao enviar e-mail para {email_dest}: {erro}"
+
+
+def formatar_html_email_comissionamento(rel: RelatorioComissionamento, nome_esp: str) -> str:
+    """Gera HTML com divs e estilos inline compatíveis com o Outlook/Word e outros clientes de e-mail."""
+    import html
+
+    msg = formatar_mensagem_comissionamento(rel) or rel.mensagem or ""
+
+    partes = re.split(r"(?i)\n*(?=Orienta[çc][ãa]o para envio do email:?)", msg, maxsplit=1)
+    corpo_dados = partes[0].strip()
+    corpo_orientacao = partes[1].strip() if len(partes) > 1 else ""
+
+    def processar_linhas(texto: str) -> str:
+        linhas_out = []
+        for raw in texto.splitlines():
+            linha = raw.strip()
+            if not linha:
+                linhas_out.append('<div style="height: 8px; line-height: 8px;">&nbsp;</div>')
+                continue
+            escaped = html.escape(linha)
+            formatado = re.sub(r"\*([^*\n\r]+)\*", r"<strong>\1</strong>", escaped)
+            if "TOTAL " in linha or "Conferência total" in linha:
+                formatado = f'<span style="color: #047857; font-weight: bold;">{formatado}</span>'
+            linhas_out.append(f'<div style="margin: 0; padding: 2px 0; line-height: 1.5;">{formatado}</div>')
+        return "\n".join(linhas_out)
+
+    dados_html = processar_linhas(corpo_dados)
+    orientacao_html = processar_linhas(corpo_orientacao) if corpo_orientacao else ""
+
+    orientacao_box = ""
+    if orientacao_html:
+        orientacao_box = f"""
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 16px; background-color: #fefce8; border: 1px solid #fef08a; border-left: 4px solid #eab308; border-radius: 6px;">
+          <tr>
+            <td style="padding: 14px 16px; font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #713f12; line-height: 1.5;">
+              {orientacao_html}
+            </td>
+          </tr>
+        </table>
+        """
+
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+</head>
+<body style="margin: 0; padding: 10px; background-color: #ffffff; font-family: Arial, Helvetica, sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #1e293b; line-height: 1.6; max-width: 650px;">
+    <tr>
+      <td style="padding: 0 0 14px 0;">
+        <p style="margin: 0 0 6px 0; font-size: 15px;">Olá, <strong>{html.escape(nome_esp)}</strong>!</p>
+        <p style="margin: 0; color: #475569;">Segue em anexo a planilha e abaixo os dados da apuração de comissionamento do parceiro <strong>{html.escape(rel.pdv_nome)}</strong>:</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 18px 20px; font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #1e293b;">
+        {dados_html}
+      </td>
+    </tr>
+    {f"<tr><td>{orientacao_box}</td></tr>" if orientacao_box else ""}
+    <tr>
+      <td style="padding-top: 20px; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9;">
+        NIO GC Tickets · Gestão de Parceiros
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+
+def enviar_comissionamento_lote_email(
+    lote_id: int,
+    user: AbstractBaseUser | None = None,
+    parceiros=None,
+) -> ResumoEnvio:
+    """Envia em lote as planilhas e mensagens de comissionamento para os especialistas de cada PDV."""
+    total = ResumoEnvio()
+    qs = RelatorioComissionamento.objects.filter(lote_id=lote_id).select_related(
+        "parceiro__especialista"
+    )
+    qs = _filtrar_lote_escopo(qs, user, parceiros, incluir_sem_pdv=False)
+    if not qs.exists():
+        return ResumoEnvio(ignorados=1, detalhes=["Lote sem relatórios de comissionamento."])
+
+    for rel in qs:
+        ok, msg_retorno = enviar_comissionamento_email_especialista(rel, user)
+        if ok:
+            total.enviados += 1
+            total.detalhes.append(f"OK → {rel.pdv_nome}: {msg_retorno}")
+        else:
+            total.erros += 1
+            total.detalhes.append(f"ERRO → {rel.pdv_nome}: {msg_retorno}")
+
+    return total
 
 
 def enviar_tarefa(rel: RelatorioTarefa, user: AbstractBaseUser | None = None) -> ResumoEnvio:
