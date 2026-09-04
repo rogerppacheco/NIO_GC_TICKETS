@@ -909,6 +909,78 @@ def enviar_comissionamento_lote(
     return total
 
 
+def enviar_comissionamento_email_especialista(
+    relatorio: RelatorioComissionamento,
+    user: AbstractBaseUser | None = None,
+) -> tuple[bool, str]:
+    """Envia por e-mail a planilha e o texto de comissionamento para o especialista do parceiro."""
+    if not smtp_configurado():
+        return False, "Serviço de e-mail (SMTP) não configurado no servidor."
+
+    especialista = relatorio.parceiro.especialista if relatorio.parceiro else None
+    email_dest = (especialista.email if especialista else "").strip()
+    if not email_dest or "@" not in email_dest:
+        nome_esp = (especialista.get_full_name() or especialista.username) if especialista else "Nenhum especialista vinculado"
+        return False, f"O parceiro {relatorio.pdv_nome} não possui especialista com e-mail cadastrado ({nome_esp})."
+
+    anexos: list[tuple[str, bytes, str]] = []
+    if relatorio.arquivo:
+        try:
+            dados_arquivo, nome_bruto = _ler_arquivo_relatorio(
+                relatorio.arquivo, f"comissionamento_{relatorio.pdv_nome}.xlsx"
+            )
+            stem = Path(nome_bruto).stem
+            stem_limpo = re.sub(r"(_[a-zA-Z0-9]{7})+$", "", stem)
+            nome_arquivo = f"{stem_limpo}.xlsx" if stem_limpo else f"comissionamento_{relatorio.pdv_nome}.xlsx"
+            mime = mimetypes.guess_type(nome_arquivo)[0] or XLSX_MIME
+            anexos.append((nome_arquivo, dados_arquivo, mime))
+        except Exception as exc:
+            return False, f"Não foi possível ler a planilha de comissionamento: {exc}"
+
+    mensagem_final = formatar_mensagem_comissionamento(relatorio)
+    msg = (mensagem_final or relatorio.mensagem or "").strip()
+
+    m_razao = re.search(r"RAZ[ÃA]O SOCIAL:\s*(.+)", msg, flags=re.IGNORECASE)
+    empresa = m_razao.group(1).strip() if m_razao else ""
+    if not empresa or empresa == "-":
+        empresa = (relatorio.pdv_nome or (relatorio.parceiro.nome if relatorio.parceiro else "")).strip()
+
+    m_ciclo = re.search(r"REFER[ÊE]NCIA:\s*(?:COMISSAO\s*)?([^\n\r]+)", msg, flags=re.IGNORECASE)
+    ciclo = m_ciclo.group(1).strip() if m_ciclo else ""
+    ciclo = re.sub(r"^COMISS[ÃA]O\s*", "", ciclo, flags=re.IGNORECASE).strip()
+
+    if ciclo and ciclo != "-":
+        assunto = f"Comissionamento — {empresa}_{ciclo}"
+    else:
+        assunto = f"Comissionamento — {empresa}"
+
+    nome_esp_display = (especialista.get_full_name() or especialista.username or "Especialista").strip()
+    corpo_texto = msg.replace("*", "")
+    corpo_html = (
+        f'<div style="font-family: Arial, sans-serif; font-size: 14px; color: #1e293b; line-height: 1.6;">'
+        f'<p>Olá, <strong>{nome_esp_display}</strong>!</p>'
+        f'<p>Segue em anexo a planilha e abaixo os dados de comissionamento do parceiro <strong>{relatorio.pdv_nome}</strong>:</p>'
+        f'<hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 16px 0;">'
+        f'<div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 16px; white-space: pre-wrap; font-family: monospace; font-size: 13px;">'
+        f'{msg}'
+        f'</div>'
+        f'<hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 16px 0;">'
+        f'<p style="font-size: 12px; color: #64748b;">NIO GC Tickets · Gestão de Comissionamento</p>'
+        f'</div>'
+    )
+
+    ok, erro = enviar_email_com_anexos(
+        [email_dest],
+        assunto=assunto,
+        corpo_texto=corpo_texto,
+        corpo_html=corpo_html,
+        anexos=anexos,
+    )
+    if ok:
+        return True, f"Planilha e texto de comissionamento enviados para {email_dest} com sucesso!"
+    return False, f"Falha ao enviar e-mail para {email_dest}: {erro}"
+
+
 def enviar_tarefa(rel: RelatorioTarefa, user: AbstractBaseUser | None = None) -> ResumoEnvio:
     destinos = destinos_para_envio(
         user, "envio_tarefas", rel.parceiro, somente_grupos=not rel.parceiro_id

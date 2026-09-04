@@ -1935,6 +1935,75 @@ class ComissionamentoTests(TestCase):
         self.assertIn("PEDIDO", wb.sheetnames)
         self.assertIn("LINHA_A_LINHA", wb.sheetnames)
 
+    def test_enviar_comissionamento_email_especialista(self):
+        from unittest.mock import patch
+        from django.contrib.auth import get_user_model
+        from gestao.models import LoteImportacao, RelatorioComissionamento
+        from gestao.messaging.envio import enviar_comissionamento_email_especialista
+        from gestao.pipelines.comissionamento import processar_comissionamento
+
+        User = get_user_model()
+        esp = User.objects.create(username="samuel_test", email="samuel.pires@niointernet.com.br", first_name="Samuel Pires")
+        self.pdv.especialista = esp
+        self.pdv.save(update_fields=["especialista"])
+
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.COMISSIONAMENTO,
+            arquivo_nome="ciclo.xlsx",
+            ok=True,
+        )
+        processar_comissionamento(self._ciclo_xlsx(), "ciclo.xlsx", lote)
+        rel = RelatorioComissionamento.objects.get()
+
+        with patch("gestao.messaging.envio.smtp_configurado", return_value=True), \
+             patch("gestao.messaging.envio.enviar_email_com_anexos", return_value=(True, "")) as mock_send:
+            ok, msg = enviar_comissionamento_email_especialista(rel)
+            self.assertTrue(ok)
+            self.assertIn("samuel.pires@niointernet.com.br", msg)
+            mock_send.assert_called_once()
+            args, kwargs = mock_send.call_args
+            self.assertEqual(args[0], ["samuel.pires@niointernet.com.br"])
+            self.assertIn("Comissionamento", kwargs["assunto"])
+            self.assertTrue(len(kwargs["anexos"]) >= 1)
+            self.assertIn(".xlsx", kwargs["anexos"][0][0])
+
+    def test_botao_e_action_enviar_email_especialista_view(self):
+        from unittest.mock import patch
+        from django.contrib.auth import get_user_model
+        from gestao.models import LoteImportacao, RelatorioComissionamento
+        from gestao.pipelines.comissionamento import processar_comissionamento
+        from tickets.models import PerfilStaff
+
+        User = get_user_model()
+        user = User.objects.create_superuser("admin_esp", "admin_esp@teste.com", "senha123")
+        PerfilStaff.objects.create(user=user, papel=PerfilStaff.Papel.GESTOR)
+        esp = User.objects.create(username="jessica_test", email="jessica.kaster@niointernet.com.br")
+        self.pdv.especialista = esp
+        self.pdv.save(update_fields=["especialista"])
+        self.client.force_login(user)
+
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.COMISSIONAMENTO,
+            arquivo_nome="ciclo.xlsx",
+            ok=True,
+        )
+        processar_comissionamento(self._ciclo_xlsx(), "ciclo.xlsx", lote)
+        rel = RelatorioComissionamento.objects.get()
+
+        resp = self.client.get("/gestao/comissionamento/?escopo=todos")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "✉️ Enviar para Especialista")
+
+        with patch("gestao.messaging.envio.smtp_configurado", return_value=True), \
+             patch("gestao.messaging.envio.enviar_email_com_anexos", return_value=(True, "")):
+            resp_post = self.client.post(
+                "/gestao/comissionamento/?escopo=todos",
+                {"action": "enviar_email_especialista", "relatorio_id": rel.id, "escopo": "todos"},
+                follow=True,
+            )
+            self.assertEqual(resp_post.status_code, 200)
+            self.assertContains(resp_post, "enviados para jessica.kaster@niointernet.com.br com sucesso")
+
     def test_exige_razoes_configuradas(self):
         from gestao.models import LoteImportacao
         from gestao.pipelines.comissionamento import processar_comissionamento

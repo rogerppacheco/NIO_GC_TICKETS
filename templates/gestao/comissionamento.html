@@ -77,11 +77,19 @@
       <div class="fila-actions">
         <textarea id="com-{{ r.id }}" hidden>{{ r.mensagem }}</textarea>
         <button class="btn btn-primary" type="button" data-copy-target="com-{{ r.id }}">Copiar</button>
+        <form method="post" style="display:inline">
+          {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+          <input type="hidden" name="action" value="enviar_email_especialista">
+          <input type="hidden" name="relatorio_id" value="{{ r.id }}">
+          <button class="btn btn-secondary" type="submit" title="Enviar planilha e texto por e-mail para o especialista{% if r.parceiro.especialista and r.parceiro.especialista.email %} ({{ r.parceiro.especialista.email }}){% endif %}">
+            ✉️ Enviar para Especialista
+          </button>
+        </form>
         {% if r.arquivo %}
         <a class="btn btn-secondary" href="{% url 'gestao_comissionamento_download' pk=r.id %}">📥 Baixar Planilha</a>
         {% endif %}
         {% if pode_enviar %}
-        <form method="post">
+        <form method="post" style="display:inline">
           {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
           <input type="hidden" name="action" value="enviar_pdv">
           <input type="hidden" name="parceiro" value="{{ r.parceiro_id }}">

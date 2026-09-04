@@ -42,6 +42,7 @@ from .messaging.envio import (
     enviar_churn_pdv,
     enviar_comissionamento_lote,
     enviar_comissionamento_pdv,
+    enviar_comissionamento_email_especialista,
     enviar_fpd_pdv,
     enviar_osab_pdv,
     enviar_resumo_capilaridade,
@@ -1226,6 +1227,20 @@ def importar_comissionamento_view(request: HttpRequest) -> HttpResponse:
 def comissionamento_view(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         action = request.POST.get("action") or ""
+        if action == "enviar_email_especialista":
+            rel_id = request.POST.get("relatorio_id")
+            visiveis = _parceiros(request)
+            rel = get_object_or_404(
+                RelatorioComissionamento.objects.select_related("parceiro__especialista")
+                .filter(parceiro__in=visiveis),
+                pk=rel_id,
+            )
+            ok, msg_retorno = enviar_comissionamento_email_especialista(rel, request.user)
+            if ok:
+                messages.success(request, msg_retorno)
+            else:
+                messages.error(request, msg_retorno)
+            return _voltar(request, "gestao_comissionamento")
         if action == "enviar_pdv" and _pode_enviar(request):
             parceiro = get_object_or_404(_parceiros(request), pk=request.POST.get("parceiro"))
             _flash_resumo(request, "Comissionamento", enviar_comissionamento_pdv(parceiro, request.user))
