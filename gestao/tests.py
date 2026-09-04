@@ -1635,6 +1635,28 @@ class DestinatarioEnvioTests(TestCase):
         self.assertTrue(logs.exists())
         self.assertTrue(all(l.status == EnvioWhatsApp.Status.ENVIADO for l in logs))
         self.assertTrue(any(l.syncwa_message_id == "ml-9" for l in logs))
+        self.assertTrue(any("Bom dia" in l.mensagem for l in logs))
+
+    def test_motivacional_capilaridade(self):
+        from datetime import date
+        from gestao.motivacional import (
+            FRASES_MOTIVACIONAIS_VENDAS,
+            montar_mensagem_motivacional_pdv,
+            obter_frase_do_dia,
+        )
+
+        self.assertGreaterEqual(len(FRASES_MOTIVACIONAIS_VENDAS), 50)
+        d1 = date(2026, 9, 4)
+        d2 = date(2026, 9, 5)
+        f1 = obter_frase_do_dia(d1)
+        f2 = obter_frase_do_dia(d2)
+        self.assertNotEqual(f1, f2)
+        self.assertIn(f1, FRASES_MOTIVACIONAIS_VENDAS)
+
+        msg = montar_mensagem_motivacional_pdv(self.pdv, d1)
+        self.assertIn("Bom dia, time", msg)
+        self.assertIn(self.pdv.nome, msg)
+        self.assertIn(f1, msg)
 
     def test_destinos_especialista_usa_whatsapp_do_perfil(self):
         from gestao.messaging.envio import destinos_para_envio

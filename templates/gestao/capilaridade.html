@@ -33,6 +33,24 @@
   </div>
 </div>
 
+{% if frase_do_dia %}
+<div class="panel" style="margin-bottom:1rem;border-left:4px solid #f59e0b;background:rgba(245,158,11,0.06)">
+  <div class="panel-b" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+    <div style="flex:1;min-width:260px">
+      <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.05em;color:#f59e0b;text-transform:uppercase;margin-bottom:0.25rem">
+        ☀️ Inspiração do Dia (Vendas)
+      </div>
+      <div style="font-style:italic;line-height:1.4">
+        "{{ frase_do_dia }}"
+      </div>
+    </div>
+    <span class="badge" style="font-size:0.75rem;opacity:0.9;white-space:nowrap">
+      Enviada no WhatsApp antes do relatório
+    </span>
+  </div>
+</div>
+{% endif %}
+
 <div class="panel" style="margin-bottom:1rem">
   <div class="panel-h"><h2>Filtros</h2></div>
   <div class="panel-b">

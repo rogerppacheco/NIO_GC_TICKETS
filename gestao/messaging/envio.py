@@ -469,12 +469,42 @@ def enviar_capilaridade_pdv(
     parceiro: Parceiro,
     user: AbstractBaseUser | None = None,
     filtros: dict | None = None,
+    *,
+    enviar_motivacional: bool = True,
 ) -> ResumoEnvio:
+    import time
+
+    from ..motivacional import montar_mensagem_motivacional_pdv
+
     ano, mes = periodo_ativo()
-    mensagem = montar_mascara_pdv(parceiro, ano, mes, filtros)
     destinos = destinos_para_envio(user, "envio_capilaridade", parceiro)
+    if not destinos:
+        return ResumoEnvio(ignorados=1, detalhes=[_msg_sem_destino(user)])
+
+    resumo_total = ResumoEnvio()
+
+    # 1. Envia o Bom Dia com frase motivacional de vendas antes do relatório
+    if enviar_motivacional:
+        msg_motivacional = montar_mensagem_motivacional_pdv(parceiro)
+        resumo_mot = _enviar_para_lista(
+            tipo=EnvioWhatsApp.Tipo.CAPILARIDADE,
+            mensagem=msg_motivacional,
+            destinos=destinos,
+            parceiro=parceiro,
+            user=user,
+            flag="",
+        )
+        resumo_total.enviados += resumo_mot.enviados
+        resumo_total.erros += resumo_mot.erros
+        resumo_total.ignorados += resumo_mot.ignorados
+        resumo_total.detalhes.extend(resumo_mot.detalhes)
+        # Breve pausa para garantir ordem cronológica no WhatsApp
+        time.sleep(1)
+
+    # 2. Envia o relatório de capilaridade (planilha + máscara) conforme a regra atual
+    mensagem = montar_mascara_pdv(parceiro, ano, mes, filtros)
     arquivo_bytes, nome_arquivo = planilha_capilaridade(parceiro, filtros)
-    return _enviar_com_anexo(
+    resumo_anexo = _enviar_com_anexo(
         tipo=EnvioWhatsApp.Tipo.CAPILARIDADE,
         mensagem=mensagem,
         caption=f"📁 *Capilaridade* — {parceiro.nome}",
@@ -485,6 +515,11 @@ def enviar_capilaridade_pdv(
         nome_arquivo=nome_arquivo,
         flag="envio_capilaridade",
     )
+    resumo_total.enviados += resumo_anexo.enviados
+    resumo_total.erros += resumo_anexo.erros
+    resumo_total.ignorados += resumo_anexo.ignorados
+    resumo_total.detalhes.extend(resumo_anexo.detalhes)
+    return resumo_total
 
 
 def enviar_resumo_capilaridade(

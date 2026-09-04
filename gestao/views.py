@@ -131,6 +131,7 @@ from .pipelines.resultados import (
 )
 from .pipelines.tarefas import processar_tarefas
 from .pipelines.venda_indevida import processar_venda_indevida
+from .motivacional import obter_frase_do_dia
 from .relatorios import montar_mascara_pdv, resumo_geral
 from .terceiros import importar_sysmap
 
@@ -433,6 +434,7 @@ def capilaridade_view(request: HttpRequest) -> HttpResponse:
             "pode_recalcular": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
             "modo_teste": modo_teste_ativo(),
+            "frase_do_dia": obter_frase_do_dia(),
             "whatsapp_usuario": ""
             if eh_gestor(request.user)
             else (getattr(getattr(request.user, "perfil_staff", None), "whatsapp", "") or "").strip(),
