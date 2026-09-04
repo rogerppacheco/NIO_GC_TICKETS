@@ -31,26 +31,39 @@ def extrair_razoes_sociais(texto: str) -> list[str]:
 
 
 def mapa_pdv_razoes() -> dict[int, dict]:
-    """parceiro_id → {pdv_nome, razoes} a partir do cadastro do PDV (+ legado destinatários)."""
+    """parceiro_id → {pdv_nome, razoes, email_especialista} a partir do cadastro do PDV (+ legado destinatários)."""
     mapa: dict[int, dict] = {}
-    for parceiro in Parceiro.objects.filter(ativo=True).exclude(razao_social=""):
+    for parceiro in Parceiro.objects.filter(ativo=True).exclude(razao_social="").select_related("especialista"):
+        email_esp = ""
+        if parceiro.especialista and parceiro.especialista.email:
+            email_esp = parceiro.especialista.email.strip()
         mapa[parceiro.id] = {
             "pdv_nome": parceiro.nome,
             "razoes": [parceiro.razao_social.strip()],
+            "email_especialista": email_esp,
         }
     qs = (
         Destinatario.objects.filter(ativo=True, envio_comissionamento=True)
         .exclude(razoes_sociais_comissionamento="")
-        .select_related("parceiro")
+        .select_related("parceiro__especialista")
     )
     for dest in qs:
         extras = extrair_razoes_sociais(dest.razoes_sociais_comissionamento)
         if not extras:
             continue
+        email_esp = ""
+        if dest.parceiro and dest.parceiro.especialista and dest.parceiro.especialista.email:
+            email_esp = dest.parceiro.especialista.email.strip()
         info = mapa.setdefault(
             dest.parceiro_id,
-            {"pdv_nome": dest.parceiro.nome, "razoes": []},
+            {
+                "pdv_nome": dest.parceiro.nome,
+                "razoes": [],
+                "email_especialista": email_esp,
+            },
         )
+        if not info.get("email_especialista") and email_esp:
+            info["email_especialista"] = email_esp
         for razao in extras:
             if razao not in info["razoes"]:
                 info["razoes"].append(razao)
@@ -244,7 +257,12 @@ def gerar_planilha_comissionamento_formatada(pedido_df: pd.DataFrame, linha_df: 
     return out.getvalue()
 
 
-def montar_mensagem(caminho_anexo: Path | str, pdv_nome: str, limite_pedidos: int = 15) -> tuple[str, float, float]:
+def montar_mensagem(
+    caminho_anexo: Path | str,
+    pdv_nome: str,
+    limite_pedidos: int = 15,
+    email_copia: str = "",
+) -> tuple[str, float, float]:
     path = Path(caminho_anexo)
     engine = "pyxlsb" if path.suffix.lower() == ".xlsb" else None
     try:
@@ -331,10 +349,11 @@ def montar_mensagem(caminho_anexo: Path | str, pdv_nome: str, limite_pedidos: in
     empresa_final = empresa_assunto or pdv_nome
     assunto_email = f"{empresa_final}_{ciclo_assunto}" if ciclo_assunto else f"{empresa_final}_[CICLO]"
 
+    email_dest = (email_copia or "").strip() or "rogerio.pacheco@niointernet.com.br"
     msg.append(
         "\nOrientação para envio do email: \n\n"
         "Enviar o email para recebimentonfes@niointernet.com.br\n"
-        "Com cópia para: rogerio.pacheco@niointernet.com.br e PP-GestaodosParceiros@niointernet.com.br\n\n"
+        f"Com cópia para: {email_dest} e PP-GestaodosParceiros@niointernet.com.br\n\n"
         "No corpo do email retirar assinatura e não escrever nada no corpo do email \n"
         f"E o assunto do email deverá ser {assunto_email}"
     )
@@ -416,7 +435,9 @@ def processar_comissionamento(arquivo, nome: str, lote: LoteImportacao) -> dict:
                 tmp_out.write(conteudo_xlsx)
                 caminho_out = Path(tmp_out.name)
             try:
-                mensagem, total_pedido, total_comissao = montar_mensagem(caminho_out, pdv_nome)
+                mensagem, total_pedido, total_comissao = montar_mensagem(
+                    caminho_out, pdv_nome, email_copia=info.get("email_especialista", "")
+                )
             finally:
                 caminho_out.unlink(missing_ok=True)
 

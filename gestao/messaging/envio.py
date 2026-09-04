@@ -773,8 +773,21 @@ def formatar_mensagem_comissionamento(rel: RelatorioComissionamento) -> str:
     msg = (rel.mensagem or "").strip()
     if not msg:
         return ""
+
+    email_esp = ""
+    if rel.parceiro and rel.parceiro.especialista and rel.parceiro.especialista.email:
+        email_esp = rel.parceiro.especialista.email.strip()
+    if not email_esp:
+        email_esp = "rogerio.pacheco@niointernet.com.br"
+
     if "Orientação para envio do email" in msg or "Orientaçaõ para envio do email" in msg:
-        return msg
+        msg_atualizada = re.sub(
+            r"Com c[óo]pia para:\s*[^ \t\n\r]+(?:\s*@@?\s*[^ \t\n\r]+)?\s*e\s*PP-GestaodosParceiros@niointernet\.com\.br",
+            f"Com cópia para: {email_esp} e PP-GestaodosParceiros@niointernet.com.br",
+            msg,
+            flags=re.IGNORECASE,
+        )
+        return msg_atualizada
 
     m_razao = re.search(r"RAZ[ÃA]O SOCIAL:\s*(.+)", msg, flags=re.IGNORECASE)
     empresa = m_razao.group(1).strip() if m_razao else ""
@@ -790,7 +803,7 @@ def formatar_mensagem_comissionamento(rel: RelatorioComissionamento) -> str:
     bloco = (
         "\n\nOrientação para envio do email: \n\n"
         "Enviar o email para recebimentonfes@niointernet.com.br\n"
-        "Com cópia para: rogerio.pacheco@niointernet.com.br e PP-GestaodosParceiros@niointernet.com.br\n\n"
+        f"Com cópia para: {email_esp} e PP-GestaodosParceiros@niointernet.com.br\n\n"
         "No corpo do email retirar assinatura e não escrever nada no corpo do email \n"
         f"E o assunto do email deverá ser {assunto_email}"
     )

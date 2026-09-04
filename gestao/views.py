@@ -1280,11 +1280,19 @@ def comissionamento_download_view(request: HttpRequest, pk: int) -> HttpResponse
 
 
 def _render_comissionamento(request, form):
+    from .messaging.envio import formatar_mensagem_comissionamento
+
     visiveis = _parceiros(request)
-    relatorios = (
+    relatorios = list(
         RelatorioComissionamento.objects.select_related("parceiro__especialista", "lote")
         .filter(parceiro__in=visiveis)[:80]
     )
+    for r in relatorios:
+        msg_formatada = formatar_mensagem_comissionamento(r)
+        if msg_formatada and msg_formatada != r.mensagem:
+            r.mensagem = msg_formatada
+            r.save(update_fields=["mensagem"])
+
     lotes = LoteImportacao.objects.filter(
         tipo=LoteImportacao.Tipo.COMISSIONAMENTO, ok=True
     )[:15]

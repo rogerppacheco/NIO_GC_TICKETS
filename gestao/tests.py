@@ -1850,6 +1850,29 @@ class ComissionamentoTests(TestCase):
         self.assertEqual(ws_pedido.cell(1, 1).font.color.rgb, "00FFFFFF")
         self.assertTrue(ws_pedido.views.sheetView[0].showGridLines)
 
+    def test_comissionamento_email_copia_especialista_do_parceiro(self):
+        from django.contrib.auth import get_user_model
+        from gestao.models import LoteImportacao, RelatorioComissionamento
+        from gestao.pipelines.comissionamento import processar_comissionamento
+
+        User = get_user_model()
+        especialista = User.objects.create(
+            username="samuel",
+            email="samuel.pires@niointernet.com.br",
+        )
+        self.pdv.especialista = especialista
+        self.pdv.save(update_fields=["especialista"])
+
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.COMISSIONAMENTO,
+            arquivo_nome="ciclo.xlsx",
+            ok=True,
+        )
+        processar_comissionamento(self._ciclo_xlsx(), "ciclo.xlsx", lote)
+        rel = RelatorioComissionamento.objects.get()
+        self.assertIn("Com cópia para: samuel.pires@niointernet.com.br e PP-GestaodosParceiros@niointernet.com.br", rel.mensagem)
+        self.assertNotIn("rogerio.pacheco@niointernet.com.br", rel.mensagem)
+
     def test_botao_baixar_planilha_presente_na_view(self):
         from django.contrib.auth import get_user_model
         from gestao.models import LoteImportacao, RelatorioComissionamento
