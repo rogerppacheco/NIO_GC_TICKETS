@@ -30,13 +30,29 @@
 </div>
 {% endif %}
 
+{% if eh_gestor and gestao_escopo == "meus" %}
+<div class="panel" style="margin-bottom:1rem;background:#eff6ff;border-color:#bfdbfe;">
+  <div class="panel-b" style="padding:0.6rem 1rem;font-size:0.875rem;color:#1e40af;">
+    💡 <strong>Atenção:</strong> Você está visualizando apenas os parceiros da aba <strong>Meus parceiros</strong>. Para visualizar os relatórios de outros especialistas (Ricardo, Samuel, Carla, Caio, etc.), clique na aba <a href="?escopo=todos{% if lote_ativo %}&amp;lote={{ lote_ativo }}{% endif %}" style="font-weight:600;text-decoration:underline;">Todos</a> ou <a href="?escopo=outros{% if lote_ativo %}&amp;lote={{ lote_ativo }}{% endif %}" style="font-weight:600;text-decoration:underline;">Outros especialistas</a>.
+  </div>
+</div>
+{% endif %}
+
 {% if mapa_razoes %}
 <div class="panel" style="margin-bottom:1rem">
   <div class="panel-h"><h2>PDVs configurados ({{ mapa_razoes|length }})</h2></div>
   <div class="panel-b">
     <ul class="help" style="margin:0;padding-left:1.2rem">
       {% for pid, info in mapa_razoes.items %}
-        <li><strong>{{ info.pdv_nome }}</strong> — {{ info.razoes|join:"; " }}</li>
+        <li>
+          <strong>{{ info.pdv_nome }}</strong>
+          {% if info.especialista_nome %}
+            <span style="display:inline-block;padding:0.05rem 0.35rem;border-radius:4px;background:#f1f5f9;color:#475569;font-size:0.75rem;margin-left:0.25rem;">
+              👤 {{ info.especialista_nome }}
+            </span>
+          {% endif %}
+          — {{ info.razoes|join:"; " }}
+        </li>
       {% endfor %}
     </ul>
   </div>
@@ -116,7 +132,15 @@
           {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
           <input type="hidden" name="action" value="enviar_pdv">
           <input type="hidden" name="parceiro" value="{{ r.parceiro_id }}">
-          <button class="btn btn-secondary" type="submit">WhatsApp</button>
+          {% if r.parceiro.especialista and r.parceiro.especialista.username|lower != "admin" %}
+          <button class="btn btn-secondary" type="submit" title="Enviar para o WhatsApp do especialista {{ r.parceiro.especialista.get_full_name|default:r.parceiro.especialista.username }}">
+            📱 WhatsApp (Especialista)
+          </button>
+          {% else %}
+          <button class="btn btn-secondary" type="submit" title="Enviar para o WhatsApp do empresário cadastrado no parceiro">
+            📱 WhatsApp (Empresário)
+          </button>
+          {% endif %}
         </form>
         {% endif %}
       </div>

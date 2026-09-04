@@ -140,6 +140,17 @@ def destinos_comissionamento(
             )
         )
 
+    spec = parceiro.especialista
+    eh_admin_spec = not spec or spec.username.lower() == "admin"
+
+    # Se o especialista NÃO for o admin, envia para o WhatsApp do especialista
+    if not eh_admin_spec:
+        wpp_spec = whatsapp_do_usuario(spec)
+        if wpp_spec:
+            nome_esp = (spec.get_full_name() or spec.get_username() or "Especialista").strip()
+            add(wpp_spec, f"Especialista {nome_esp}")
+        return destinos
+
     n_empresario = 0
     for contato in parceiro.contatos.filter(ativo=True):
         if contato.eh_empresario() and contato.telefone:
@@ -857,8 +868,17 @@ def enviar_comissionamento_pdv(
         .first()
     )
     if not rel:
-        return ResumoEnvio(ignorados=1, detalhes=[f"{parceiro.nome}: sem relatório de comissionamento."])
+        return ResumoEnvio(ignorados=1, detalhes=["Nenhum relatório encontrado para o parceiro."])
     destinos = destinos_para_envio(user, "envio_comissionamento", parceiro)
+    if not destinos:
+        spec = parceiro.especialista
+        if spec and spec.username.lower() != "admin" and not whatsapp_do_usuario(spec):
+            nome_esp = (spec.get_full_name() or spec.username).strip()
+            return ResumoEnvio(
+                erros=1,
+                detalhes=[f"{parceiro.nome}: Especialista {nome_esp} não possui WhatsApp cadastrado em Meu perfil."],
+            )
+        return ResumoEnvio(ignorados=1, detalhes=[_msg_sem_destino(user)])
     try:
         arquivo_bytes, nome_arquivo = _ler_arquivo_relatorio(
             rel.arquivo, f"comissionamento_{parceiro.nome}.xlsx"

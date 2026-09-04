@@ -2057,6 +2057,89 @@ class ComissionamentoTests(TestCase):
             self.assertEqual(resp.status_code, 200)
             self.assertContains(resp, "Comissionamento (lote E-mail)")
 
+    def test_destinos_comissionamento_especialista_nao_admin(self):
+        from django.contrib.auth import get_user_model
+        from gestao.messaging.envio import destinos_para_envio
+        from tickets.models import ContatoParceiro, PerfilStaff
+
+        User = get_user_model()
+        esp = User.objects.create(username="ricardo_test", first_name="Ricardo Santos")
+        PerfilStaff.objects.create(user=esp, papel=PerfilStaff.Papel.ESPECIALISTA, whatsapp="5521999575120")
+        self.pdv.especialista = esp
+        self.pdv.save(update_fields=["especialista"])
+
+        ContatoParceiro.objects.create(
+            parceiro=self.pdv,
+            nome="Empresario",
+            cargo=ContatoParceiro.Cargo.EMPRESARIO,
+            telefone="5511999999999",
+            ativo=True,
+        )
+
+        destinos = destinos_para_envio(None, "envio_comissionamento", self.pdv)
+        self.assertEqual(len(destinos), 1)
+        self.assertEqual(destinos[0].jid, "5521999575120")
+        self.assertIn("Ricardo", destinos[0].nome)
+
+    def test_destinos_comissionamento_especialista_admin(self):
+        from django.contrib.auth import get_user_model
+        from gestao.messaging.envio import destinos_para_envio
+        from tickets.models import ContatoParceiro
+
+        User = get_user_model()
+        admin_user = User.objects.create(username="admin", first_name="Admin")
+        self.pdv.especialista = admin_user
+        self.pdv.save(update_fields=["especialista"])
+
+        ContatoParceiro.objects.create(
+            parceiro=self.pdv,
+            nome="Empresario Dono",
+            cargo=ContatoParceiro.Cargo.EMPRESARIO,
+            telefone="5511888888888",
+            ativo=True,
+        )
+
+        destinos = destinos_para_envio(None, "envio_comissionamento", self.pdv)
+        self.assertEqual(len(destinos), 1)
+        self.assertEqual(destinos[0].jid, "5511888888888")
+        self.assertEqual(destinos[0].nome, "Empresario Dono")
+
+    def test_destinos_comissionamento_especialista_sem_whatsapp(self):
+        from django.contrib.auth import get_user_model
+        from gestao.messaging.envio import enviar_comissionamento_pdv
+        from gestao.models import LoteImportacao, RelatorioComissionamento
+        from gestao.pipelines.comissionamento import processar_comissionamento
+
+        User = get_user_model()
+        esp = User.objects.create(username="ricardo_sem_wpp", first_name="Ricardo Santos")
+        self.pdv.especialista = esp
+        self.pdv.save(update_fields=["especialista"])
+
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.COMISSIONAMENTO,
+            arquivo_nome="ciclo.xlsx",
+            ok=True,
+        )
+        processar_comissionamento(self._ciclo_xlsx(), "ciclo.xlsx", lote)
+        rel = RelatorioComissionamento.objects.get()
+
+        resumo = enviar_comissionamento_pdv(self.pdv, relatorio=rel)
+        self.assertEqual(resumo.erros, 1)
+        self.assertTrue(any("não possui WhatsApp cadastrado" in d for d in resumo.detalhes))
+
+    def test_mapa_pdv_razoes_inclui_especialista_nome(self):
+        from django.contrib.auth import get_user_model
+        from gestao.pipelines.comissionamento import mapa_pdv_razoes
+
+        User = get_user_model()
+        esp = User.objects.create(username="ricardo_mapa", first_name="Ricardo Duarte")
+        self.pdv.especialista = esp
+        self.pdv.save(update_fields=["especialista"])
+
+        mapa = mapa_pdv_razoes()
+        self.assertIn(self.pdv.id, mapa)
+        self.assertEqual(mapa[self.pdv.id]["especialista_nome"], "Ricardo Duarte")
+
     def test_exige_razoes_configuradas(self):
         from gestao.models import LoteImportacao
         from gestao.pipelines.comissionamento import processar_comissionamento

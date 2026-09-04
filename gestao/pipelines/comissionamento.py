@@ -35,12 +35,16 @@ def mapa_pdv_razoes() -> dict[int, dict]:
     mapa: dict[int, dict] = {}
     for parceiro in Parceiro.objects.filter(ativo=True).exclude(razao_social="").select_related("especialista"):
         email_esp = ""
-        if parceiro.especialista and parceiro.especialista.email:
-            email_esp = parceiro.especialista.email.strip()
+        nome_esp = ""
+        if parceiro.especialista:
+            if parceiro.especialista.email:
+                email_esp = parceiro.especialista.email.strip()
+            nome_esp = (parceiro.especialista.get_full_name() or parceiro.especialista.username).strip()
         mapa[parceiro.id] = {
             "pdv_nome": parceiro.nome,
             "razoes": [parceiro.razao_social.strip()],
             "email_especialista": email_esp,
+            "especialista_nome": nome_esp,
         }
     qs = (
         Destinatario.objects.filter(ativo=True, envio_comissionamento=True)
@@ -52,18 +56,24 @@ def mapa_pdv_razoes() -> dict[int, dict]:
         if not extras:
             continue
         email_esp = ""
-        if dest.parceiro and dest.parceiro.especialista and dest.parceiro.especialista.email:
-            email_esp = dest.parceiro.especialista.email.strip()
+        nome_esp = ""
+        if dest.parceiro and dest.parceiro.especialista:
+            if dest.parceiro.especialista.email:
+                email_esp = dest.parceiro.especialista.email.strip()
+            nome_esp = (dest.parceiro.especialista.get_full_name() or dest.parceiro.especialista.username).strip()
         info = mapa.setdefault(
             dest.parceiro_id,
             {
                 "pdv_nome": dest.parceiro.nome,
                 "razoes": [],
                 "email_especialista": email_esp,
+                "especialista_nome": nome_esp,
             },
         )
         if not info.get("email_especialista") and email_esp:
             info["email_especialista"] = email_esp
+        if not info.get("especialista_nome") and nome_esp:
+            info["especialista_nome"] = nome_esp
         for razao in extras:
             if razao not in info["razoes"]:
                 info["razoes"].append(razao)
