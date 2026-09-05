@@ -591,7 +591,9 @@ class Destinatario(models.Model):
         verbose_name_plural = "Destinatários WhatsApp"
 
     def __str__(self) -> str:
-        return f"{self.nome} ({self.parceiro.nome})"
+        if self.parceiro_id and self.parceiro:
+            return f"{self.nome} ({self.parceiro.nome})"
+        return self.nome
 
 
 class EnvioWhatsApp(models.Model):

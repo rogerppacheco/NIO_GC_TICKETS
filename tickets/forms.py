@@ -6,6 +6,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm
 
+from gestao.models import Destinatario
 from .demanda_campos import LABELS_SIMPLES, LABELS_POR_TIPO, campos_resposta, montar_texto_retorno, schema_tipo
 from .models import (
     Anexo,
@@ -179,7 +180,7 @@ class EspecialistaForm(forms.Form):
     )
     mascara_grupo = forms.ModelChoiceField(
         label="Grupo de WhatsApp",
-        queryset=None,
+        queryset=Destinatario.objects.none(),
         required=False,
         empty_label="Selecione um grupo de WhatsApp...",
         widget=forms.Select(attrs={"class": "fila-pick", "id": "id_mascara_grupo"}),
@@ -208,14 +209,9 @@ class EspecialistaForm(forms.Form):
 
     def __init__(self, *args, instance=None, **kwargs):
         self.instance = instance
-        from gestao.models import Destinatario
-        super().__init__(*args, **kwargs)
-        self.fields["mascara_grupo"].queryset = Destinatario.objects.filter(
-            tipo=Destinatario.TipoDestino.GRUPO, ativo=True
-        ).order_by("nome")
         if instance and "initial" not in kwargs:
             perfil = getattr(instance, "perfil_staff", None)
-            self.initial.update({
+            kwargs["initial"] = {
                 "first_name": instance.first_name,
                 "username": instance.username,
                 "email": instance.email,
@@ -223,15 +219,22 @@ class EspecialistaForm(forms.Form):
                 "eh_admin": bool(
                     perfil and perfil.papel == PerfilStaff.Papel.GESTOR
                 ),
-                "fte": perfil.fte if perfil else Decimal("1.00"),
-                "whatsapp": perfil.whatsapp if perfil else "",
-                "gerencia": perfil.gerencia if perfil else "",
-                "tipo_destino_mascara": perfil.tipo_destino_mascara if perfil else PerfilStaff.TipoDestinoMascara.PROPRIO,
-                "mascara_grupo": perfil.mascara_grupo_id if perfil else None,
-                "mascara_grupo_custom": perfil.mascara_grupo_custom if perfil else "",
-                "mascara_numero": perfil.mascara_numero if perfil else "",
-                "mascara_numero_nome": perfil.mascara_numero_nome if perfil else "",
-            })
+                "fte": getattr(perfil, "fte", Decimal("1.00")),
+                "whatsapp": getattr(perfil, "whatsapp", "") or "",
+                "gerencia": getattr(perfil, "gerencia", "") or "",
+                "tipo_destino_mascara": getattr(perfil, "tipo_destino_mascara", PerfilStaff.TipoDestinoMascara.PROPRIO) or PerfilStaff.TipoDestinoMascara.PROPRIO,
+                "mascara_grupo": getattr(perfil, "mascara_grupo_id", None),
+                "mascara_grupo_custom": getattr(perfil, "mascara_grupo_custom", "") or "",
+                "mascara_numero": getattr(perfil, "mascara_numero", "") or "",
+                "mascara_numero_nome": getattr(perfil, "mascara_numero_nome", "") or "",
+            }
+        super().__init__(*args, **kwargs)
+        self.fields["mascara_grupo"].queryset = Destinatario.objects.filter(
+            tipo=Destinatario.TipoDestino.GRUPO, ativo=True
+        ).select_related("parceiro").order_by("nome")
+        self.fields["mascara_grupo"].label_from_instance = lambda obj: (
+            f"{obj.nome} ({obj.parceiro.nome})" if getattr(obj, "parceiro_id", None) and obj.parceiro else obj.nome
+        )
         if instance is None:
             self.fields["password"].required = True
             self.fields["password"].help_text = "Senha inicial do especialista."
@@ -353,7 +356,7 @@ class StaffPerfilForm(forms.Form):
     )
     mascara_grupo = forms.ModelChoiceField(
         label="Grupo de WhatsApp",
-        queryset=None,
+        queryset=Destinatario.objects.none(),
         required=False,
         empty_label="Selecione um grupo de WhatsApp...",
         widget=forms.Select(attrs={"class": "fila-pick", "id": "id_perfil_mascara_grupo"}),
@@ -382,14 +385,9 @@ class StaffPerfilForm(forms.Form):
 
     def __init__(self, *args, instance=None, **kwargs):
         self.instance = instance
-        from gestao.models import Destinatario
-        super().__init__(*args, **kwargs)
-        self.fields["mascara_grupo"].queryset = Destinatario.objects.filter(
-            tipo=Destinatario.TipoDestino.GRUPO, ativo=True
-        ).order_by("nome")
         if instance and "initial" not in kwargs:
             perfil = getattr(instance, "perfil_staff", None)
-            self.initial.update({
+            kwargs["initial"] = {
                 "first_name": instance.first_name,
                 "username": instance.username,
                 "email": instance.email,
@@ -399,7 +397,14 @@ class StaffPerfilForm(forms.Form):
                 "mascara_grupo_custom": getattr(perfil, "mascara_grupo_custom", "") or "",
                 "mascara_numero": getattr(perfil, "mascara_numero", "") or "",
                 "mascara_numero_nome": getattr(perfil, "mascara_numero_nome", "") or "",
-            })
+            }
+        super().__init__(*args, **kwargs)
+        self.fields["mascara_grupo"].queryset = Destinatario.objects.filter(
+            tipo=Destinatario.TipoDestino.GRUPO, ativo=True
+        ).select_related("parceiro").order_by("nome")
+        self.fields["mascara_grupo"].label_from_instance = lambda obj: (
+            f"{obj.nome} ({obj.parceiro.nome})" if getattr(obj, "parceiro_id", None) and obj.parceiro else obj.nome
+        )
 
     def clean_username(self):
         User = get_user_model()

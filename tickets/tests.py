@@ -1276,5 +1276,40 @@ class EspecialistaDestinoMascaraTests(TestCase):
         self.assertContains(resp, f'data-send-maska="{self.ticket.protocolo}"')
         self.assertContains(resp, 'id="modal-enviar-mascara"')
 
+    def test_especialista_form_renderiza_com_destinatario_sem_parceiro(self):
+        from gestao.models import Destinatario
+        User = get_user_model()
+        gestor = User.objects.create_user(
+            username="gestor_test",
+            password="123",
+            first_name="Admin Test",
+            is_staff=True,
+        )
+        PerfilStaff.objects.create(
+            user=gestor,
+            papel=PerfilStaff.Papel.GESTOR,
+        )
+        # Cria grupo de WhatsApp sem parceiro vinculado (ex: grupo geral da gerência)
+        Destinatario.objects.create(
+            nome="Grupo Geral Operação",
+            jid="120363000111222@g.us",
+            tipo=Destinatario.TipoDestino.GRUPO,
+            parceiro=None,
+            ativo=True,
+        )
+        self.client.force_login(gestor)
+        # GET /especialistas/<id>/ não deve dar 500
+        url = reverse("especialista_editar", args=[self.spec_user.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Destino das Máscaras (WhatsApp)")
+        self.assertContains(resp, "Grupo Geral Operação")
+
+        # GET /perfil/ também deve renderizar normalmente
+        self.client.force_login(self.spec_user)
+        resp_perfil = self.client.get(reverse("meu_perfil"))
+        self.assertEqual(resp_perfil.status_code, 200)
+        self.assertContains(resp_perfil, "Destino das Máscaras (WhatsApp)")
+
 
 
