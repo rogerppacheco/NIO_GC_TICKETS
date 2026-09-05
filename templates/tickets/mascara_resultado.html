@@ -21,8 +21,8 @@
             {% csrf_token %}
             <input type="hidden" name="action" value="enviar_mascara_wpp">
             <input type="hidden" name="mascara_id" value="{{ mascara.id }}">
-            <button class="btn btn-secondary" type="submit" title="Enviar para o WhatsApp do especialista {{ especialista_parceiro.get_full_name|default:especialista_parceiro.username }}">
-              📱 Enviar WhatsApp (Especialista: {{ especialista_parceiro.get_full_name|default:especialista_parceiro.username }})
+            <button class="btn btn-secondary" type="submit" title="Enviar para {{ destino_mascara_especialista.rotulo|default:especialista_parceiro.username }}">
+              📱 Enviar WhatsApp ({% if destino_mascara_especialista.nome %}{{ destino_mascara_especialista.nome }}{% else %}Especialista: {{ especialista_parceiro.get_full_name|default:especialista_parceiro.username }}{% endif %})
             </button>
           </form>
         {% else %}

@@ -391,6 +391,9 @@ input:focus, select:focus, textarea:focus {
 }
 .icon-btn:hover { border-color: var(--brand); color: var(--brand); background: #eef8f5; }
 .icon-btn.is-copied { border-color: var(--ok); color: var(--ok); background: #ecfdf3; }
+.icon-btn.icon-btn-wpp { color: #15803d; }
+.icon-btn.icon-btn-wpp:hover { border-color: #25d366; color: #16a34a; background: #f0fdf4; }
+.icon-btn.icon-btn-wpp.is-sent { border-color: #25d366; background: #dcfce7; color: #15803d; }
 .mask-menu {
   position: fixed; z-index: 40; min-width: 220px; max-width: 320px;
   background: #fff; border: 1px solid var(--line); border-radius: 12px;

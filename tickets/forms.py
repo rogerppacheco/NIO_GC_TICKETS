@@ -170,12 +170,52 @@ class EspecialistaForm(forms.Form):
         ),
         widget=forms.TextInput(attrs={"placeholder": "Ex.: MG INTERIOR"}),
     )
+    tipo_destino_mascara = forms.ChoiceField(
+        label="Para onde vai a máscara",
+        choices=PerfilStaff.TipoDestinoMascara.choices,
+        initial=PerfilStaff.TipoDestinoMascara.PROPRIO,
+        required=False,
+        widget=forms.Select(attrs={"class": "fila-pick", "id": "id_tipo_destino_mascara"}),
+    )
+    mascara_grupo = forms.ModelChoiceField(
+        label="Grupo de WhatsApp",
+        queryset=None,
+        required=False,
+        empty_label="Selecione um grupo de WhatsApp...",
+        widget=forms.Select(attrs={"class": "fila-pick", "id": "id_mascara_grupo"}),
+    )
+    mascara_grupo_custom = forms.CharField(
+        label="Ou digite o JID do grupo",
+        max_length=120,
+        required=False,
+        help_text="Ex.: 1203630283749281@g.us",
+        widget=forms.TextInput(attrs={"placeholder": "Ex.: 1203630283749281@g.us", "id": "id_mascara_grupo_custom"}),
+    )
+    mascara_numero = forms.CharField(
+        label="Número individual (WhatsApp)",
+        max_length=40,
+        required=False,
+        help_text="Número com DDI, só dígitos. Ex.: 5531999999999",
+        widget=forms.TextInput(attrs={"placeholder": "5531999999999", "id": "id_mascara_numero"}),
+    )
+    mascara_numero_nome = forms.CharField(
+        label="Nome do contato individual",
+        max_length=120,
+        required=False,
+        help_text="Nome ou descrição do contato (opcional).",
+        widget=forms.TextInput(attrs={"placeholder": "Ex.: Backoffice Central", "id": "id_mascara_numero_nome"}),
+    )
 
     def __init__(self, *args, instance=None, **kwargs):
         self.instance = instance
+        from gestao.models import Destinatario
+        super().__init__(*args, **kwargs)
+        self.fields["mascara_grupo"].queryset = Destinatario.objects.filter(
+            tipo=Destinatario.TipoDestino.GRUPO, ativo=True
+        ).order_by("nome")
         if instance and "initial" not in kwargs:
             perfil = getattr(instance, "perfil_staff", None)
-            kwargs["initial"] = {
+            self.initial.update({
                 "first_name": instance.first_name,
                 "username": instance.username,
                 "email": instance.email,
@@ -186,8 +226,12 @@ class EspecialistaForm(forms.Form):
                 "fte": perfil.fte if perfil else Decimal("1.00"),
                 "whatsapp": perfil.whatsapp if perfil else "",
                 "gerencia": perfil.gerencia if perfil else "",
-            }
-        super().__init__(*args, **kwargs)
+                "tipo_destino_mascara": perfil.tipo_destino_mascara if perfil else PerfilStaff.TipoDestinoMascara.PROPRIO,
+                "mascara_grupo": perfil.mascara_grupo_id if perfil else None,
+                "mascara_grupo_custom": perfil.mascara_grupo_custom if perfil else "",
+                "mascara_numero": perfil.mascara_numero if perfil else "",
+                "mascara_numero_nome": perfil.mascara_numero_nome if perfil else "",
+            })
         if instance is None:
             self.fields["password"].required = True
             self.fields["password"].help_text = "Senha inicial do especialista."
@@ -268,6 +312,11 @@ class EspecialistaForm(forms.Form):
                 "fte": dados.get("fte") or Decimal("1.00"),
                 "whatsapp": (dados.get("whatsapp") or "").strip(),
                 "gerencia": (dados.get("gerencia") or "").strip()[:120],
+                "tipo_destino_mascara": dados.get("tipo_destino_mascara") or PerfilStaff.TipoDestinoMascara.PROPRIO,
+                "mascara_grupo": dados.get("mascara_grupo"),
+                "mascara_grupo_custom": (dados.get("mascara_grupo_custom") or "").strip(),
+                "mascara_numero": (dados.get("mascara_numero") or "").strip(),
+                "mascara_numero_nome": (dados.get("mascara_numero_nome") or "").strip()[:120],
             },
         )
         user.perfil_staff = perfil
@@ -295,17 +344,62 @@ class StaffPerfilForm(forms.Form):
         help_text="Se você não for admin, as máscaras de Gestão chegam neste número (DDI, só dígitos). Ex.: 5531999999999.",
         widget=forms.TextInput(attrs={"placeholder": "5531999999999"}),
     )
+    tipo_destino_mascara = forms.ChoiceField(
+        label="Para onde vai a máscara",
+        choices=PerfilStaff.TipoDestinoMascara.choices,
+        initial=PerfilStaff.TipoDestinoMascara.PROPRIO,
+        required=False,
+        widget=forms.Select(attrs={"class": "fila-pick", "id": "id_perfil_tipo_destino_mascara"}),
+    )
+    mascara_grupo = forms.ModelChoiceField(
+        label="Grupo de WhatsApp",
+        queryset=None,
+        required=False,
+        empty_label="Selecione um grupo de WhatsApp...",
+        widget=forms.Select(attrs={"class": "fila-pick", "id": "id_perfil_mascara_grupo"}),
+    )
+    mascara_grupo_custom = forms.CharField(
+        label="Ou digite o JID do grupo",
+        max_length=120,
+        required=False,
+        help_text="Ex.: 1203630283749281@g.us",
+        widget=forms.TextInput(attrs={"placeholder": "Ex.: 1203630283749281@g.us", "id": "id_perfil_mascara_grupo_custom"}),
+    )
+    mascara_numero = forms.CharField(
+        label="Número individual (WhatsApp)",
+        max_length=40,
+        required=False,
+        help_text="Número com DDI, só dígitos. Ex.: 5531999999999",
+        widget=forms.TextInput(attrs={"placeholder": "5531999999999", "id": "id_perfil_mascara_numero"}),
+    )
+    mascara_numero_nome = forms.CharField(
+        label="Nome do contato individual",
+        max_length=120,
+        required=False,
+        help_text="Nome ou descrição do contato (opcional).",
+        widget=forms.TextInput(attrs={"placeholder": "Ex.: Backoffice Central", "id": "id_perfil_mascara_numero_nome"}),
+    )
 
     def __init__(self, *args, instance=None, **kwargs):
         self.instance = instance
+        from gestao.models import Destinatario
+        super().__init__(*args, **kwargs)
+        self.fields["mascara_grupo"].queryset = Destinatario.objects.filter(
+            tipo=Destinatario.TipoDestino.GRUPO, ativo=True
+        ).order_by("nome")
         if instance and "initial" not in kwargs:
-            kwargs["initial"] = {
+            perfil = getattr(instance, "perfil_staff", None)
+            self.initial.update({
                 "first_name": instance.first_name,
                 "username": instance.username,
                 "email": instance.email,
-                "whatsapp": getattr(getattr(instance, "perfil_staff", None), "whatsapp", "") or "",
-            }
-        super().__init__(*args, **kwargs)
+                "whatsapp": getattr(perfil, "whatsapp", "") or "",
+                "tipo_destino_mascara": getattr(perfil, "tipo_destino_mascara", PerfilStaff.TipoDestinoMascara.PROPRIO) or PerfilStaff.TipoDestinoMascara.PROPRIO,
+                "mascara_grupo": getattr(perfil, "mascara_grupo_id", None),
+                "mascara_grupo_custom": getattr(perfil, "mascara_grupo_custom", "") or "",
+                "mascara_numero": getattr(perfil, "mascara_numero", "") or "",
+                "mascara_numero_nome": getattr(perfil, "mascara_numero_nome", "") or "",
+            })
 
     def clean_username(self):
         User = get_user_model()
@@ -333,7 +427,19 @@ class StaffPerfilForm(forms.Form):
         perfil = getattr(user, "perfil_staff", None)
         if perfil is not None:
             perfil.whatsapp = (dados.get("whatsapp") or "").strip()
-            perfil.save(update_fields=["whatsapp"])
+            perfil.tipo_destino_mascara = dados.get("tipo_destino_mascara") or PerfilStaff.TipoDestinoMascara.PROPRIO
+            perfil.mascara_grupo = dados.get("mascara_grupo")
+            perfil.mascara_grupo_custom = (dados.get("mascara_grupo_custom") or "").strip()
+            perfil.mascara_numero = (dados.get("mascara_numero") or "").strip()
+            perfil.mascara_numero_nome = (dados.get("mascara_numero_nome") or "").strip()[:120]
+            perfil.save(update_fields=[
+                "whatsapp",
+                "tipo_destino_mascara",
+                "mascara_grupo",
+                "mascara_grupo_custom",
+                "mascara_numero",
+                "mascara_numero_nome",
+            ])
         return user
 
 

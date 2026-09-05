@@ -145,20 +145,31 @@ def enviar_mascara_whatsapp(
     nome = (destino_nome or "").strip()
 
     if not jid:
-        if not eh_admin_spec:
-            jid = whatsapp_do_usuario(spec)
-            nome_esp = (spec.get_full_name() or spec.username).strip()
-            nome = f"Especialista {nome_esp}"
-            if not jid:
+        # Verifica se o especialista tem destino configurado em seu perfil
+        if spec:
+            perfil = getattr(spec, "perfil_staff", None)
+            if perfil:
+                info_dest = perfil.obter_destino_mascara()
+                if info_dest.get("configurado"):
+                    if not eh_admin_spec or perfil.tipo_destino_mascara != perfil.TipoDestinoMascara.PROPRIO:
+                        jid = info_dest["jid"]
+                        nome = info_dest["nome"]
+
+        if not jid:
+            if not eh_admin_spec and spec:
+                jid = whatsapp_do_usuario(spec)
+                nome_esp = (spec.get_full_name() or spec.username).strip()
+                nome = f"Especialista {nome_esp}"
+                if not jid:
+                    return (
+                        False,
+                        f"O especialista {nome_esp} responsável pelo parceiro não possui WhatsApp ou destino cadastrado no perfil.",
+                    )
+            else:
                 return (
                     False,
-                    f"O especialista {nome_esp} responsável pelo parceiro não possui WhatsApp cadastrado em Meu perfil.",
+                    "O parceiro é atendido pelo admin. Por favor selecione um grupo ou contato de destino para enviar.",
                 )
-        else:
-            return (
-                False,
-                "O parceiro é atendido pelo admin. Por favor selecione um grupo ou contato de destino para enviar.",
-            )
 
     if not syncwa_configurado():
         return False, "SyncWA não está configurado no sistema."
@@ -229,7 +240,7 @@ def enviar_mascara_whatsapp(
 
 
 def notificar_mascaras_por_whatsapp(ticket: Ticket) -> int:
-    """Envia máscaras marcadas com enviar_whatsapp=True para o especialista do parceiro (quando não for admin)."""
+    """Envia máscaras marcadas com enviar_whatsapp=True para o destino configurado do especialista (quando não for admin)."""
     if not ticket.parceiro:
         return 0
     spec = ticket.parceiro.especialista
@@ -237,20 +248,22 @@ def notificar_mascaras_por_whatsapp(ticket: Ticket) -> int:
         return 0
     from gestao.messaging.envio import whatsapp_do_usuario
 
-    wpp = whatsapp_do_usuario(spec)
-    if not wpp:
+    perfil = getattr(spec, "perfil_staff", None)
+    info_dest = perfil.obter_destino_mascara() if perfil else {}
+    dest_jid = info_dest.get("jid") or whatsapp_do_usuario(spec)
+    dest_nome = info_dest.get("nome") or f"Especialista {(spec.get_full_name() or spec.username).strip()}"
+    if not dest_jid:
         return 0
 
     enviados = 0
-    nome_esp = (spec.get_full_name() or spec.username).strip()
     for mascara in Mascara.objects.filter(ativo=True, enviar_whatsapp=True):
         if not mascara.aplica_para(ticket.tipo):
             continue
         ok, _ = enviar_mascara_whatsapp(
             ticket,
             mascara,
-            destino_jid=wpp,
-            destino_nome=f"Especialista {nome_esp}",
+            destino_jid=dest_jid,
+            destino_nome=dest_nome,
         )
         if ok:
             enviados += 1

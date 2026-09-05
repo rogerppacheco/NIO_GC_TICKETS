@@ -544,12 +544,103 @@ class PerfilStaff(models.Model):
         help_text="Mesmo valor da coluna GERENCIA da OSAB. Meus/Outros só mostram PDVs desta gerência.",
     )
 
+    class TipoDestinoMascara(models.TextChoices):
+        PROPRIO = "proprio", "Para ele (WhatsApp do especialista)"
+        GRUPO = "grupo", "Para algum grupo de WhatsApp"
+        INDIVIDUAL = "individual", "Para um número individual"
+
+    tipo_destino_mascara = models.CharField(
+        "Destino da máscara",
+        max_length=20,
+        choices=TipoDestinoMascara.choices,
+        default=TipoDestinoMascara.PROPRIO,
+        help_text="Define para onde vai a máscara gerada para os tickets deste especialista.",
+    )
+    mascara_grupo = models.ForeignKey(
+        "gestao.Destinatario",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Grupo de WhatsApp selecionado da lista de Destinatários.",
+    )
+    mascara_grupo_custom = models.CharField(
+        "JID / nome do grupo",
+        max_length=120,
+        blank=True,
+        help_text="JID ou identificador do grupo caso não esteja cadastrado na lista.",
+    )
+    mascara_numero = models.CharField(
+        "Número individual (WhatsApp)",
+        max_length=40,
+        blank=True,
+        help_text="Número com DDI, só dígitos. Ex.: 5531999999999.",
+    )
+    mascara_numero_nome = models.CharField(
+        "Nome do contato individual",
+        max_length=120,
+        blank=True,
+        help_text="Nome ou descrição do contato (opcional).",
+    )
+
     class Meta:
         verbose_name = "Perfil interno"
         verbose_name_plural = "Perfis internos"
 
     def __str__(self) -> str:
         return f"{self.user} · {self.get_papel_display()}"
+
+    def obter_destino_mascara(self) -> dict:
+        """Retorna dicionário com os dados do destino configurado para envio de máscaras."""
+        tipo = self.tipo_destino_mascara or self.TipoDestinoMascara.PROPRIO
+
+        if tipo == self.TipoDestinoMascara.GRUPO:
+            if self.mascara_grupo:
+                jid = (self.mascara_grupo.jid or "").strip()
+                nome = self.mascara_grupo.nome
+                return {
+                    "tipo": "grupo",
+                    "tipo_display": "Grupo WhatsApp",
+                    "jid": jid,
+                    "nome": nome,
+                    "rotulo": f"Grupo: {nome} ({jid})",
+                    "configurado": bool(jid),
+                }
+            elif self.mascara_grupo_custom:
+                jid = self.mascara_grupo_custom.strip()
+                nome = "Grupo WhatsApp"
+                return {
+                    "tipo": "grupo",
+                    "tipo_display": "Grupo WhatsApp",
+                    "jid": jid,
+                    "nome": nome,
+                    "rotulo": f"Grupo: {jid}",
+                    "configurado": bool(jid),
+                }
+
+        elif tipo == self.TipoDestinoMascara.INDIVIDUAL:
+            jid = (self.mascara_numero or "").strip()
+            nome = (self.mascara_numero_nome or "").strip() or f"Contato {jid}"
+            return {
+                "tipo": "individual",
+                "tipo_display": "Número individual",
+                "jid": jid,
+                "nome": nome,
+                "rotulo": f"{nome} ({jid})" if jid else "Número individual (não informado)",
+                "configurado": bool(jid),
+            }
+
+        # Padrão: "proprio" (WhatsApp do especialista)
+        jid = (self.whatsapp or "").strip()
+        nome = (self.user.get_full_name() or self.user.username).strip()
+        return {
+            "tipo": "proprio",
+            "tipo_display": "Especialista",
+            "jid": jid,
+            "nome": f"Especialista {nome}",
+            "rotulo": f"Especialista {nome} ({jid})" if jid else f"Especialista {nome} (sem WhatsApp)",
+            "configurado": bool(jid),
+        }
 
 
 def formatar_duracao(segundos: int | None) -> str:

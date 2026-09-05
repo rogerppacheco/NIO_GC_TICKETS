@@ -68,6 +68,13 @@
                   <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                 </svg>
               </button>
+              <button type="button" class="icon-btn icon-btn-wpp" title="Enviar máscara via WhatsApp"
+                      data-send-maska="{{ t.protocolo }}"
+                      aria-label="Enviar máscara via WhatsApp {{ t.protocolo }}">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                </svg>
+              </button>
               <a class="btn btn-primary" href="{% url 'ticket_detalhe' t.protocolo %}?responder=1"
                  data-abrir-resposta="{{ t.protocolo }}" data-next="{{ request.get_full_path }}">Responder</a>
             </div>
@@ -82,6 +89,88 @@
 </div>
 
 <div id="mask-menu" class="mask-menu" hidden></div>
+
+<!-- Modal Enviar Máscara via WhatsApp -->
+<div class="modal-overlay" id="modal-enviar-mascara" role="presentation" style="display:none">
+  <div class="modal" style="width: min(640px, 100%); margin: auto;" role="dialog" aria-modal="true" aria-labelledby="modal-wpp-titulo">
+    <div class="modal-h" style="align-items:center;">
+      <div>
+        <h2 id="modal-wpp-titulo" style="display:flex;align-items:center;gap:0.45rem; font-size:1.15rem; margin:0;">
+          <span style="color:#16a34a">📱</span> Enviar Máscara via WhatsApp
+        </h2>
+        <p class="help" id="modal-wpp-sub" style="margin:0.2rem 0 0; font-weight:600;"></p>
+      </div>
+      <button type="button" class="icon-btn" id="modal-wpp-fechar" aria-label="Fechar modal" style="margin-left:auto;">
+        ✕
+      </button>
+    </div>
+
+    <div style="padding: 1.25rem 1.25rem 1.5rem; display:flex; flex-direction:column; gap: 0.9rem;">
+      {% csrf_token %}
+      <!-- Destino configurado do especialista -->
+      <div id="modal-wpp-card-destino" style="background:#f8fafc; border:1px solid var(--line); border-radius:10px; padding:0.85rem 1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem; flex-wrap:wrap;">
+          <div>
+            <div style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--muted); font-weight:700;">
+              Destino do Especialista
+            </div>
+            <div id="modal-wpp-dest-nome" style="font-weight:700; color:var(--ink); font-size:1rem; margin-top:0.2rem;">
+              —
+            </div>
+            <div id="modal-wpp-dest-info" class="help" style="margin-top:0.15rem;"></div>
+          </div>
+          <span id="modal-wpp-dest-badge" class="pill" style="font-size:0.75rem;">Configurado</span>
+        </div>
+
+        <div style="margin-top:0.75rem; border-top:1px dashed var(--line); padding-top:0.65rem;">
+          <label for="modal-wpp-select-destino" style="font-size:0.82rem; font-weight:600; margin-bottom:0.3rem; display:block;">
+            Enviar para outro destino (opcional):
+          </label>
+          <select id="modal-wpp-select-destino" class="fila-pick" style="width:100%; font-size:0.85rem;">
+            <option value="">Usar destino padrão do especialista</option>
+          </select>
+          <div id="modal-wpp-custom-phone-box" style="margin-top:0.5rem; display:none;">
+            <input type="text" id="modal-wpp-custom-phone" class="fila-search" placeholder="Número com DDI (ex.: 5531999999999)" style="width:100%; font-size:0.85rem;">
+          </div>
+        </div>
+      </div>
+
+      <!-- Seleção de Máscara -->
+      <div id="modal-wpp-bloco-mascara">
+        <label for="modal-wpp-select-mascara" style="font-weight:600; font-size:0.85rem; margin-bottom:0.3rem; display:block;">
+          Máscara:
+        </label>
+        <select id="modal-wpp-select-mascara" class="fila-pick" style="width:100%; font-size:0.88rem;"></select>
+      </div>
+
+      <!-- Prévia do Conteúdo -->
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem;">
+          <label style="font-weight:600; font-size:0.85rem; margin:0;">
+            Prévia da mensagem
+          </label>
+          <span class="help" id="modal-wpp-charcount" style="font-size:0.75rem;"></span>
+        </div>
+        <textarea id="modal-wpp-preview" class="mono" rows="7" readonly style="width:100%; resize:vertical; background:#fbfcfd;"></textarea>
+      </div>
+
+      <div id="modal-wpp-alerta" style="display:none; padding:0.65rem 0.85rem; border-radius:8px; font-size:0.85rem;"></div>
+
+      <!-- Ações -->
+      <div style="display:flex; gap:0.5rem; justify-content:flex-end; flex-wrap:wrap; margin-top:0.25rem; align-items:center;">
+        <button type="button" class="btn btn-ghost" id="modal-wpp-btn-copiar" title="Copiar texto da máscara">
+          Copiar texto
+        </button>
+        <a href="#" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" id="modal-wpp-btn-web" style="display:inline-flex; align-items:center; gap:0.35rem;">
+          🌐 WhatsApp Web
+        </a>
+        <button type="button" class="btn btn-primary" id="modal-wpp-btn-enviar" style="background:#16a34a; border-color:#16a34a; color:#fff; display:inline-flex; align-items:center; gap:0.35rem; font-weight:700;">
+          📱 Enviar WhatsApp
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 {% block extra_js %}
 <script>
@@ -101,6 +190,7 @@
     }
   }
 
+  // Menu rápido de copiar máscara
   const menu = document.getElementById("mask-menu");
 
   function hideMenu() {
@@ -162,6 +252,277 @@
       }
     });
   });
+
+  // Modal Enviar Máscara via WhatsApp
+  const modalWpp = document.getElementById("modal-enviar-mascara");
+  const modalSub = document.getElementById("modal-wpp-sub");
+  const modalFechar = document.getElementById("modal-wpp-fechar");
+  const destNomeEl = document.getElementById("modal-wpp-dest-nome");
+  const destInfoEl = document.getElementById("modal-wpp-dest-info");
+  const destBadgeEl = document.getElementById("modal-wpp-dest-badge");
+  const selDestino = document.getElementById("modal-wpp-select-destino");
+  const customPhoneBox = document.getElementById("modal-wpp-custom-phone-box");
+  const customPhoneInput = document.getElementById("modal-wpp-custom-phone");
+  const selMascara = document.getElementById("modal-wpp-select-mascara");
+  const previewEl = document.getElementById("modal-wpp-preview");
+  const charcountEl = document.getElementById("modal-wpp-charcount");
+  const alertaEl = document.getElementById("modal-wpp-alerta");
+  const btnEnviar = document.getElementById("modal-wpp-btn-enviar");
+  const btnWeb = document.getElementById("modal-wpp-btn-web");
+  const btnCopiar = document.getElementById("modal-wpp-btn-copiar");
+
+  let currentProtocolo = null;
+  let currentData = null;
+  let currentActiveBtn = null;
+
+  function csrfToken() {
+    const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+    if (match) return decodeURIComponent(match[1]);
+    const input = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    return input ? input.value : "";
+  }
+
+  function fecharModal() {
+    if (!modalWpp) return;
+    modalWpp.style.display = "none";
+    document.body.classList.remove("modal-open");
+    currentProtocolo = null;
+    currentData = null;
+    alertaEl.style.display = "none";
+  }
+
+  if (modalFechar) modalFechar.addEventListener("click", fecharModal);
+  if (modalWpp) {
+    modalWpp.addEventListener("click", function(ev) {
+      if (ev.target === modalWpp) fecharModal();
+    });
+  }
+  document.addEventListener("keydown", function(ev) {
+    if (ev.key === "Escape" && modalWpp && modalWpp.style.display !== "none") {
+      fecharModal();
+    }
+  });
+
+  function getActiveDestination() {
+    if (!currentData) return { jid: "", nome: "" };
+    const selVal = selDestino.value;
+    if (selVal === "__custom__") {
+      const num = (customPhoneInput.value || "").trim().replace(/\D/g, "");
+      return { jid: num, nome: "Contato " + num };
+    }
+    if (selVal) {
+      const parts = selVal.split("|");
+      return { jid: parts[0], nome: parts[1] || parts[0] };
+    }
+    const esp = currentData.especialista || {};
+    return { jid: esp.destino_jid || "", nome: esp.destino_nome || "" };
+  }
+
+  function updateWebLink() {
+    const dest = getActiveDestination();
+    const txt = previewEl.value || "";
+    let cleanPhone = (dest.jid || "").replace(/\D/g, "");
+    if (dest.jid && dest.jid.includes("@g.us")) {
+      cleanPhone = "";
+    }
+    let url = "https://web.whatsapp.com/";
+    if (cleanPhone) {
+      url = "https://web.whatsapp.com/send?phone=" + encodeURIComponent(cleanPhone) + "&text=" + encodeURIComponent(txt);
+    } else if (txt) {
+      url = "https://web.whatsapp.com/send?text=" + encodeURIComponent(txt);
+    }
+    btnWeb.href = url;
+  }
+
+  function updatePreview() {
+    if (!currentData || !currentData.mascaras || !currentData.mascaras.length) {
+      previewEl.value = "";
+      charcountEl.textContent = "";
+      return;
+    }
+    const idx = Number(selMascara.value || 0);
+    const m = currentData.mascaras[idx] || currentData.mascaras[0];
+    previewEl.value = m ? m.conteudo : "";
+    charcountEl.textContent = (previewEl.value.length) + " caracteres";
+    updateWebLink();
+  }
+
+  if (selMascara) selMascara.addEventListener("change", updatePreview);
+  if (selDestino) {
+    selDestino.addEventListener("change", function() {
+      if (selDestino.value === "__custom__") {
+        customPhoneBox.style.display = "block";
+        customPhoneInput.focus();
+      } else {
+        customPhoneBox.style.display = "none";
+      }
+      updateWebLink();
+    });
+  }
+  if (customPhoneInput) customPhoneInput.addEventListener("input", updateWebLink);
+
+  if (btnCopiar) {
+    btnCopiar.addEventListener("click", function() {
+      const text = previewEl.value;
+      if (!text) return;
+      if (window.copyText) window.copyText(text, btnCopiar);
+      else navigator.clipboard.writeText(text);
+      const originalText = btnCopiar.textContent;
+      btnCopiar.textContent = "✓ Copiado!";
+      setTimeout(function() { btnCopiar.textContent = originalText; }, 1800);
+    });
+  }
+
+  document.querySelectorAll("[data-send-maska]").forEach(function (btn) {
+    btn.addEventListener("click", async function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const protocolo = btn.getAttribute("data-send-maska");
+      currentProtocolo = protocolo;
+      currentActiveBtn = btn;
+      btn.disabled = true;
+
+      try {
+        const res = await fetch("/tickets/" + encodeURIComponent(protocolo) + "/mascaras.json", {
+          headers: { "Accept": "application/json" },
+          credentials: "same-origin",
+        });
+        if (!res.ok) throw new Error("Falha ao carregar informações da demanda");
+        const data = await res.json();
+        currentData = data;
+
+        const list = data.mascaras || [];
+        if (!list.length) {
+          alert("Nenhuma máscara configurada para o tipo " + (data.tipo || "") + ".");
+          return;
+        }
+
+        // Subtítulo
+        modalSub.textContent = (data.protocolo || protocolo) + " · " + (data.parceiro || "") + " · " + (data.tipo || "");
+
+        // Máscaras
+        selMascara.innerHTML = list.map(function (m, i) {
+          return '<option value="' + i + '">' + (m.nome || "Máscara") + (m.destino ? " → " + m.destino : "") + '</option>';
+        }).join("");
+        selMascara.selectedIndex = 0;
+
+        // Destino do Especialista
+        const esp = data.especialista || {};
+        if (esp.configurado) {
+          destNomeEl.textContent = esp.destino_rotulo || esp.destino_nome || "Configurado";
+          destInfoEl.textContent = "Configurado no cadastro (" + (esp.destino_tipo_display || "Especialista") + ")";
+          destBadgeEl.textContent = esp.destino_tipo_display || "Configurado";
+          destBadgeEl.className = "pill novo";
+        } else if (esp.tem_especialista) {
+          destNomeEl.textContent = esp.nome ? "Especialista " + esp.nome : "Especialista do parceiro";
+          destInfoEl.textContent = "⚠️ Especialista sem WhatsApp ou destino configurado no perfil.";
+          destBadgeEl.textContent = "Não configurado";
+          destBadgeEl.className = "pill cancelado";
+        } else {
+          destNomeEl.textContent = "Atendido pelo Admin / Sem especialista";
+          destInfoEl.textContent = "Selecione um grupo ou contato abaixo para enviar.";
+          destBadgeEl.textContent = "Admin";
+          destBadgeEl.className = "pill em_analise";
+        }
+
+        // Opções alternativas de destino
+        let optsHtml = '<option value="">Usar destino do especialista (' + (esp.destino_nome || esp.nome || "Padrão") + ')</option>';
+        (data.destinos_disponiveis || []).forEach(function(cat) {
+          optsHtml += '<optgroup label="' + cat.categoria + '">';
+          (cat.itens || []).forEach(function(it) {
+            optsHtml += '<option value="' + it.jid + '|' + (it.nome || "") + '">' + it.rotulo + '</option>';
+          });
+          optsHtml += '</optgroup>';
+        });
+        optsHtml += '<optgroup label="Outro destino"><option value="__custom__">Digitar outro número de WhatsApp...</option></optgroup>';
+        selDestino.innerHTML = optsHtml;
+        selDestino.value = "";
+        customPhoneBox.style.display = "none";
+        customPhoneInput.value = "";
+
+        alertaEl.style.display = "none";
+        btnEnviar.disabled = false;
+        btnEnviar.innerHTML = '📱 Enviar WhatsApp';
+
+        updatePreview();
+
+        modalWpp.style.display = "flex";
+        document.body.classList.add("modal-open");
+      } catch (e) {
+        alert("Erro ao abrir envio de máscara: " + e.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
+  if (btnEnviar) {
+    btnEnviar.addEventListener("click", async function() {
+      if (!currentProtocolo || !currentData) return;
+
+      const dest = getActiveDestination();
+      if (!dest.jid && !currentData.especialista.configurado) {
+        alertaEl.style.display = "block";
+        alertaEl.style.background = "#fef3f2";
+        alertaEl.style.color = "var(--danger)";
+        alertaEl.textContent = "Por favor selecione um grupo ou contato de destino para enviar.";
+        return;
+      }
+
+      const mIdx = Number(selMascara.value || 0);
+      const mascaraObj = currentData.mascaras[mIdx];
+      const mascaraId = mascaraObj ? mascaraObj.id : null;
+
+      btnEnviar.disabled = true;
+      btnEnviar.innerHTML = '⏳ Enviando...';
+      alertaEl.style.display = "none";
+
+      const formData = new URLSearchParams();
+      if (mascaraId) formData.append("mascara_id", mascaraId);
+      if (dest.jid) {
+        formData.append("destino_jid", dest.jid);
+        formData.append("destino_nome", dest.nome);
+      }
+
+      try {
+        const res = await fetch("/tickets/" + encodeURIComponent(currentProtocolo) + "/enviar-mascara/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-CSRFToken": csrfToken(),
+          },
+          body: formData.toString(),
+          credentials: "same-origin",
+        });
+
+        const respData = await res.json();
+        if (!res.ok || !respData.ok) {
+          throw new Error(respData.erro || "Falha ao enviar máscara via WhatsApp.");
+        }
+
+        alertaEl.style.display = "block";
+        alertaEl.style.background = "#dcfce7";
+        alertaEl.style.color = "#15803d";
+        alertaEl.textContent = "✓ " + respData.mensagem;
+
+        if (currentActiveBtn) {
+          currentActiveBtn.classList.add("is-sent");
+          currentActiveBtn.title = "Enviada via WhatsApp!";
+        }
+
+        setTimeout(function() {
+          fecharModal();
+        }, 1600);
+      } catch (err) {
+        alertaEl.style.display = "block";
+        alertaEl.style.background = "#fef3f2";
+        alertaEl.style.color = "var(--danger)";
+        alertaEl.textContent = "❌ " + err.message;
+        btnEnviar.disabled = false;
+        btnEnviar.innerHTML = '📱 Tentar novamente';
+      }
+    });
+  }
 })();
 </script>
 {% endblock %}

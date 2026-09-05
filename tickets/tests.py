@@ -11,7 +11,7 @@ from django.utils.datastructures import MultiValueDict
 from .acesso import eh_gestor, qs_equipe, qs_especialistas, tickets_visiveis
 from .demanda_campos import contexto_demanda_para_resposta, montar_abas_tratamento
 from .forms import LoginForm, MultipleFileField, ParceiroForm, TicketCreateForm, TicketTreatForm
-from .models import Anexo, Mensagem, Parceiro, PerfilStaff, StatusTicket, Ticket, TipoDemanda, formatar_duracao
+from .models import Anexo, Mascara, Mensagem, Parceiro, PerfilStaff, StatusTicket, Ticket, TipoDemanda, formatar_duracao
 
 
 class MultipleFileFieldTests(SimpleTestCase):
@@ -1113,5 +1113,168 @@ class VtalPortalCardTests(SimpleTestCase):
             ctx = contexto_portal_vtal()
         self.assertEqual(ctx["vtal_forms_url"], url)
         self.assertIn("vtal_ultima_importacao", ctx)
+
+
+class EspecialistaDestinoMascaraTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.spec_user = User.objects.create_user(
+            username="lucas_spec",
+            password="123",
+            first_name="Lucas Especialista",
+            email="lucas@example.com",
+            is_staff=True,
+        )
+        self.perfil = PerfilStaff.objects.create(
+            user=self.spec_user,
+            papel=PerfilStaff.Papel.ESPECIALISTA,
+            whatsapp="5531988880000",
+        )
+        self.pdv = Parceiro.objects.create(
+            codigo_pdv="PDV-LUCAS",
+            nome="Parceiro Lucas",
+            especialista=self.spec_user,
+        )
+        from gestao.models import Destinatario
+        self.grupo = Destinatario.objects.create(
+            nome="Grupo Suporte Central",
+            jid="120363999999999@g.us",
+            tipo=Destinatario.TipoDestino.GRUPO,
+            ativo=True,
+        )
+        self.mascara = Mascara.objects.create(
+            nome="Máscara Genérica",
+            tipos="",  # todos
+            destino="Central Suporte",
+            template="Protocolo: {{protocolo}} - Parceiro: {{parceiro}}",
+            ativo=True,
+        )
+        self.ticket = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.OUTROS,
+            pedido="PED-999",
+            descricao="Demanda de teste",
+        )
+
+    def test_obter_destino_mascara_proprio(self):
+        self.perfil.tipo_destino_mascara = PerfilStaff.TipoDestinoMascara.PROPRIO
+        dest = self.perfil.obter_destino_mascara()
+        self.assertEqual(dest["tipo"], "proprio")
+        self.assertEqual(dest["jid"], "5531988880000")
+        self.assertIn("Lucas Especialista", dest["nome"])
+        self.assertTrue(dest["configurado"])
+
+    def test_obter_destino_mascara_grupo(self):
+        self.perfil.tipo_destino_mascara = PerfilStaff.TipoDestinoMascara.GRUPO
+        self.perfil.mascara_grupo = self.grupo
+        dest = self.perfil.obter_destino_mascara()
+        self.assertEqual(dest["tipo"], "grupo")
+        self.assertEqual(dest["jid"], "120363999999999@g.us")
+        self.assertEqual(dest["nome"], "Grupo Suporte Central")
+        self.assertTrue(dest["configurado"])
+
+    def test_obter_destino_mascara_individual(self):
+        self.perfil.tipo_destino_mascara = PerfilStaff.TipoDestinoMascara.INDIVIDUAL
+        self.perfil.mascara_numero = "5511977776666"
+        self.perfil.mascara_numero_nome = "Backoffice SP"
+        dest = self.perfil.obter_destino_mascara()
+        self.assertEqual(dest["tipo"], "individual")
+        self.assertEqual(dest["jid"], "5511977776666")
+        self.assertEqual(dest["nome"], "Backoffice SP")
+        self.assertTrue(dest["configurado"])
+
+    def test_form_salva_destino_grupo(self):
+        from tickets.forms import EspecialistaForm
+
+        form = EspecialistaForm(
+            data={
+                "first_name": "Lucas Atualizado",
+                "username": "lucas_spec",
+                "email": "lucas@example.com",
+                "password": "",
+                "fte": "1.00",
+                "is_active": True,
+                "eh_admin": False,
+                "whatsapp": "5531988880000",
+                "gerencia": "MG",
+                "tipo_destino_mascara": PerfilStaff.TipoDestinoMascara.GRUPO,
+                "mascara_grupo": self.grupo.pk,
+                "mascara_grupo_custom": "",
+                "mascara_numero": "",
+                "mascara_numero_nome": "",
+            },
+            instance=self.spec_user,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+
+        self.perfil.refresh_from_db()
+        self.assertEqual(self.perfil.tipo_destino_mascara, PerfilStaff.TipoDestinoMascara.GRUPO)
+        self.assertEqual(self.perfil.mascara_grupo, self.grupo)
+
+    def test_enviar_mascara_whatsapp_destino_grupo_do_especialista(self):
+        from unittest.mock import patch
+        from gestao.messaging.syncwa import SyncWAResult
+        from tickets.services import enviar_mascara_whatsapp
+
+        self.perfil.tipo_destino_mascara = PerfilStaff.TipoDestinoMascara.GRUPO
+        self.perfil.mascara_grupo = self.grupo
+        self.perfil.save()
+
+        fake_resp = SyncWAResult(ok=True)
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), \
+             patch("gestao.messaging.syncwa.enviar_texto", return_value=fake_resp) as mock_send:
+            ok, msg = enviar_mascara_whatsapp(self.ticket, self.mascara, user=self.spec_user)
+            self.assertTrue(ok)
+            self.assertIn("Grupo Suporte Central", msg)
+            mock_send.assert_called_once()
+            jid, texto = mock_send.call_args.args
+            self.assertEqual(jid, "120363999999999@g.us")
+            self.assertIn("Parceiro: Parceiro Lucas", texto)
+
+    def test_ticket_mascaras_json_traz_destino_especialista(self):
+        self.client.force_login(self.spec_user)
+        self.perfil.tipo_destino_mascara = PerfilStaff.TipoDestinoMascara.GRUPO
+        self.perfil.mascara_grupo = self.grupo
+        self.perfil.save()
+
+        url = reverse("ticket_mascaras_json", args=[self.ticket.protocolo])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("especialista", data)
+        self.assertEqual(data["especialista"]["destino_tipo"], "grupo")
+        self.assertEqual(data["especialista"]["destino_jid"], "120363999999999@g.us")
+        self.assertTrue(data["especialista"]["configurado"])
+        self.assertIn("destinos_disponiveis", data)
+
+    def test_ticket_enviar_mascara_api(self):
+        from unittest.mock import patch
+        from gestao.messaging.syncwa import SyncWAResult
+
+        self.client.force_login(self.spec_user)
+        self.perfil.tipo_destino_mascara = PerfilStaff.TipoDestinoMascara.INDIVIDUAL
+        self.perfil.mascara_numero = "5531999991234"
+        self.perfil.mascara_numero_nome = "WhatsApp Central"
+        self.perfil.save()
+
+        url = reverse("ticket_enviar_mascara_api", args=[self.ticket.protocolo])
+        fake_resp = SyncWAResult(ok=True)
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), \
+             patch("gestao.messaging.syncwa.enviar_texto", return_value=fake_resp):
+            resp = self.client.post(url, {"mascara_id": self.mascara.id})
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertTrue(data["ok"])
+            self.assertIn("sucesso", data["mensagem"])
+
+    def test_fila_renderiza_botao_enviar_mascara(self):
+        self.client.force_login(self.spec_user)
+        url = reverse("fila")
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, f'data-send-maska="{self.ticket.protocolo}"')
+        self.assertContains(resp, 'id="modal-enviar-mascara"')
+
 
 

@@ -12,19 +12,115 @@
   <div class="panel-b">
     <form method="post" class="form-grid">
       {% csrf_token %}
-      {% for field in form %}
-        <div class="full">
-          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-          {{ field }}
-          {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
-          {% if field.errors %}<div class="help" style="color:var(--danger)">{{ field.errors|striptags }}</div>{% endif %}
+      <div class="full">
+        <label for="{{ form.first_name.id_for_label }}">{{ form.first_name.label }}</label>
+        {{ form.first_name }}
+        {% if form.first_name.help_text %}<div class="help">{{ form.first_name.help_text }}</div>{% endif %}
+        {% if form.first_name.errors %}<div class="help" style="color:var(--danger)">{{ form.first_name.errors|striptags }}</div>{% endif %}
+      </div>
+      <div class="full">
+        <label for="{{ form.username.id_for_label }}">{{ form.username.label }}</label>
+        {{ form.username }}
+        {% if form.username.help_text %}<div class="help">{{ form.username.help_text }}</div>{% endif %}
+        {% if form.username.errors %}<div class="help" style="color:var(--danger)">{{ form.username.errors|striptags }}</div>{% endif %}
+      </div>
+      <div class="full">
+        <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+        {{ form.email }}
+        {% if form.email.help_text %}<div class="help">{{ form.email.help_text }}</div>{% endif %}
+        {% if form.email.errors %}<div class="help" style="color:var(--danger)">{{ form.email.errors|striptags }}</div>{% endif %}
+      </div>
+      <div class="full">
+        <label for="{{ form.password.id_for_label }}">{{ form.password.label }}</label>
+        {{ form.password }}
+        {% if form.password.help_text %}<div class="help">{{ form.password.help_text }}</div>{% endif %}
+        {% if form.password.errors %}<div class="help" style="color:var(--danger)">{{ form.password.errors|striptags }}</div>{% endif %}
+      </div>
+      <div class="full">
+        <label for="{{ form.whatsapp.id_for_label }}">{{ form.whatsapp.label }}</label>
+        {{ form.whatsapp }}
+        {% if form.whatsapp.help_text %}<div class="help">{{ form.whatsapp.help_text }}</div>{% endif %}
+        {% if form.whatsapp.errors %}<div class="help" style="color:var(--danger)">{{ form.whatsapp.errors|striptags }}</div>{% endif %}
+      </div>
+
+      <div class="full" style="margin-top: 0.8rem; padding-top: 1rem; border-top: 1px solid var(--line);">
+        <h3 style="font-size: 1.05rem; margin: 0 0 0.25rem; color: var(--ink); display: flex; align-items: center; gap: 0.4rem;">
+          📱 Destino das Máscaras (WhatsApp)
+        </h3>
+        <p class="help" style="margin: 0 0 0.8rem;">Configure para onde as máscaras dos tickets associados a você devem ser enviadas:</p>
+      </div>
+
+      <div class="full">
+        <label for="{{ form.tipo_destino_mascara.id_for_label }}">{{ form.tipo_destino_mascara.label }}</label>
+        {{ form.tipo_destino_mascara }}
+        {% if form.tipo_destino_mascara.errors %}<div class="help" style="color:var(--danger)">{{ form.tipo_destino_mascara.errors|striptags }}</div>{% endif %}
+      </div>
+
+      <div class="full" id="bloco-perfil-destino-proprio" style="display:none">
+        <div class="help" style="background:#eef8f5; border:1px solid #c9e8df; color:var(--brand); padding:0.65rem 0.85rem; border-radius:8px;">
+          A máscara será enviada para o seu <strong>WhatsApp</strong> informado acima.
         </div>
-      {% endfor %}
-      <div class="full" style="display:flex;gap:0.5rem;flex-wrap:wrap">
+      </div>
+
+      <div class="full" id="bloco-perfil-destino-grupo" style="display:none">
+        <div style="display:grid; gap:0.75rem;">
+          <div>
+            <label for="{{ form.mascara_grupo.id_for_label }}">{{ form.mascara_grupo.label }}</label>
+            {{ form.mascara_grupo }}
+            {% if form.mascara_grupo.errors %}<div class="help" style="color:var(--danger)">{{ form.mascara_grupo.errors|striptags }}</div>{% endif %}
+          </div>
+          <div>
+            <label for="{{ form.mascara_grupo_custom.id_for_label }}">{{ form.mascara_grupo_custom.label }}</label>
+            {{ form.mascara_grupo_custom }}
+            {% if form.mascara_grupo_custom.help_text %}<div class="help">{{ form.mascara_grupo_custom.help_text }}</div>{% endif %}
+            {% if form.mascara_grupo_custom.errors %}<div class="help" style="color:var(--danger)">{{ form.mascara_grupo_custom.errors|striptags }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="full" id="bloco-perfil-destino-individual" style="display:none">
+        <div style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:0.75rem;">
+          <div>
+            <label for="{{ form.mascara_numero.id_for_label }}">{{ form.mascara_numero.label }}</label>
+            {{ form.mascara_numero }}
+            {% if form.mascara_numero.help_text %}<div class="help">{{ form.mascara_numero.help_text }}</div>{% endif %}
+            {% if form.mascara_numero.errors %}<div class="help" style="color:var(--danger)">{{ form.mascara_numero.errors|striptags }}</div>{% endif %}
+          </div>
+          <div>
+            <label for="{{ form.mascara_numero_nome.id_for_label }}">{{ form.mascara_numero_nome.label }}</label>
+            {{ form.mascara_numero_nome }}
+            {% if form.mascara_numero_nome.help_text %}<div class="help">{{ form.mascara_numero_nome.help_text }}</div>{% endif %}
+            {% if form.mascara_numero_nome.errors %}<div class="help" style="color:var(--danger)">{{ form.mascara_numero_nome.errors|striptags }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="full" style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.6rem">
         <button class="btn btn-primary" type="submit">Salvar</button>
         <a class="btn btn-secondary" href="{% url 'fila' %}">Voltar</a>
       </div>
     </form>
   </div>
 </div>
+
+<script>
+(function() {
+  const sel = document.getElementById('id_perfil_tipo_destino_mascara');
+  const bProprio = document.getElementById('bloco-perfil-destino-proprio');
+  const bGrupo = document.getElementById('bloco-perfil-destino-grupo');
+  const bIndiv = document.getElementById('bloco-perfil-destino-individual');
+
+  function update() {
+    const val = sel ? sel.value : 'proprio';
+    if (bProprio) bProprio.style.display = (val === 'proprio') ? 'block' : 'none';
+    if (bGrupo) bGrupo.style.display = (val === 'grupo') ? 'block' : 'none';
+    if (bIndiv) bIndiv.style.display = (val === 'individual') ? 'block' : 'none';
+  }
+
+  if (sel) {
+    sel.addEventListener('change', update);
+    update();
+  }
+})();
+</script>
 {% endblock %}

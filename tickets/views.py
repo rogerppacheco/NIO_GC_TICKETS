@@ -677,6 +677,11 @@ def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
     spec = ticket.parceiro.especialista if ticket.parceiro else None
     eh_admin_spec = not spec or spec.username.lower() == "admin"
     destinos_wpp = _destinos_whatsapp_para_ticket(ticket) if eh_admin_spec else []
+    dest_info_spec = (
+        spec.perfil_staff.obter_destino_mascara()
+        if (spec and getattr(spec, "perfil_staff", None))
+        else {}
+    )
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -750,6 +755,7 @@ def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
                     "conteudo": conteudo,
                     "eh_admin_spec": eh_admin_spec,
                     "especialista_parceiro": spec,
+                    "destino_mascara_especialista": dest_info_spec,
                     "destinos_wpp": destinos_wpp,
                     "syncwa_ok": syncwa_configurado(),
                 },
@@ -800,6 +806,7 @@ def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
             "mascaras_prontas": mascaras_prontas,
             "eh_admin_spec": eh_admin_spec,
             "especialista_parceiro": spec,
+            "destino_mascara_especialista": dest_info_spec,
             "destinos_wpp": destinos_wpp,
             "syncwa_ok": syncwa_configurado(),
             "schema": schema_tipo(ticket.tipo),
@@ -1239,7 +1246,9 @@ def dashboard(request: HttpRequest) -> HttpResponse:
 @login_required
 @require_GET
 def ticket_mascaras_json(request: HttpRequest, protocolo: str) -> HttpResponse:
-    """Máscaras preenchidas do ticket — usado para copiar direto na fila."""
+    """Máscaras preenchidas do ticket e informações de destino — usado para copiar e enviar direto na fila."""
+    from gestao.messaging.syncwa import syncwa_configurado
+
     ticket = ticket_para_usuario(request.user, protocolo)
     mascaras = [
         m for m in Mascara.objects.filter(ativo=True) if m.aplica_para(ticket.tipo)
@@ -1253,13 +1262,105 @@ def ticket_mascaras_json(request: HttpRequest, protocolo: str) -> HttpResponse:
         }
         for m in mascaras
     ]
+
+    spec = ticket.parceiro.especialista if ticket.parceiro else None
+    eh_admin_spec = not spec or spec.username.lower() == "admin"
+    dest_info = {}
+    if spec:
+        perfil = getattr(spec, "perfil_staff", None)
+        if perfil:
+            dest_info = perfil.obter_destino_mascara()
+
+    destinos_disponiveis = _destinos_whatsapp_para_ticket(ticket)
+
     return JsonResponse(
         {
             "protocolo": ticket.protocolo,
+            "parceiro": ticket.parceiro.nome if ticket.parceiro else "—",
             "tipo": ticket.get_tipo_display(),
             "mascaras": payload,
+            "especialista": {
+                "nome": (spec.get_full_name() or spec.username).strip() if spec else "",
+                "eh_admin": eh_admin_spec,
+                "tem_especialista": bool(spec),
+                "destino_tipo": dest_info.get("tipo", "proprio"),
+                "destino_tipo_display": dest_info.get("tipo_display", ""),
+                "destino_jid": dest_info.get("jid", ""),
+                "destino_nome": dest_info.get("nome", ""),
+                "destino_rotulo": dest_info.get("rotulo", ""),
+                "configurado": bool(dest_info.get("configurado")),
+            },
+            "destinos_disponiveis": destinos_disponiveis,
+            "syncwa_ok": syncwa_configurado(),
         }
     )
+
+
+@login_required
+@require_POST
+def ticket_enviar_mascara_api(request: HttpRequest, protocolo: str) -> HttpResponse:
+    """Dispara o envio da máscara por WhatsApp diretamente da fila ou de modal."""
+    import json
+
+    ticket = ticket_para_usuario(request.user, protocolo)
+
+    mascara_id = request.POST.get("mascara_id")
+    destino_jid = (request.POST.get("destino_jid") or "").strip()
+    destino_nome = (request.POST.get("destino_nome") or "").strip()
+
+    # Suporta payload JSON caso enviado via fetch com Content-Type application/json
+    if not mascara_id and request.body:
+        try:
+            body_data = json.loads(request.body.decode("utf-8"))
+            mascara_id = body_data.get("mascara_id")
+            if not destino_jid:
+                destino_jid = (body_data.get("destino_jid") or "").strip()
+            if not destino_nome:
+                destino_nome = (body_data.get("destino_nome") or "").strip()
+        except Exception:
+            pass
+
+    if mascara_id:
+        mascara = get_object_or_404(Mascara, pk=mascara_id, ativo=True)
+    else:
+        mascaras = [
+            m for m in Mascara.objects.filter(ativo=True) if m.aplica_para(ticket.tipo)
+        ]
+        if not mascaras:
+            return JsonResponse(
+                {"ok": False, "erro": "Nenhuma máscara aplicável para este ticket."},
+                status=400,
+            )
+        mascara = mascaras[0]
+
+    if destino_jid and "|" in destino_jid:
+        partes = destino_jid.split("|", 1)
+        destino_jid = partes[0].strip()
+        if not destino_nome:
+            destino_nome = partes[1].strip()
+
+    ok, msg = enviar_mascara_whatsapp(
+        ticket,
+        mascara,
+        destino_jid=destino_jid or None,
+        destino_nome=destino_nome or None,
+        user=request.user,
+    )
+
+    if ok:
+        return JsonResponse({
+            "ok": True,
+            "mensagem": msg,
+            "protocolo": ticket.protocolo,
+            "status": ticket.status,
+            "status_display": ticket.get_status_display(),
+        })
+    else:
+        return JsonResponse({
+            "ok": False,
+            "erro": msg,
+            "protocolo": ticket.protocolo,
+        }, status=400)
 
 
 @login_required

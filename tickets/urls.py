@@ -12,6 +12,7 @@ urlpatterns = [
     path("tickets/novo/", views.ticket_criar, name="ticket_criar"),
     path("tickets/<str:protocolo>/responder/", views.ticket_responder, name="ticket_responder"),
     path("tickets/<str:protocolo>/mascaras.json", views.ticket_mascaras_json, name="ticket_mascaras_json"),
+    path("tickets/<str:protocolo>/enviar-mascara/", views.ticket_enviar_mascara_api, name="ticket_enviar_mascara_api"),
     path("tickets/<str:protocolo>/", views.ticket_detalhe, name="ticket_detalhe"),
     path("campos-resposta/", views.config_resposta_lista, name="config_resposta_lista"),
     path("campos-resposta/<str:tipo>/", views.config_resposta_editar, name="config_resposta_editar"),

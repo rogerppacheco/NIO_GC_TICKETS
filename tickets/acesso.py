@@ -44,7 +44,12 @@ def qs_especialistas():
 
 
 def tickets_visiveis(user):
-    qs = Ticket.objects.select_related("parceiro", "atendente", "parceiro__especialista")
+    qs = Ticket.objects.select_related(
+        "parceiro",
+        "atendente",
+        "parceiro__especialista",
+        "parceiro__especialista__perfil_staff",
+    )
     if eh_gestor(user):
         return qs
     return qs.filter(parceiro__especialista=user)
