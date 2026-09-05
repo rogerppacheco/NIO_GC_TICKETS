@@ -885,6 +885,150 @@ class MascaraEmailTests(TestCase):
         send.assert_not_called()
 
 
+class MascaraWhatsAppTests(TestCase):
+    def setUp(self):
+        from unittest.mock import patch
+        from tickets.models import Mascara
+        User = get_user_model()
+        self.spec = User.objects.create_user(
+            "specricardo", "ricardo@test.com", "x", is_staff=True, first_name="Ricardo Santos"
+        )
+        self.perfil_spec = PerfilStaff.objects.create(
+            user=self.spec, papel=PerfilStaff.Papel.ESPECIALISTA, whatsapp="5521999575120"
+        )
+        self.admin_user = User.objects.create_superuser("admin", "admin@test.com", "x")
+        PerfilStaff.objects.create(user=self.admin_user, papel=PerfilStaff.Papel.GESTOR)
+        self.pdv_spec = Parceiro.objects.create(
+            codigo_pdv="pdv_spec",
+            nome="PDV Ricardo",
+            especialista=self.spec,
+        )
+        self.pdv_admin = Parceiro.objects.create(
+            codigo_pdv="pdv_admin",
+            nome="PDV Admin",
+            especialista=self.admin_user,
+        )
+        self.mascara_slot = Mascara.objects.create(
+            nome="Sinalização — Sem slot / liberação de agenda",
+            destino="GC / Diretoria",
+            tipos=TipoDemanda.SEM_SLOT,
+            template="Sem SLOT em {{uf}}\nPedido: {{pedido}}\nContato: {{contato}}",
+            enviar_whatsapp=True,
+            ativo=True,
+        )
+
+    def test_enviar_mascara_whatsapp_especialista_nao_admin(self):
+        from unittest.mock import patch
+        from tickets.services import enviar_mascara_whatsapp
+        from gestao.messaging.syncwa import SyncWAResult
+
+        ticket = Ticket.objects.create(
+            parceiro=self.pdv_spec,
+            tipo=TipoDemanda.SEM_SLOT,
+            pedido="PED-100",
+            solicitante_contato="21999999999",
+            uf="RJ",
+        )
+        fake_resp = SyncWAResult(ok=True)
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), \
+             patch("gestao.messaging.syncwa.enviar_texto", return_value=fake_resp) as mock_send:
+            ok, msg = enviar_mascara_whatsapp(ticket, self.mascara_slot)
+            self.assertTrue(ok)
+            self.assertIn("Ricardo Santos", msg)
+            mock_send.assert_called_once()
+            jid, texto = mock_send.call_args.args
+            self.assertEqual(jid, "5521999575120")
+            self.assertIn("Sem SLOT em RJ", texto)
+            self.assertIn("Pedido: PED-100", texto)
+
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.status, StatusTicket.ENCAMINHADO)
+        self.assertTrue(ticket.encaminhamentos.filter(destino__contains="5521999575120").exists())
+
+    def test_enviar_mascara_whatsapp_especialista_admin_com_destino_escolhido(self):
+        from unittest.mock import patch
+        from tickets.services import enviar_mascara_whatsapp
+        from gestao.messaging.syncwa import SyncWAResult
+
+        ticket = Ticket.objects.create(
+            parceiro=self.pdv_admin,
+            tipo=TipoDemanda.SEM_SLOT,
+            pedido="PED-200",
+            uf="SP",
+        )
+        fake_resp = SyncWAResult(ok=True)
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), \
+             patch("gestao.messaging.syncwa.enviar_texto", return_value=fake_resp) as mock_send:
+            ok, msg = enviar_mascara_whatsapp(
+                ticket,
+                self.mascara_slot,
+                destino_jid="120363000000000@g.us",
+                destino_nome="Grupo Elite",
+            )
+            self.assertTrue(ok)
+            self.assertIn("Grupo Elite", msg)
+            mock_send.assert_called_once()
+            jid, texto = mock_send.call_args.args
+            self.assertEqual(jid, "120363000000000@g.us")
+            self.assertIn("Sem SLOT em SP", texto)
+
+    def test_enviar_mascara_whatsapp_admin_sem_destino_falha(self):
+        from unittest.mock import patch
+        from tickets.services import enviar_mascara_whatsapp
+
+        ticket = Ticket.objects.create(
+            parceiro=self.pdv_admin,
+            tipo=TipoDemanda.SEM_SLOT,
+            pedido="PED-300",
+        )
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True):
+            ok, msg = enviar_mascara_whatsapp(ticket, self.mascara_slot)
+            self.assertFalse(ok)
+            self.assertIn("admin", msg.lower())
+
+    def test_notificar_mascaras_por_whatsapp_ao_criar_ticket(self):
+        from unittest.mock import patch
+        from tickets.services import notificar_mascaras_por_whatsapp
+        from gestao.messaging.syncwa import SyncWAResult
+
+        ticket = Ticket.objects.create(
+            parceiro=self.pdv_spec,
+            tipo=TipoDemanda.SEM_SLOT,
+            pedido="PED-AUTO",
+            uf="RJ",
+        )
+        fake_resp = SyncWAResult(ok=True)
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), \
+             patch("gestao.messaging.syncwa.enviar_texto", return_value=fake_resp) as mock_send:
+            n = notificar_mascaras_por_whatsapp(ticket)
+            self.assertEqual(n, 1)
+            mock_send.assert_called_once()
+            jid, texto = mock_send.call_args.args
+            self.assertEqual(jid, "5521999575120")
+
+    def test_view_enviar_mascara_wpp(self):
+        from unittest.mock import patch
+        from gestao.messaging.syncwa import SyncWAResult
+
+        ticket = Ticket.objects.create(
+            parceiro=self.pdv_spec,
+            tipo=TipoDemanda.SEM_SLOT,
+            pedido="PED-VIEW",
+            uf="RJ",
+        )
+        self.client.force_login(self.admin_user)
+        fake_resp = SyncWAResult(ok=True)
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), \
+             patch("gestao.messaging.syncwa.enviar_texto", return_value=fake_resp):
+            resp = self.client.post(
+                f"/tickets/{ticket.protocolo}/",
+                {"action": "enviar_mascara_wpp", "mascara_id": self.mascara_slot.id},
+                follow=True,
+            )
+            self.assertEqual(resp.status_code, 200)
+            self.assertContains(resp, "enviada com sucesso")
+
+
 class ContatoCargoTests(TestCase):
     def setUp(self):
         User = get_user_model()

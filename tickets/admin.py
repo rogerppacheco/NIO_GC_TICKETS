@@ -86,8 +86,8 @@ class TicketAdmin(admin.ModelAdmin):
 
 @admin.register(Mascara)
 class MascaraAdmin(admin.ModelAdmin):
-    list_display = ("nome", "destino", "tipos", "ativo")
-    list_filter = ("ativo",)
+    list_display = ("nome", "destino", "tipos", "enviar_email", "enviar_whatsapp", "ativo")
+    list_filter = ("ativo", "enviar_email", "enviar_whatsapp")
 
 
 @admin.register(Encaminhamento)

@@ -609,6 +609,7 @@ class EnvioWhatsApp(models.Model):
         ACUMULADO = "acumulado", "Acumulado do mês"
         RANKING = "ranking", "Ranking VB"
         RESUMO = "resumo", "Resumo geral"
+        MASCARA = "mascara", "Máscara de atendimento"
         TESTE = "teste", "Teste WhatsApp"
 
     class Status(models.TextChoices):

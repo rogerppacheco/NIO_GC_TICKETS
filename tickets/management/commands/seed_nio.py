@@ -52,6 +52,7 @@ MASCARAS = [
         "nome": "Sinalização — Sem slot / liberação de agenda",
         "destino": "GC / Diretoria",
         "tipos": TipoDemanda.SEM_SLOT,
+        "enviar_whatsapp": True,
         "template": (
             "Sem SLOT em {{uf}}\n\n"
             "Pedido: {{pedido}}\n"
@@ -198,6 +199,7 @@ class Command(BaseCommand):
                     "destino": data["destino"],
                     "tipos": data["tipos"],
                     "template": data["template"],
+                    "enviar_whatsapp": data.get("enviar_whatsapp", False),
                     "ativo": True,
                 },
             )

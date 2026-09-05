@@ -119,3 +119,139 @@ def notificar_mascaras_por_email(ticket: Ticket) -> int:
         if ok:
             enviados += 1
     return enviados
+
+
+def enviar_mascara_whatsapp(
+    ticket: Ticket,
+    mascara: Mascara,
+    destino_jid: str | None = None,
+    destino_nome: str | None = None,
+    user=None,
+) -> tuple[bool, str]:
+    """Envia máscara renderizada via WhatsApp.
+    - Se destino_jid for omitido e o parceiro tiver especialista (não-admin), envia para o WhatsApp do especialista.
+    - Se for admin, exige que destino_jid seja fornecido (grupo ou pessoa escolhida).
+    """
+    from django.utils import timezone
+    from gestao.messaging.envio import whatsapp_do_usuario
+    from gestao.messaging.syncwa import enviar_texto, syncwa_configurado
+    from gestao.models import EnvioWhatsApp
+    from .models import Encaminhamento, Mensagem, StatusTicket
+
+    spec = ticket.parceiro.especialista if ticket.parceiro else None
+    eh_admin_spec = not spec or spec.username.lower() == "admin"
+
+    jid = (destino_jid or "").strip()
+    nome = (destino_nome or "").strip()
+
+    if not jid:
+        if not eh_admin_spec:
+            jid = whatsapp_do_usuario(spec)
+            nome_esp = (spec.get_full_name() or spec.username).strip()
+            nome = f"Especialista {nome_esp}"
+            if not jid:
+                return (
+                    False,
+                    f"O especialista {nome_esp} responsável pelo parceiro não possui WhatsApp cadastrado em Meu perfil.",
+                )
+        else:
+            return (
+                False,
+                "O parceiro é atendido pelo admin. Por favor selecione um grupo ou contato de destino para enviar.",
+            )
+
+    if not syncwa_configurado():
+        return False, "SyncWA não está configurado no sistema."
+
+    conteudo = render_mascara(mascara, ticket)
+    if not conteudo.strip():
+        return False, "O conteúdo da máscara gerada está vazio."
+
+    resp = enviar_texto(jid, conteudo)
+    if not resp.ok:
+        return False, f"Falha ao enviar via WhatsApp para {nome or jid}: {resp.error}"
+
+    # 1. Registra o encaminhamento oficial
+    Encaminhamento.objects.create(
+        ticket=ticket,
+        mascara=mascara,
+        destino=f"WhatsApp {nome} ({jid})",
+        conteudo=conteudo,
+        criado_por=user if (user and getattr(user, "is_authenticated", False)) else None,
+    )
+
+    # 2. Registra no histórico do ticket
+    autor_label = (
+        (user.get_full_name() or user.username).strip()
+        if (user and getattr(user, "is_authenticated", False))
+        else "Sistema"
+    )
+    Mensagem.objects.create(
+        ticket=ticket,
+        autor=user if (user and getattr(user, "is_authenticated", False)) else None,
+        autor_nome=autor_label,
+        corpo=f"📱 Máscara '{mascara.nome}' enviada via WhatsApp para {nome} ({jid}).",
+    )
+
+    # 3. Registra log de envio
+    try:
+        EnvioWhatsApp.objects.create(
+            tipo=EnvioWhatsApp.Tipo.MASCARA,
+            status=EnvioWhatsApp.Status.ENVIADO,
+            parceiro=ticket.parceiro,
+            destino_jid=jid,
+            destino_nome=nome,
+            mensagem=conteudo,
+            syncwa_message_id=getattr(resp, "message_id", "") or "",
+            criado_por=user if (user and getattr(user, "is_authenticated", False)) else None,
+        )
+    except Exception:
+        pass
+
+    # 4. Atualiza status do ticket
+    ticket.status = StatusTicket.ENCAMINHADO
+    ticket.destino_encaminhamento = f"WhatsApp {nome}"
+    if not ticket.primeiro_atendimento_em:
+        ticket.primeiro_atendimento_em = timezone.now()
+    if user and getattr(user, "is_authenticated", False) and not ticket.atendente:
+        ticket.atendente = user
+    ticket.save(
+        update_fields=[
+            "status",
+            "destino_encaminhamento",
+            "primeiro_atendimento_em",
+            "atendente",
+            "atualizado_em",
+        ]
+    )
+
+    return True, f"Máscara '{mascara.nome}' enviada com sucesso para {nome} ({jid})!"
+
+
+def notificar_mascaras_por_whatsapp(ticket: Ticket) -> int:
+    """Envia máscaras marcadas com enviar_whatsapp=True para o especialista do parceiro (quando não for admin)."""
+    if not ticket.parceiro:
+        return 0
+    spec = ticket.parceiro.especialista
+    if not spec or spec.username.lower() == "admin":
+        return 0
+    from gestao.messaging.envio import whatsapp_do_usuario
+
+    wpp = whatsapp_do_usuario(spec)
+    if not wpp:
+        return 0
+
+    enviados = 0
+    nome_esp = (spec.get_full_name() or spec.username).strip()
+    for mascara in Mascara.objects.filter(ativo=True, enviar_whatsapp=True):
+        if not mascara.aplica_para(ticket.tipo):
+            continue
+        ok, _ = enviar_mascara_whatsapp(
+            ticket,
+            mascara,
+            destino_jid=wpp,
+            destino_nome=f"Especialista {nome_esp}",
+        )
+        if ok:
+            enviados += 1
+    return enviados

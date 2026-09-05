@@ -682,7 +682,15 @@ class AnexoForm(forms.ModelForm):
 class MascaraForm(forms.ModelForm):
     class Meta:
         model = Mascara
-        fields = ["nome", "destino", "tipos", "template", "enviar_email", "ativo"]
+        fields = [
+            "nome",
+            "destino",
+            "tipos",
+            "template",
+            "enviar_email",
+            "enviar_whatsapp",
+            "ativo",
+        ]
         widgets = {
             "template": forms.Textarea(attrs={"rows": 10, "class": "mono"}),
             "tipos": forms.TextInput(

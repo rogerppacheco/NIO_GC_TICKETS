@@ -11,9 +11,42 @@
 <div class="panel">
   <div class="panel-h">
     <h2>Texto no padrão para WhatsApp / encaminhar</h2>
-    <button class="btn btn-primary" type="button" id="btn-copiar-mascara" data-copy-target="mask">
-      Copiar máscara
-    </button>
+    <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-primary" type="button" id="btn-copiar-mascara" data-copy-target="mask">
+        Copiar máscara
+      </button>
+      {% if syncwa_ok %}
+        {% if not eh_admin_spec and especialista_parceiro %}
+          <form method="post" action="{% url 'ticket_detalhe' ticket.protocolo %}" style="margin:0">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="enviar_mascara_wpp">
+            <input type="hidden" name="mascara_id" value="{{ mascara.id }}">
+            <button class="btn btn-secondary" type="submit" title="Enviar para o WhatsApp do especialista {{ especialista_parceiro.get_full_name|default:especialista_parceiro.username }}">
+              📱 Enviar WhatsApp (Especialista: {{ especialista_parceiro.get_full_name|default:especialista_parceiro.username }})
+            </button>
+          </form>
+        {% else %}
+          <form method="post" action="{% url 'ticket_detalhe' ticket.protocolo %}" style="display:flex;gap:0.3rem;align-items:center;margin:0;flex-wrap:wrap">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="enviar_mascara_wpp">
+            <input type="hidden" name="mascara_id" value="{{ mascara.id }}">
+            <select name="destino_escolhido" class="fila-pick" style="max-width:260px;font-size:0.85rem;" required>
+              <option value="">Destino WhatsApp...</option>
+              {% for grupo_cat in destinos_wpp %}
+                <optgroup label="{{ grupo_cat.categoria }}">
+                  {% for opt in grupo_cat.itens %}
+                    <option value="{{ opt.jid }}|{{ opt.nome }}">{{ opt.rotulo }}</option>
+                  {% endfor %}
+                </optgroup>
+              {% endfor %}
+            </select>
+            <button class="btn btn-secondary" type="submit" title="Enviar máscara para o destino selecionado">
+              📱 Enviar WhatsApp
+            </button>
+          </form>
+        {% endif %}
+      {% endif %}
+    </div>
   </div>
   <div class="panel-b">
     <p class="help" style="margin-top:0">Texto preenchido com os dados da demanda. Cole no grupo/destino: <strong>{{ mascara.destino }}</strong>.</p>

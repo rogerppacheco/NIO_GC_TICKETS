@@ -62,7 +62,13 @@ from .models import (
     Ticket,
     TipoDemanda,
 )
-from .services import notificar_mascaras_por_email, render_mascara
+from .services import (
+    enviar_mascara_whatsapp,
+    notificar_mascaras_por_email,
+    notificar_mascaras_por_whatsapp,
+    render_mascara,
+)
+from gestao.messaging.syncwa import syncwa_configurado
 
 
 class StaffLoginView(LoginView):
@@ -217,6 +223,7 @@ def ticket_criar(request: HttpRequest) -> HttpResponse:
             )
             _salvar_anexos(request, ticket)
             notificar_mascaras_por_email(ticket)
+            notificar_mascaras_por_whatsapp(ticket)
             messages.success(request, f"Ticket {ticket.protocolo} criado.")
             return redirect("ticket_detalhe", protocolo=ticket.protocolo)
     else:
@@ -372,6 +379,7 @@ def abrir_demanda_form(request: HttpRequest) -> HttpResponse:
             )
             _salvar_anexos(request, ticket)
             notificar_mascaras_por_email(ticket)
+            notificar_mascaras_por_whatsapp(ticket)
             messages.success(
                 request,
                 f"Demanda registrada! Protocolo {ticket.protocolo}. Guarde este número.",
@@ -576,6 +584,80 @@ def ticket_responder(request: HttpRequest, protocolo: str) -> HttpResponse:
     return redirect("ticket_detalhe", protocolo=ticket.protocolo)
 
 
+def _destinos_whatsapp_para_ticket(ticket: Ticket) -> list[dict]:
+    """Retorna opções organizadas de destinatários para quando o especialista for admin."""
+    from django.contrib.auth import get_user_model
+    from gestao.models import Destinatario
+
+    opcoes = []
+
+    # 1. Grupos de WhatsApp cadastrados em Destinatario
+    grupos = (
+        Destinatario.objects.filter(ativo=True, tipo=Destinatario.TipoDestino.GRUPO)
+        .order_by("nome")
+    )
+    itens_grupos = []
+    for g in grupos:
+        itens_grupos.append({
+            "jid": g.jid,
+            "nome": g.nome,
+            "rotulo": f"{g.nome} (Grupo)",
+        })
+    if itens_grupos:
+        opcoes.append({"categoria": "Grupos de WhatsApp", "itens": itens_grupos})
+
+    # 2. Contatos do próprio parceiro (empresários, backoffice)
+    if ticket.parceiro:
+        itens_parceiro = []
+        for c in ticket.parceiro.contatos.filter(ativo=True).exclude(telefone=""):
+            cargo = f" - {c.cargo}" if c.cargo else ""
+            itens_parceiro.append({
+                "jid": c.telefone,
+                "nome": f"{c.nome}{cargo}",
+                "rotulo": f"{c.nome}{cargo} ({c.telefone})",
+            })
+        if itens_parceiro:
+            opcoes.append({"categoria": f"Contatos de {ticket.parceiro.nome}", "itens": itens_parceiro})
+
+    # 3. Especialistas da equipe (com WhatsApp cadastrado)
+    User = get_user_model()
+    specs = (
+        User.objects.filter(is_active=True, perfil_staff__isnull=False)
+        .exclude(perfil_staff__whatsapp="")
+        .select_related("perfil_staff")
+        .order_by("first_name", "username")
+    )
+    itens_specs = []
+    for s in specs:
+        wpp = (getattr(s.perfil_staff, "whatsapp", "") or "").strip()
+        if wpp:
+            nome = (s.get_full_name() or s.username).strip()
+            itens_specs.append({
+                "jid": wpp,
+                "nome": f"Especialista {nome}",
+                "rotulo": f"Especialista {nome} ({wpp})",
+            })
+    if itens_specs:
+        opcoes.append({"categoria": "Especialistas NIO", "itens": itens_specs})
+
+    # 4. Outros contatos individuais cadastrados em Destinatario
+    individuais = (
+        Destinatario.objects.filter(ativo=True, tipo=Destinatario.TipoDestino.INDIVIDUAL)
+        .order_by("nome")
+    )
+    itens_indiv = []
+    for d in individuais:
+        itens_indiv.append({
+            "jid": d.jid,
+            "nome": d.nome,
+            "rotulo": f"{d.nome} ({d.jid})",
+        })
+    if itens_indiv:
+        opcoes.append({"categoria": "Outros Contatos Cadastrados", "itens": itens_indiv})
+
+    return opcoes
+
+
 @login_required
 def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
     ticket = ticket_para_usuario(request.user, protocolo)
@@ -591,6 +673,10 @@ def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
     mascaras_prontas = [
         {"mascara": m, "conteudo": render_mascara(m, ticket)} for m in mascaras
     ]
+
+    spec = ticket.parceiro.especialista if ticket.parceiro else None
+    eh_admin_spec = not spec or spec.username.lower() == "admin"
+    destinos_wpp = _destinos_whatsapp_para_ticket(ticket) if eh_admin_spec else []
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -658,8 +744,46 @@ def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
             return render(
                 request,
                 "tickets/mascara_resultado.html",
-                {"ticket": ticket, "mascara": mascara, "conteudo": conteudo},
+                {
+                    "ticket": ticket,
+                    "mascara": mascara,
+                    "conteudo": conteudo,
+                    "eh_admin_spec": eh_admin_spec,
+                    "especialista_parceiro": spec,
+                    "destinos_wpp": destinos_wpp,
+                    "syncwa_ok": syncwa_configurado(),
+                },
             )
+        elif action == "enviar_mascara_wpp":
+            mascara = get_object_or_404(Mascara, pk=request.POST.get("mascara_id"), ativo=True)
+            destino_jid = (request.POST.get("destino_jid") or "").strip()
+            destino_nome = (request.POST.get("destino_nome") or "").strip()
+
+            destino_escolhido = (request.POST.get("destino_escolhido") or "").strip()
+            if destino_escolhido and "|" in destino_escolhido:
+                partes = destino_escolhido.split("|", 1)
+                destino_jid = partes[0].strip()
+                destino_nome = partes[1].strip()
+            elif destino_escolhido:
+                destino_jid = destino_escolhido.strip()
+
+            destino_custom = (request.POST.get("destino_custom") or "").strip()
+            if destino_custom:
+                destino_jid = destino_custom
+                destino_nome = f"Contato {destino_custom}"
+
+            ok, msg = enviar_mascara_whatsapp(
+                ticket,
+                mascara,
+                destino_jid=destino_jid or None,
+                destino_nome=destino_nome or None,
+                user=request.user,
+            )
+            if ok:
+                messages.success(request, msg)
+            else:
+                messages.error(request, msg)
+            return redirect("ticket_detalhe", protocolo=ticket.protocolo)
 
     return render(
         request,
@@ -674,6 +798,10 @@ def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
             "encaminhamentos": ticket.encaminhamentos.select_related("mascara"),
             "mascaras": mascaras,
             "mascaras_prontas": mascaras_prontas,
+            "eh_admin_spec": eh_admin_spec,
+            "especialista_parceiro": spec,
+            "destinos_wpp": destinos_wpp,
+            "syncwa_ok": syncwa_configurado(),
             "schema": schema_tipo(ticket.tipo),
             "labels_tipo": {**LABELS_SIMPLES, **LABELS_POR_TIPO.get(ticket.tipo, {})},
             "campos_resposta": treat_form.campos_resposta_defs,

@@ -460,6 +460,11 @@ class Mascara(models.Model):
         default=False,
         help_text="O especialista do PDV recebe esta máscara por e-mail quando a solicitação é registrada.",
     )
+    enviar_whatsapp = models.BooleanField(
+        "Enviar por WhatsApp ao abrir a demanda",
+        default=False,
+        help_text="O especialista do PDV recebe esta máscara por WhatsApp quando a solicitação é registrada (se não for admin).",
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:
