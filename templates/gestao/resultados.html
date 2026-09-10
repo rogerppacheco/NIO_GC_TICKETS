@@ -227,7 +227,7 @@
 
         {% if parcial_dados and parcial_sub == "consolidado" and eh_gestor %}
         <div class="parcial-aside-envio">
-          <p class="help" style="margin:0">Especialista → parceiros · linha <strong>TOTAL PP</strong> no rodapé.</p>
+          <p class="help" style="margin:0">Parceiro + especialista · zerados em A–Z · linha <strong>TOTAL PP</strong> no rodapé.</p>
           {% if pode_enviar %}
           <form method="post" data-parcial-envio>
             {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}

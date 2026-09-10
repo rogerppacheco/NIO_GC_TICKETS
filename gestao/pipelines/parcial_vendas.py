@@ -529,6 +529,27 @@ def nome_especialista_curto(nome: str) -> str:
     return f"{partes[0]} {partes[-1]}"
 
 
+def ordenar_linhas_parcial(linhas: list[dict]) -> list[dict]:
+    """Com vendas: total ↓ (empate % ↓); zerados ao final em ordem alfabética do parceiro."""
+    com_venda: list[dict] = []
+    zerados: list[dict] = []
+    for linha in linhas:
+        if int(linha.get("vendas") or 0) > 0:
+            com_venda.append(linha)
+        else:
+            zerados.append(linha)
+
+    def _pct(l: dict) -> float:
+        pct = l.get("pct_plano")
+        return float(pct) if pct is not None else float("-inf")
+
+    com_venda.sort(
+        key=lambda l: (-int(l.get("vendas") or 0), -_pct(l), (l.get("pdv") or "").upper())
+    )
+    zerados.sort(key=lambda l: (l.get("pdv") or "").upper())
+    return com_venda + zerados
+
+
 def agrupar_por_especialista(linhas: list[dict]) -> list[dict]:
     """Agrupa PDVs por especialista (ordenado por volume total da carteira)."""
     buckets: dict[str, list[dict]] = {}
@@ -540,7 +561,7 @@ def agrupar_por_especialista(linhas: list[dict]) -> list[dict]:
     grupos = []
     for chave, items in buckets.items():
         nome_completo = rotulos[chave]
-        ordenado = sorted(items, key=lambda l: (-l.get("vendas", 0), l.get("pdv", "").upper()))
+        ordenado = ordenar_linhas_parcial(items)
         total_vendas = sum(int(l.get("vendas") or 0) for l in ordenado)
         planos = [float(l["plano"]) for l in ordenado if l.get("plano") is not None]
         total_plano = round(sum(planos), 2) if planos else 0.0

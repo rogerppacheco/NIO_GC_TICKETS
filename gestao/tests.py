@@ -2920,6 +2920,22 @@ class ResultadosTests(TestCase):
         self.assertEqual(grupos[1]["total_vendas"], 8)
         self.assertEqual(grupos[1]["linhas"][0]["vendas"], 5)
 
+    def test_ordenar_linhas_parcial_zerados_alfabeticos(self):
+        from gestao.pipelines.parcial_vendas import ordenar_linhas_parcial
+
+        linhas = [
+            {"pdv": "ZULU", "vendas": 0, "pct_plano": 0},
+            {"pdv": "ALFA", "vendas": 0, "pct_plano": 0},
+            {"pdv": "BETA", "vendas": 5, "pct_plano": 1.0},
+            {"pdv": "GAMA", "vendas": 5, "pct_plano": 2.0},
+            {"pdv": "MEIO", "vendas": 3, "pct_plano": 1.5},
+        ]
+        ordenado = ordenar_linhas_parcial(linhas)
+        self.assertEqual(
+            [l["pdv"] for l in ordenado],
+            ["GAMA", "BETA", "MEIO", "ALFA", "ZULU"],
+        )
+
     def test_importar_parcial_pela_tela(self):
         arquivo = _xlsx(
             [["INOVA MG", 30, 25]],

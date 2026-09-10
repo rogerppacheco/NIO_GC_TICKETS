@@ -7,7 +7,13 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .pipelines.parcial_vendas import agrupar_por_especialista, fmt_pct, fmt_plano
+from .pipelines.parcial_vendas import (
+    agrupar_por_especialista,
+    fmt_pct,
+    fmt_plano,
+    nome_especialista_curto,
+    ordenar_linhas_parcial,
+)
 
 BG = (255, 255, 255)
 BRAND = (15, 107, 92)
@@ -27,6 +33,14 @@ FOOTER_H = 34
 
 COLS = [
     ("Parceiro", 220),
+    ("TOTAL", 60),
+    ("Plano", 60),
+    ("% Plano", 70),
+]
+
+COLS_CARTEIRA = [
+    ("Parceiro", 180),
+    ("Especialista", 140),
     ("TOTAL", 60),
     ("Plano", 60),
     ("% Plano", 70),
@@ -113,6 +127,25 @@ def _desenhar_header(
     draw.text((PAD, 48), subtitulo, fill=(220, 240, 236), font=font_sub)
 
 
+def _celulas_linha(item: dict, cols: list[tuple[str, int]]) -> list[tuple[str, tuple[int, int, int]]]:
+    pct = _pct_item(item)
+    rotulo = str(item.get("pdv") or item.get("rotulo") or "")
+    eh_total = rotulo.upper().startswith("TOTAL")
+    plano = item.get("plano")
+    esp = nome_especialista_curto(item.get("especialista") or "") if not eh_total else ""
+    mapa = {
+        "Parceiro": (_truncar(rotulo, 26), INK),
+        "Especialista": (_truncar(esp, 18), INK),
+        "TOTAL": (str(int(item.get("vendas") or 0)), INK),
+        "Plano": (fmt_plano(float(plano) if plano is not None else None), INK),
+        "% Plano": (fmt_pct(pct), _cor_pct(pct)),
+    }
+    out: list[tuple[str, tuple[int, int, int]]] = []
+    for nome, _larg in cols:
+        out.append(mapa.get(nome, ("", INK)))
+    return out
+
+
 def _desenhar_linha_dados(
     draw: ImageDraw.ImageDraw,
     *,
@@ -127,15 +160,7 @@ def _desenhar_linha_dados(
 ) -> int:
     if fundo:
         draw.rectangle((x + 6, y, x + largura - 6, y + ALT_LINHA - 2), fill=fundo)
-    pct = _pct_item(item)
-    rotulo = str(item.get("pdv") or item.get("rotulo") or "")
-    plano = item.get("plano")
-    vals = [
-        (_truncar(rotulo, 28), INK),
-        (str(int(item.get("vendas") or 0)), INK),
-        (fmt_plano(float(plano) if plano is not None else None), INK),
-        (fmt_pct(pct), _cor_pct(pct)),
-    ]
+    vals = _celulas_linha(item, cols)
     x_cur = x + 8
     for (texto, cor), (_, larg) in zip(vals, cols):
         draw.text((x_cur + 2, y + 7), texto, fill=cor, font=font_cell)
@@ -437,20 +462,19 @@ def _desenhar_por_especialista(
 
 
 def imagem_parcial_especialistas(dados: dict, *, titulo: str = "Carteira PP") -> tuple[bytes, str]:
-    """Visão completa: especialista → parceiros + linha TOTAL PP."""
+    """Visão completa plana: Parceiro | Especialista | TOTAL | Plano | % + TOTAL PP."""
     font_banner = _fonte(24, negrito=True)
     font_sub = _fonte(13)
-    font_esp = _fonte(13, negrito=True)
     font_head = _fonte(12, negrito=True)
     font_cell = _fonte(12)
 
-    linhas = dados.get("linhas") or []
-    grupos = agrupar_por_especialista(linhas)
-    multi = len(grupos) > 1
-    cols = COLS
+    linhas = ordenar_linhas_parcial(dados.get("linhas") or [])
+    cols = COLS_CARTEIRA
     tab_w = _largura_cols(cols)
     largura = tab_w + 2 * PAD
-    altura = HEADER_H + _altura_por_especialistas(grupos) + PAD + 16
+    qtd = max(len(linhas), 1)
+    # cabeçalho cols (52) + linhas + TOTAL PP (FOOTER_H)
+    altura = HEADER_H + 52 + qtd * ALT_LINHA + FOOTER_H + PAD + 16
 
     img = Image.new("RGB", (largura, altura), BG)
     draw = ImageDraw.Draw(img)
@@ -463,29 +487,54 @@ def imagem_parcial_especialistas(dados: dict, *, titulo: str = "Carteira PP") ->
         font_sub=font_sub,
     )
 
+    x = PAD
+    y = HEADER_H
     draw.rounded_rectangle(
-        (PAD, HEADER_H, PAD + tab_w, altura - PAD),
+        (x, y, x + tab_w, altura - PAD),
         radius=10,
         outline=LINE,
         fill=BG,
     )
-    _desenhar_por_especialista(
+    y_cur = y + 8
+    x_cur = x + 8
+    for rotulo, larg in cols:
+        draw.text((x_cur, y_cur), rotulo, fill=MUTED, font=font_head)
+        x_cur += larg
+    draw.line((x + 6, y_cur + 18, x + tab_w - 6, y_cur + 18), fill=LINE)
+    y_cur += 24
+
+    if not linhas:
+        draw.text((x + 10, y_cur + 4), "Sem PDVs na base.", fill=MUTED, font=font_cell)
+        y_cur += ALT_LINHA
+    else:
+        for idx, item in enumerate(linhas):
+            y_cur = _desenhar_linha_dados(
+                draw,
+                x=x,
+                y=y_cur,
+                largura=tab_w,
+                item=item,
+                cols=cols,
+                font_cell=font_cell,
+                fundo=ALT_ROW if idx % 2 == 1 else None,
+            )
+
+    draw.line((x + 6, y_cur, x + tab_w - 6, y_cur), fill=LINE)
+    _desenhar_linha_dados(
         draw,
-        x=PAD,
-        y=HEADER_H,
-        grupos=grupos,
-        cols=cols,
-        font_esp=font_esp,
-        font_head=font_head,
-        font_cell=font_cell,
-        ocultar_cabecalho_esp=not multi,
-        subtotal_por_grupo=multi,
-        total_pp={
-            "rotulo": "TOTAL PP",
+        x=x,
+        y=y_cur + 2,
+        largura=tab_w,
+        item={
+            "pdv": "TOTAL PP",
             "vendas": dados.get("total_pp", 0),
             "plano": dados.get("total_plano"),
             "pct_plano": dados.get("pct_pp"),
+            "especialista": "",
         },
+        cols=cols,
+        font_cell=font_head,
+        fundo=BRAND_SOFT,
     )
 
     return _salvar_png(img, dados, "Especialistas")
