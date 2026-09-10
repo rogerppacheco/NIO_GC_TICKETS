@@ -215,6 +215,10 @@ class ConfiguracaoOSAB(models.Model):
         default=0,
         help_text="Plano do dia (VB) usado no parcial quando o PDV não vem no Excel.",
     )
+    plano_dia_fixo = models.BooleanField(
+        default=False,
+        help_text="Se marcado, o Excel do parcial não altera o Plano dia (definido pelo especialista).",
+    )
     pesos_diarios_vl = models.TextField(blank=True)
     pesos_diarios_gross = models.TextField(blank=True)
     comissao_500 = models.IntegerField(default=0)

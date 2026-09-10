@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from typing import Iterable
 
@@ -99,8 +100,25 @@ def planos_cadastrados(
     return {int(c.parceiro_id): float(c.plano_dia) for c in qs.only("parceiro_id", "plano_dia")}
 
 
+def planos_dia_fixos(
+    ano: int,
+    mes: int,
+    parceiro_ids: Iterable[int] | None = None,
+) -> set[int]:
+    """PDVs cujo Plano dia não deve ser sobrescrito pelo Excel do parcial."""
+    from ..models import ConfiguracaoOSAB
+
+    qs = ConfiguracaoOSAB.objects.filter(ano=ano, mes=mes, plano_dia_fixo=True)
+    if parceiro_ids is not None:
+        qs = qs.filter(parceiro_id__in=list(parceiro_ids))
+    return {int(pid) for pid in qs.values_list("parceiro_id", flat=True)}
+
+
 def sincronizar_planos_dia_metas(dados: dict) -> int:
-    """Grava em Metas o Plano Dia vindo do Excel (só PDVs presentes na planilha)."""
+    """Grava em Metas o Plano Dia vindo do Excel (só PDVs presentes na planilha).
+
+    PDVs com plano_dia_fixo=True são ignorados (plano definido pelo especialista).
+    """
     from ..models import ConfiguracaoOSAB
 
     ano = dados.get("ano")
@@ -108,11 +126,14 @@ def sincronizar_planos_dia_metas(dados: dict) -> int:
     if not ano or not mes:
         return 0
     bruto = dados.get("vendas_por_id") or {}
+    fixos = planos_dia_fixos(int(ano), int(mes))
     atualizados = 0
     for chave, linha in bruto.items():
         try:
             pid = int(chave) if not isinstance(chave, int) else chave
         except (TypeError, ValueError):
+            continue
+        if pid in fixos:
             continue
         plano = plano_lido((linha or {}).get("plano"))
         if plano is None:
@@ -137,8 +158,14 @@ def plano_com_fallback(
     plano_excel: float | None,
     parceiro_id: int | None,
     planos_meta: dict[int, float],
+    planos_fixos: set[int] | None = None,
 ) -> float | None:
-    """Excel prevalece; se vazio, usa plano cadastrado em Metas."""
+    """Excel prevalece; se vazio, usa Metas. Com plano fixo, Metas prevalece."""
+    fixos = planos_fixos or set()
+    if parceiro_id is not None and int(parceiro_id) in fixos:
+        meta = planos_meta.get(int(parceiro_id))
+        if meta is not None:
+            return meta
     if plano_excel is not None:
         return plano_excel
     if parceiro_id is None:
@@ -146,11 +173,19 @@ def plano_com_fallback(
     return planos_meta.get(int(parceiro_id))
 
 
+def plano_arredondado(plano: float | None) -> float | None:
+    """No parcial o plano é exibido/usado arredondado para cima (inteiro)."""
+    if plano is None:
+        return None
+    return float(math.ceil(float(plano)))
+
+
 def elegivel_ranking(plano: float | None, *, min_plano: float = MIN_PLANO) -> bool:
     return plano is not None and plano >= min_plano
 
 
 def _metricas(vendas: int, plano: float | None) -> dict:
+    plano = plano_arredondado(plano)
     pct = (vendas / plano) if plano and plano > 0 else None
     gap = int(round(vendas - plano)) if plano is not None else None
     return {
@@ -269,6 +304,7 @@ def processar_parcial_excel(
     sem_cadastro: list[str] = []
     ids_para_meta = set(escopo_ids or ()) | set(ids_gerencia)
     planos_meta = planos_cadastrados(ano, mes, ids_para_meta or None)
+    planos_fixos = planos_dia_fixos(ano, mes, ids_para_meta or None)
     for _, row in df.iterrows():
         nome_pdv = texto(row.get("pdv"))
         if not nome_pdv or _eh_total_planilha(nome_pdv):
@@ -281,7 +317,9 @@ def processar_parcial_excel(
         if escopo_ids is not None and pid not in escopo_ids:
             if pid not in ids_gerencia:
                 continue
-        plano = plano_com_fallback(plano_lido(row.get(col_plano)), pid, planos_meta)
+        plano = plano_com_fallback(
+            plano_lido(row.get(col_plano)), pid, planos_meta, planos_fixos
+        )
         parceiro = mapa_parceiros.get(pid)
         if parceiro is None and (escopo_ids is not None or pid in ids_gerencia):
             parceiro = Parceiro.objects.filter(pk=pid).select_related("especialista").first()
@@ -330,7 +368,11 @@ def _mapa_vendas_parcial(dados: dict) -> dict[int, dict]:
     return {l["parceiro_id"]: l for l in dados.get("linhas") or []}
 
 
-def _recalcular_linha(linha: dict, planos_meta: dict[int, float] | None = None) -> dict:
+def _recalcular_linha(
+    linha: dict,
+    planos_meta: dict[int, float] | None = None,
+    planos_fixos: set[int] | None = None,
+) -> dict:
     """Garante métricas de % do plano; usa Metas se plano do Excel estiver vazio."""
     vendas = int(linha.get("vendas") or 0)
     pid = linha.get("parceiro_id")
@@ -339,7 +381,9 @@ def _recalcular_linha(linha: dict, planos_meta: dict[int, float] | None = None) 
     else:
         # Bases antigas (D-7): tenta só o cadastro em Metas.
         plano_excel = None
-    plano = plano_com_fallback(plano_excel, pid, planos_meta or {})
+    plano = plano_com_fallback(
+        plano_excel, pid, planos_meta or {}, planos_fixos
+    )
     met = _metricas(vendas, plano)
     out = dict(linha)
     out.update(met)
@@ -354,10 +398,11 @@ def aplicar_escopo_parcial(dados: dict, parceiros: list) -> dict:
     ano = int(dados.get("ano") or periodo_ativo()[0])
     mes = int(dados.get("mes") or periodo_ativo()[1])
     planos_meta = planos_cadastrados(ano, mes, mapa.keys())
+    planos_fixos = planos_dia_fixos(ano, mes, mapa.keys())
     linhas: list[dict] = []
     for pid in sorted(mapa.keys(), key=lambda x: (mapa[x].nome or "").upper()):
         if pid in por_id:
-            linha = _recalcular_linha(por_id[pid], planos_meta)
+            linha = _recalcular_linha(por_id[pid], planos_meta, planos_fixos)
             if not linha.get("especialista_id") and mapa[pid].especialista_id:
                 linha = _linha_parceiro(
                     mapa[pid],
@@ -555,10 +600,7 @@ def fmt_pct(pct: float | None) -> str:
 def fmt_plano(valor: float | None) -> str:
     if valor is None:
         return "—"
-    v = float(valor)
-    if abs(v - round(v)) < 0.05:
-        return str(int(round(v)))
-    return f"{v:.1f}".replace(".", ",")
+    return str(int(math.ceil(float(valor))))
 
 
 def _fmt_linha_pct(item: dict) -> str:

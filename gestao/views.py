@@ -1821,14 +1821,15 @@ def configs_view(request: HttpRequest) -> HttpResponse:
             MetaCapilaridade.objects.update_or_create(
                 parceiro=p, ano=ano, mes=mes, defaults={"meta_vendedores": meta_v}
             )
-            du_vl = float(request.POST.get(prefix + "du_vl") or 0)
-            du_gross = float(request.POST.get(prefix + "du_gross") or 0)
+            du_vl = _float_form(request.POST.get(prefix + "du_vl"))
+            du_gross = _float_form(request.POST.get(prefix + "du_gross"))
             osab_defaults = {
                 "meta_vl": int(request.POST.get(prefix + "meta_vl") or 0),
                 "du_vl": du_vl,
                 "meta_gross": int(request.POST.get(prefix + "meta_gross") or 0),
                 "du_gross": du_gross,
-                "plano_dia": float(request.POST.get(prefix + "plano_dia") or 0),
+                "plano_dia": _float_form(request.POST.get(prefix + "plano_dia")),
+                "plano_dia_fixo": prefix + "plano_dia_fixo" in request.POST,
                 "tem_bonus": prefix + "tem_bonus" in request.POST,
                 "comissao_bonus": int(request.POST.get(prefix + "comissao_bonus") or 0),
                 "tem_bonus_m10": prefix + "tem_bonus_m10" in request.POST,

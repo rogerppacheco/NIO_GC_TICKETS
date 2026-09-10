@@ -2767,7 +2767,7 @@ class ResultadosTests(TestCase):
         self.assertEqual(inova["plano"], 38)
         point = next(l for l in resumo["linhas"] if l["pdv"] == "POINT CELL")
         self.assertEqual(point["vendas"], 0)
-        self.assertAlmostEqual(point["plano"], 4.5)
+        self.assertEqual(point["plano"], 5)  # 4.5 arredonda para cima
         self.assertTrue(point["elegivel"])
         self.assertEqual(point["pct_pct"], 0)
 
@@ -2789,6 +2789,37 @@ class ResultadosTests(TestCase):
         self.assertEqual(n, 1)
         cfg = ConfiguracaoOSAB.objects.get(parceiro=self.pdv, ano=2026, mes=9)
         self.assertAlmostEqual(cfg.plano_dia, 38.0)
+
+    def test_parcial_respeita_plano_dia_fixo(self):
+        from gestao.models import ConfiguracaoOSAB
+        from gestao.pipelines.parcial_vendas import (
+            processar_parcial_excel,
+            sincronizar_planos_dia_metas,
+        )
+
+        ConfiguracaoOSAB.objects.create(
+            parceiro=self.pdv,
+            ano=2026,
+            mes=9,
+            meta_vl=20,
+            plano_dia=12.3,
+            plano_dia_fixo=True,
+        )
+        arquivo = _xlsx(
+            [["INOVA MG", 45, 99]],
+            ["PDV", "Vendas Total", "Plano Dia"],
+        )
+        resumo = processar_parcial_excel(
+            arquivo, "parcial.xlsx", [self.pdv], turno=15, ano=2026, mes=9
+        )
+        linha = resumo["linhas"][0]
+        self.assertEqual(linha["plano"], 13)  # 12.3 → ceil
+        self.assertEqual(linha["pct_pct"], int(round(45 / 13 * 100)))
+        n = sincronizar_planos_dia_metas(resumo)
+        self.assertEqual(n, 0)
+        cfg = ConfiguracaoOSAB.objects.get(parceiro=self.pdv, ano=2026, mes=9)
+        self.assertAlmostEqual(cfg.plano_dia, 12.3)
+        self.assertTrue(cfg.plano_dia_fixo)
 
     def test_parcial_import_lê_excel_da_gerencia_inteira(self):
         from gestao.pipelines.parcial_vendas import aplicar_escopo_parcial, processar_parcial_excel
