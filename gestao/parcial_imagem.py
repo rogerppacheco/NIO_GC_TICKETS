@@ -7,7 +7,7 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .pipelines.parcial_vendas import agrupar_por_especialista, fmt_plano, fmt_ritmo
+from .pipelines.parcial_vendas import agrupar_por_especialista, fmt_pct, fmt_plano
 
 BG = (255, 255, 255)
 BRAND = (15, 107, 92)
@@ -29,7 +29,7 @@ COLS = [
     ("Parceiro", 220),
     ("TOTAL", 60),
     ("Plano", 60),
-    ("Ritmo", 64),
+    ("% Plano", 70),
 ]
 
 
@@ -58,22 +58,28 @@ def _truncar(texto: str, max_chars: int) -> str:
     return t[: max_chars - 1] + "…"
 
 
-def _cor_ritmo(ritmo: float) -> tuple[int, int, int]:
-    if ritmo > 1.0:
+def _cor_pct(pct: float | None) -> tuple[int, int, int]:
+    if pct is None:
+        return MUTED
+    if pct > 1.0:
         return POS
-    if ritmo < 1.0:
+    if pct < 1.0:
         return NEG
     return INK
 
 
-def _ritmo_item(item: dict) -> float:
-    if "ritmo" in item:
-        return float(item.get("ritmo") or 0)
+def _pct_item(item: dict) -> float | None:
+    if "pct_plano" in item:
+        raw = item.get("pct_plano")
+        return float(raw) if raw is not None else None
     vendas = float(item.get("vendas") or 0)
-    esperado = float(item.get("esperado") or 0)
-    if esperado > 0:
-        return vendas / esperado
-    return 0.0
+    plano = item.get("plano")
+    if plano is None:
+        return None
+    plano_f = float(plano)
+    if plano_f <= 0:
+        return None
+    return vendas / plano_f
 
 
 def _largura_cols(cols: list[tuple[str, int]]) -> int:
@@ -121,16 +127,14 @@ def _desenhar_linha_dados(
 ) -> int:
     if fundo:
         draw.rectangle((x + 6, y, x + largura - 6, y + ALT_LINHA - 2), fill=fundo)
-    ritmo = _ritmo_item(item)
+    pct = _pct_item(item)
     rotulo = str(item.get("pdv") or item.get("rotulo") or "")
     plano = item.get("plano")
-    if plano is None:
-        plano = item.get("esperado") or 0
     vals = [
         (_truncar(rotulo, 28), INK),
         (str(int(item.get("vendas") or 0)), INK),
-        (fmt_plano(float(plano or 0)), INK),
-        (fmt_ritmo(ritmo), _cor_ritmo(ritmo)),
+        (fmt_plano(float(plano) if plano is not None else None), INK),
+        (fmt_pct(pct), _cor_pct(pct)),
     ]
     x_cur = x + 8
     for (texto, cor), (_, larg) in zip(vals, cols):
@@ -215,8 +219,8 @@ def _desenhar_tabela_simples(
             item={
                 "pdv": total.get("rotulo", "TOTAL"),
                 "vendas": total.get("vendas", 0),
-                "plano": total.get("plano", 0),
-                "ritmo": total.get("ritmo", 0),
+                "plano": total.get("plano"),
+                "pct_plano": total.get("pct_plano"),
             },
             cols=cols,
             font_cell=font_head,
@@ -245,8 +249,8 @@ def _desenhar_total_pp(
         item={
             "pdv": "TOTAL PP",
             "vendas": dados.get("total_pp", 0),
-            "plano": dados.get("total_plano", 0),
-            "ritmo": dados.get("ritmo_pp", 0),
+            "plano": dados.get("total_plano"),
+            "pct_plano": dados.get("pct_pp"),
         },
         cols=cols,
         font_cell=font_head,
@@ -293,7 +297,7 @@ def imagem_parcial_gerencia(dados: dict) -> tuple[bytes, str]:
         draw,
         x=PAD,
         y=y,
-        titulo_secao="▲ Top 5 — ritmo do turno",
+        titulo_secao="▲ Top 5 — % do plano",
         itens=top5,
         cols=cols,
         font_titulo=font_titulo,
@@ -305,13 +309,13 @@ def imagem_parcial_gerencia(dados: dict) -> tuple[bytes, str]:
         draw,
         x=PAD,
         y=y,
-        titulo_secao="▼ Bottom 5 — ritmo do turno",
+        titulo_secao="▼ Bottom 5 — % do plano",
         itens=pior5,
         cols=cols,
         font_titulo=font_titulo,
         font_head=font_head,
         font_cell=font_cell,
-        vazio_msg="Nenhum PDV adicional (≤5 no escopo).",
+        vazio_msg="Nenhum elegível adicional (plano ≥ 2).",
         sem_cabecalho_cols=True,
     )
     y += 12
@@ -396,8 +400,8 @@ def _desenhar_por_especialista(
                 item={
                     "pdv": "TOTAL",
                     "vendas": grupo.get("total_vendas", 0),
-                    "plano": grupo.get("total_plano", 0),
-                    "ritmo": grupo.get("ritmo", 0),
+                    "plano": grupo.get("total_plano"),
+                    "pct_plano": grupo.get("pct_plano"),
                 },
                 cols=cols,
                 font_cell=font_head,
@@ -415,8 +419,8 @@ def _desenhar_por_especialista(
             item={
                 "pdv": total_pp.get("rotulo", "TOTAL PP"),
                 "vendas": total_pp.get("vendas", 0),
-                "plano": total_pp.get("plano", 0),
-                "ritmo": total_pp.get("ritmo", 0),
+                "plano": total_pp.get("plano"),
+                "pct_plano": total_pp.get("pct_plano"),
             },
             cols=cols,
             font_cell=font_head,
@@ -472,8 +476,8 @@ def imagem_parcial_especialistas(dados: dict, *, titulo: str = "Carteira PP") ->
         total_pp={
             "rotulo": "TOTAL PP",
             "vendas": dados.get("total_pp", 0),
-            "plano": dados.get("total_plano", 0),
-            "ritmo": dados.get("ritmo_pp", 0),
+            "plano": dados.get("total_plano"),
+            "pct_plano": dados.get("pct_pp"),
         },
     )
 
@@ -526,8 +530,8 @@ def imagem_parcial_especialista(grupo: dict, dados: dict) -> tuple[bytes, str]:
         total_pp={
             "rotulo": "TOTAL CARTEIRA",
             "vendas": grupo.get("total_vendas", 0),
-            "plano": grupo.get("total_plano", 0),
-            "ritmo": grupo.get("ritmo", 0),
+            "plano": grupo.get("total_plano"),
+            "pct_plano": grupo.get("pct_plano"),
         },
     )
 
@@ -571,8 +575,8 @@ def imagem_parcial_pdv(linha: dict, dados: dict) -> tuple[bytes, str]:
         total={
             "rotulo": "TOTAL",
             "vendas": linha.get("vendas", 0),
-            "plano": linha.get("plano", 0),
-            "ritmo": linha.get("ritmo", 0),
+            "plano": linha.get("plano"),
+            "pct_plano": linha.get("pct_plano"),
         },
     )
 

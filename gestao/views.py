@@ -836,7 +836,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             if form.is_valid():
                 arquivo = form.cleaned_data.get("arquivo")
                 if not arquivo:
-                    messages.error(request, "Envie a base Excel com PDV, vendas e Plano Dia.")
+                    messages.error(request, "Envie a base Excel com PDV, Vendas Total e Plano Dia.")
                     return _voltar(request, "gestao_resultados", extra="aba=parcial&parcial_sub=gerencia")
                 try:
                     parceiros_todos = list(parceiros_gestao(request.user, "todos"))
@@ -864,18 +864,23 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                     aviso = ""
                     if resumo.get("sem_cadastro"):
                         aviso = f" {len(resumo['sem_cadastro'])} PDV(s) da planilha sem cadastro."
-                    ritmo_pct = int(round(float(resumo.get("ritmo_pp") or 0) * 100))
+                    pct_txt = (
+                        f"{resumo['pct_pct']}%"
+                        if resumo.get("pct_pct") is not None
+                        else "—"
+                    )
+                    fora = int(resumo.get("qtd_sem_plano") or 0)
+                    fora_txt = f" · {fora} fora do ranking" if fora else ""
                     messages.success(
                         request,
                         f"Base importada: {resumo['qtd_pdvs']} PDV(s) · total {resumo['total_pp']} VB · "
-                        f"ritmo {ritmo_pct}% · ∆ vs esp. {resumo['delta_pp']:+d} · "
-                        f"turno {resumo['rotulo_turno']}.{aviso}",
+                        f"{pct_txt} do plano · turno {resumo['rotulo_turno']}{fora_txt}.{aviso}",
                     )
                 except Exception as exc:
                     _lote(request, LoteImportacao.Tipo.PARCIAL, arquivo.name, False, {}, str(exc))
                     messages.error(request, f"Falha ao importar parcial: {exc}")
             else:
-                messages.error(request, "Envie a base Excel com PDV, vendas e Plano Dia.")
+                messages.error(request, "Envie a base Excel com PDV, Vendas Total e Plano Dia.")
             return _voltar(request, "gestao_resultados", extra="aba=parcial&parcial_sub=gerencia")
         if action in {
             "enviar_parcial_gerencia",
@@ -1009,7 +1014,8 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             parcial_gerencia_linhas = sorted(
                 parcial_dados.get("linhas") or [],
                 key=lambda l: (
-                    -float(l.get("ritmo") or 0),
+                    0 if l.get("pct_plano") is not None else 1,
+                    -(l.get("pct_plano") if l.get("pct_plano") is not None else 0),
                     -int(l.get("vendas") or 0),
                     l.get("pdv", "").upper(),
                 ),

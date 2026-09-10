@@ -59,7 +59,7 @@
     {% if parcial_gerencia_linhas %}
     <div class="parcial-todos-pdvs">
       <h3>Todos os PDVs da gerência PP ({{ parcial_gerencia_linhas|length }})</h3>
-      <p class="help" style="margin:0 0 0.5rem">Lista completa ordenada por ritmo do turno. A imagem do WhatsApp leva só top/bottom 5.</p>
+      <p class="help" style="margin:0 0 0.5rem">Lista completa ordenada por % do plano. A imagem do WhatsApp leva só top/bottom 5 (elegíveis com plano ≥ 2).</p>
       <div class="table-scroll parcial-todos-scroll">
         <table class="table">
           <thead>
@@ -68,20 +68,18 @@
               <th>PDV</th>
               <th>Total</th>
               <th>Plano</th>
-              <th>Ritmo</th>
-              <th>∆ vs esp.</th>
+              <th>%</th>
               <th>Especialista</th>
             </tr>
           </thead>
           <tbody>
             {% for linha in parcial_gerencia_linhas %}
-            <tr>
+            <tr{% if not linha.elegivel %} class="muted"{% endif %}>
               <td>{{ forloop.counter }}</td>
               <td>{{ linha.pdv }}</td>
               <td>{{ linha.vendas }}</td>
-              <td>{{ linha.plano }}</td>
-              <td>{{ linha.ritmo_pct }}%</td>
-              <td>{{ linha.delta|stringformat:"+d" }}</td>
+              <td>{% if linha.plano is not None %}{{ linha.plano|floatformat:1 }}{% else %}—{% endif %}</td>
+              <td>{% if linha.pct_pct is not None %}{{ linha.pct_pct }}%{% else %}—{% endif %}</td>
               <td>{{ linha.especialista }}</td>
             </tr>
             {% endfor %}
@@ -111,7 +109,7 @@
         </div>
         <div class="parcial-card-acao">
           <strong>{{ esp.especialista }}</strong>
-          <p class="help" style="margin:0.25rem 0 0">{{ esp.qtd_pdvs }} PDV(s) · {{ esp.total_vendas }} VB · ritmo {{ esp.ritmo_pct }}% · ∆ {{ esp.delta|stringformat:"+d" }} vs esp.</p>
+          <p class="help" style="margin:0.25rem 0 0">{{ esp.qtd_pdvs }} PDV(s) · {{ esp.total_vendas }} VB · plano {{ esp.total_plano|floatformat:1 }} · {% if esp.pct_pct is not None %}{{ esp.pct_pct }}%{% else %}—{% endif %}</p>
           {% if pode_enviar and esp.especialista_id %}
           <form method="post" style="margin-top:0.65rem">
             {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
@@ -141,7 +139,7 @@
         </div>
         <div class="parcial-card-acao">
           <strong>{{ linha.pdv }}</strong>
-          <p class="help" style="margin:0.25rem 0 0">{{ linha.vendas }} VB · plano {{ linha.plano }} · ritmo {{ linha.ritmo_pct }}% · ∆ {{ linha.delta|stringformat:"+d" }} vs esp. · {{ linha.especialista }}</p>
+          <p class="help" style="margin:0.25rem 0 0">{{ linha.vendas }} VB · plano {% if linha.plano is not None %}{{ linha.plano|floatformat:1 }}{% else %}—{% endif %} · {% if linha.pct_pct is not None %}{{ linha.pct_pct }}%{% else %}—{% endif %} · {{ linha.especialista }}</p>
           {% if pode_enviar %}
           <form method="post" style="margin-top:0.65rem">
             {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
@@ -169,17 +167,19 @@
         <div class="parcial-intro">
           <p class="help" style="margin:0">
             Importe a base Excel da dashboard (<strong>Vendas Total / Plano Dia</strong>), gere a imagem automaticamente e envie nos turnos
-            <strong>12h · 15h · 18h</strong> (ritmo vs plano).
+            <strong>12h · 15h · 18h</strong>.
             {% if parcial_dados %}
-            Base ativa: {{ parcial_dados.qtd_pdvs }} PDV(s) · {{ parcial_dados.total_pp }} VB · ritmo {{ parcial_dados.ritmo_pct }}%
-            · ∆ vs esp. {{ parcial_dados.delta_pp|stringformat:"+d" }}
+            Base ativa: {{ parcial_dados.qtd_pdvs }} PDV(s) · {{ parcial_dados.total_pp }} VB · {% if parcial_dados.pct_pct is not None %}{{ parcial_dados.pct_pct }}% do plano{% else %}sem plano agregado{% endif %}
             · turno {{ parcial_dados.rotulo_turno }}
             {% if ultimo_parcial %} · importada {{ ultimo_parcial.criado_em|date:"d/m/Y H:i" }}{% if ultimo_parcial.criado_por %} por {{ ultimo_parcial.criado_por.get_full_name|default:ultimo_parcial.criado_por.username }}{% endif %}{% endif %}.
+            {% if parcial_dados.qtd_sem_plano %}
+            <span class="help">{{ parcial_dados.qtd_sem_plano }} fora do ranking (sem plano ou plano &lt; 2).</span>
+            {% endif %}
             {% if parcial_sub == "gerencia" and eh_gestor and gestao_escopo != "todos" %}
             <span class="help">Gerência usa todos os PDVs da gerência PP.</span>
             {% endif %}
             {% if parcial_sub == "gerencia" and not parcial_dados.vendas_por_id %}
-            <strong class="help" style="color:var(--warn)"> Reimporte o Excel (com escopo Todos) para o top/bottom refletir vendas de todos os PDVs.</strong>
+            <strong class="help" style="color:var(--warn)"> Reimporte o Excel (Vendas Total + Plano Dia, escopo Todos) para o top/bottom refletir % do plano.</strong>
             {% endif %}
             {% else %}
             Turno sugerido agora: <strong>{{ parcial_turno }}</strong>.
@@ -202,7 +202,7 @@
         <form method="post" class="parcial-aside-envio">
           {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
           <input type="hidden" name="parcial_sub" value="gerencia">
-          <p class="help" style="margin:0">Top/bottom 5 · total PP · envio só da imagem.</p>
+          <p class="help" style="margin:0">Top/bottom 5 por % do plano (elegível se plano ≥ 2).</p>
           <select name="destinatario" required>
             <option value="">Grupo gerência…</option>
             {% for g in grupos_parcial %}

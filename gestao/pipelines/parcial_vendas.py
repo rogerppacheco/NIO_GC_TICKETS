@@ -15,20 +15,23 @@ from .resultados import mensagem_parcial
 
 HORARIOS_PARCIAL = (12, 15, 18)
 ROTULOS_TURNO = {12: "12h", 15: "15h", 18: "18h"}
-PLANO_DEFAULT = 2.0
+# Só entra no Top/Bottom quem tem plano preenchido e ≥ este piso.
+MIN_PLANO = 2.0
 
 ALIASES_PARCIAL = {
     "pdv": ["PDV", "NM_PARCEIRO", "NM_PARCEIRO_2", "PARCEIRO", "NOME", "LOJA"],
     "vendas": [
-        "VENDAS",
         "VENDAS_TOTAL",
+        "VENDAS TOTAL",
         "VENDAS TOTAL",
         "TOTAL_VENDAS",
         "QTD_VENDAS",
+        "VENDAS",
         "REALIZADO",
         "VB",
         "TOTAL",
     ],
+    # Nunca usar "PLANO" solto: colide com "% Plano" na chave normalizada.
     "plano_dia": [
         "PLANO_DIA",
         "PLANO DIA",
@@ -41,7 +44,7 @@ ALIASES_PARCIAL = {
 
 
 def turno_parcial(hora: int | None = None) -> tuple[int, str]:
-    """Próximo turno do dia: 12h, 15h ou 18h."""
+    """Próximo turno do dia: 12h, 15h ou 18h (só rótulo de corte; não altera a métrica)."""
     hora = hora if hora is not None else timezone.localtime().hour
     if hora < 12:
         escolhido = 12
@@ -52,12 +55,6 @@ def turno_parcial(hora: int | None = None) -> tuple[int, str]:
     else:
         escolhido = 18
     return escolhido, ROTULOS_TURNO[escolhido]
-
-
-def fracao_turno(turno: int) -> float:
-    """Fração linear do dia calendário esperada até o turno (12/24, 15/24, 18/24)."""
-    hora = turno if turno in HORARIOS_PARCIAL else turno_parcial()[0]
-    return hora / 24.0
 
 
 def _int_valor(valor) -> int:
@@ -72,7 +69,7 @@ def _int_valor(valor) -> int:
 def _float_valor(valor) -> float | None:
     if valor is None or (isinstance(valor, float) and pd.isna(valor)):
         return None
-    if isinstance(valor, str) and not valor.strip():
+    if isinstance(valor, str) and not str(valor).strip():
         return None
     try:
         return float(valor)
@@ -80,25 +77,27 @@ def _float_valor(valor) -> float | None:
         return None
 
 
-def plano_efetivo(valor) -> float:
-    """Plano do dia; ausente ou zerado vira PLANO_DEFAULT (2)."""
+def plano_lido(valor) -> float | None:
+    """Plano do dia da planilha; ausente/vazio/≤0 → None (fora do ranking)."""
     bruto = _float_valor(valor)
     if bruto is None or bruto <= 0:
-        return PLANO_DEFAULT
+        return None
     return bruto
 
 
-def _metricas(vendas: int, plano: float, turno: int) -> dict:
-    esperado = plano * fracao_turno(turno)
-    ritmo = (vendas / esperado) if esperado > 0 else 0.0
-    pct_plano = (vendas / plano) if plano > 0 else 0.0
+def elegivel_ranking(plano: float | None, *, min_plano: float = MIN_PLANO) -> bool:
+    return plano is not None and plano >= min_plano
+
+
+def _metricas(vendas: int, plano: float | None) -> dict:
+    pct = (vendas / plano) if plano and plano > 0 else None
+    gap = int(round(vendas - plano)) if plano is not None else None
     return {
         "plano": plano,
-        "esperado": round(esperado, 2),
-        "ritmo": ritmo,
-        "ritmo_pct": int(round(ritmo * 100)),
-        "pct_plano": pct_plano,
-        "delta": int(round(vendas - esperado)),
+        "pct_plano": pct,
+        "pct_pct": int(round(pct * 100)) if pct is not None else None,
+        "delta": gap if gap is not None else 0,
+        "elegivel": elegivel_ranking(plano),
     }
 
 
@@ -107,7 +106,6 @@ def _linha_parceiro(
     *,
     vendas: int = 0,
     plano: float | None = None,
-    turno: int = 12,
 ) -> dict:
     esp_nome = "—"
     esp_id = None
@@ -115,8 +113,7 @@ def _linha_parceiro(
         esp_id = parceiro.especialista_id
         user = parceiro.especialista
         esp_nome = (user.get_full_name() or user.username or "—").strip()
-    plano_ok = plano_efetivo(plano)
-    met = _metricas(vendas, plano_ok, turno)
+    met = _metricas(vendas, plano)
     return {
         "parceiro_id": parceiro.pk,
         "pdv": (parceiro.nome or "").strip(),
@@ -132,12 +129,11 @@ def _linha_manual(
     parceiro_id: int,
     pdv: str,
     vendas: int,
-    plano: float,
-    turno: int,
+    plano: float | None,
     especialista_id=None,
     especialista: str = "—",
 ) -> dict:
-    met = _metricas(vendas, plano_efetivo(plano), turno)
+    met = _metricas(vendas, plano)
     return {
         "parceiro_id": parceiro_id,
         "pdv": (pdv or "").strip(),
@@ -155,15 +151,13 @@ def _eh_total_planilha(nome: str) -> bool:
 def _completar_parceiros_escopo(
     linhas: list[dict],
     mapa_parceiros: dict[int, Parceiro],
-    *,
-    turno: int,
 ) -> list[dict]:
-    """PDVs do escopo ausentes na planilha entram com zero e plano padrão."""
+    """PDVs do escopo ausentes na planilha entram com zero e sem plano."""
     vistos = {l["parceiro_id"] for l in linhas}
     out = list(linhas)
     for pid, parceiro in sorted(mapa_parceiros.items(), key=lambda x: (x[1].nome or "").upper()):
         if pid not in vistos:
-            out.append(_linha_parceiro(parceiro, turno=turno))
+            out.append(_linha_parceiro(parceiro))
     return out
 
 
@@ -177,7 +171,7 @@ def processar_parcial_excel(
     mes: int | None = None,
     ids_gerencia: set[int] | None = None,
 ) -> dict:
-    """Importa base Excel: PDV, vendas do dia e Plano Dia (ritmo do turno)."""
+    """Importa base Excel: PDV, vendas do dia e Plano Dia (% do plano)."""
     df = ler_planilha(arquivo, nome_arquivo)
     df = aplicar_aliases(df, ALIASES_PARCIAL)
     if "pdv" not in df.columns:
@@ -214,7 +208,7 @@ def processar_parcial_excel(
         if not nome_pdv or _eh_total_planilha(nome_pdv):
             continue
         vendas = _int_valor(row.get(col_vendas))
-        plano = plano_efetivo(row.get(col_plano))
+        plano = plano_lido(row.get(col_plano))
         pid = resolver_parceiro_id(nome_pdv, indice)
         if pid is None:
             sem_cadastro.append(nome_pdv)
@@ -226,22 +220,19 @@ def processar_parcial_excel(
         if parceiro is None and (escopo_ids is not None or pid in ids_gerencia):
             parceiro = Parceiro.objects.filter(pk=pid).select_related("especialista").first()
         if parceiro:
-            por_id[pid] = _linha_parceiro(
-                parceiro, vendas=vendas, plano=plano, turno=hora_turno
-            )
+            por_id[pid] = _linha_parceiro(parceiro, vendas=vendas, plano=plano)
         else:
             por_id[pid] = _linha_manual(
                 parceiro_id=pid,
                 pdv=nome_pdv,
                 vendas=vendas,
                 plano=plano,
-                turno=hora_turno,
             )
 
     vendas_por_id = dict(por_id)
     linhas = list(por_id.values())
     if mapa_parceiros:
-        linhas = _completar_parceiros_escopo(linhas, mapa_parceiros, turno=hora_turno)
+        linhas = _completar_parceiros_escopo(linhas, mapa_parceiros)
 
     if not linhas:
         raise ValueError(
@@ -273,17 +264,15 @@ def _mapa_vendas_parcial(dados: dict) -> dict[int, dict]:
     return {l["parceiro_id"]: l for l in dados.get("linhas") or []}
 
 
-def _recalcular_linha(linha: dict, turno: int) -> dict:
-    """Garante métricas de ritmo mesmo em bases antigas (d7) ou incompletas."""
+def _recalcular_linha(linha: dict) -> dict:
+    """Garante métricas de % do plano; lotes antigos com D-7 ficam sem plano."""
     vendas = int(linha.get("vendas") or 0)
     if "plano" in linha:
-        plano = plano_efetivo(linha.get("plano"))
-    elif "d7" in linha:
-        # Lotes antigos: D-7 não é plano — usa default.
-        plano = PLANO_DEFAULT
+        plano = plano_lido(linha.get("plano"))
     else:
-        plano = PLANO_DEFAULT
-    met = _metricas(vendas, plano, turno)
+        # Bases antigas (D-7): não inventar plano — fora do ranking até reimportar.
+        plano = None
+    met = _metricas(vendas, plano)
     out = dict(linha)
     out.update(met)
     out.pop("d7", None)
@@ -294,56 +283,63 @@ def aplicar_escopo_parcial(dados: dict, parceiros: list) -> dict:
     """Recalcula totais/top/bottom para o escopo atual (ausentes entram com zero)."""
     mapa = {p.pk: p for p in parceiros}
     por_id = _mapa_vendas_parcial(dados)
-    turno = int(dados.get("turno") or turno_parcial()[0])
     linhas: list[dict] = []
     for pid in sorted(mapa.keys(), key=lambda x: (mapa[x].nome or "").upper()):
         if pid in por_id:
-            linha = _recalcular_linha(por_id[pid], turno)
+            linha = _recalcular_linha(por_id[pid])
             if not linha.get("especialista_id") and mapa[pid].especialista_id:
                 linha = _linha_parceiro(
                     mapa[pid],
                     vendas=linha.get("vendas", 0),
                     plano=linha.get("plano"),
-                    turno=turno,
                 )
             linhas.append(linha)
         else:
-            linhas.append(_linha_parceiro(mapa[pid], turno=turno))
+            linhas.append(_linha_parceiro(mapa[pid]))
     return {**dados, **_totais_parcial(linhas), "linhas": linhas}
 
 
+def _chave_pct(linha: dict) -> float:
+    pct = linha.get("pct_plano")
+    return float(pct) if pct is not None else float("-inf")
+
+
 def _top_e_piores(linhas: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Top 5 e piores 5 por ritmo do turno, sem repetir PDV."""
+    """Top 5 / Bottom 5 por % do plano; só elegíveis (plano ≥ MIN_PLANO)."""
+    elegiveis = [l for l in linhas if l.get("elegivel")]
     ordenado = sorted(
-        linhas,
-        key=lambda l: (-float(l.get("ritmo") or 0), -int(l.get("vendas") or 0), l["pdv"].upper()),
+        elegiveis,
+        key=lambda l: (-_chave_pct(l), -int(l.get("vendas") or 0), l["pdv"].upper()),
     )
     top5 = ordenado[:5]
     ids_top = {l["parceiro_id"] for l in top5}
-    restantes = [l for l in linhas if l.get("parceiro_id") not in ids_top]
+    restantes = [l for l in elegiveis if l.get("parceiro_id") not in ids_top]
     pior5 = sorted(
         restantes,
-        key=lambda l: (float(l.get("ritmo") or 0), int(l.get("vendas") or 0), l["pdv"].upper()),
+        key=lambda l: (_chave_pct(l), int(l.get("vendas") or 0), l["pdv"].upper()),
     )[:5]
     return top5, pior5
 
 
 def _totais_parcial(linhas: list[dict]) -> dict:
     top5, pior5 = _top_e_piores(linhas)
+    sem_plano = [l for l in linhas if not l.get("elegivel")]
     total_pp = sum(int(l.get("vendas") or 0) for l in linhas)
-    total_plano = round(sum(float(l.get("plano") or 0) for l in linhas), 2)
-    total_esperado = round(sum(float(l.get("esperado") or 0) for l in linhas), 2)
-    ritmo_pp = (total_pp / total_esperado) if total_esperado > 0 else 0.0
+    planos = [float(l["plano"]) for l in linhas if l.get("plano") is not None]
+    total_plano = round(sum(planos), 2) if planos else 0.0
+    pct_pp = (total_pp / total_plano) if total_plano > 0 else None
     return {
         "top5": top5,
         "pior5": pior5,
+        "sem_plano": sem_plano,
         "total_pp": total_pp,
         "total_plano": total_plano,
-        "total_esperado": total_esperado,
-        "ritmo_pp": ritmo_pp,
-        "ritmo_pct": int(round(ritmo_pp * 100)),
-        "delta_pp": int(round(total_pp - total_esperado)),
+        "pct_pp": pct_pp,
+        "pct_pct": int(round(pct_pp * 100)) if pct_pp is not None else None,
+        "delta_pp": int(round(total_pp - total_plano)) if planos else 0,
         "qtd_pdvs": len(linhas),
+        "qtd_elegiveis": len(linhas) - len(sem_plano),
+        "qtd_sem_plano": len(sem_plano),
     }
 
 
@@ -424,10 +420,10 @@ def agrupar_por_especialista(linhas: list[dict]) -> list[dict]:
     for chave, items in buckets.items():
         nome_completo = rotulos[chave]
         ordenado = sorted(items, key=lambda l: (-l.get("vendas", 0), l.get("pdv", "").upper()))
-        total_vendas = sum(l["vendas"] for l in ordenado)
-        total_plano = round(sum(float(l.get("plano") or 0) for l in ordenado), 2)
-        total_esperado = round(sum(float(l.get("esperado") or 0) for l in ordenado), 2)
-        ritmo = (total_vendas / total_esperado) if total_esperado > 0 else 0.0
+        total_vendas = sum(int(l.get("vendas") or 0) for l in ordenado)
+        planos = [float(l["plano"]) for l in ordenado if l.get("plano") is not None]
+        total_plano = round(sum(planos), 2) if planos else 0.0
+        pct = (total_vendas / total_plano) if total_plano > 0 else None
         grupos.append(
             {
                 "especialista_id": None if chave == "sem" else int(chave),
@@ -436,10 +432,9 @@ def agrupar_por_especialista(linhas: list[dict]) -> list[dict]:
                 "linhas": ordenado,
                 "total_vendas": total_vendas,
                 "total_plano": total_plano,
-                "total_esperado": total_esperado,
-                "ritmo": ritmo,
-                "ritmo_pct": int(round(ritmo * 100)),
-                "delta": int(round(total_vendas - total_esperado)),
+                "pct_plano": pct,
+                "pct_pct": int(round(pct * 100)) if pct is not None else None,
+                "delta": int(round(total_vendas - total_plano)) if planos else 0,
                 "qtd_pdvs": len(ordenado),
             }
         )
@@ -467,21 +462,25 @@ def _fmt_delta(valor: int) -> str:
     return str(valor)
 
 
-def fmt_ritmo(ritmo: float) -> str:
-    return f"{int(round(float(ritmo or 0) * 100))}%"
+def fmt_pct(pct: float | None) -> str:
+    if pct is None:
+        return "—"
+    return f"{int(round(float(pct) * 100))}%"
 
 
-def fmt_plano(valor: float) -> str:
-    v = float(valor or 0)
+def fmt_plano(valor: float | None) -> str:
+    if valor is None:
+        return "—"
+    v = float(valor)
     if abs(v - round(v)) < 0.05:
         return str(int(round(v)))
     return f"{v:.1f}".replace(".", ",")
 
 
-def _fmt_linha_ritmo(item: dict) -> str:
+def _fmt_linha_pct(item: dict) -> str:
     return (
-        f"{item['pdv']} — {item['vendas']}/{fmt_plano(item.get('plano', 0))} "
-        f"({fmt_ritmo(item.get('ritmo', 0))} ritmo · {_fmt_delta(int(item.get('delta', 0)))} vs esp.)"
+        f"{item['pdv']} — {item['vendas']}/{fmt_plano(item.get('plano'))} "
+        f"({fmt_pct(item.get('pct_plano'))} do plano)"
     )
 
 
@@ -491,18 +490,22 @@ def mensagem_parcial_gerencia(dados: dict) -> str:
     partes = [
         f"📊 *Parcial PP · {mes:02d}/{ano} · {rotulo}*",
         (
-            f"Total: *{dados['total_pp']}* VB · plano {fmt_plano(dados.get('total_plano', 0))} · "
-            f"ritmo {fmt_ritmo(dados.get('ritmo_pp', 0))} · ∆ {_fmt_delta(dados['delta_pp'])} vs esp."
+            f"Total: *{dados['total_pp']}* VB · plano {fmt_plano(dados.get('total_plano'))} · "
+            f"{fmt_pct(dados.get('pct_pp'))} do plano"
         ),
         "",
-        "*Top 5 (ritmo do turno)*",
+        "*Top 5 (% do plano)*",
     ]
     for i, item in enumerate(dados.get("top5") or [], start=1):
-        partes.append(f"{i}. {_fmt_linha_ritmo(item)}")
+        partes.append(f"{i}. {_fmt_linha_pct(item)}")
     partes.append("")
-    partes.append("*Bottom 5 (ritmo do turno)*")
+    partes.append("*Bottom 5 (% do plano)*")
     for i, item in enumerate(dados.get("pior5") or [], start=1):
-        partes.append(f"{i}. {_fmt_linha_ritmo(item)}")
+        partes.append(f"{i}. {_fmt_linha_pct(item)}")
+    qtd_fora = int(dados.get("qtd_sem_plano") or 0)
+    if qtd_fora:
+        partes.append("")
+        partes.append(f"_Fora do ranking (sem plano ou plano < {int(MIN_PLANO)}): {qtd_fora}_")
     return "\n".join(partes)
 
 
@@ -518,13 +521,12 @@ def mensagem_parcial_especialista(dados: dict, *, pdv: str = "time") -> str:
         "",
         f"📈 *Parcial · {rotulo}*",
         (
-            f"Total carteira: *{dados['total_pp']}* VB · "
-            f"ritmo {fmt_ritmo(dados.get('ritmo_pp', 0))} · "
-            f"∆ {_fmt_delta(dados['delta_pp'])} vs esp."
+            f"Total carteira: *{dados['total_pp']}* VB · plano {fmt_plano(dados.get('total_plano'))} · "
+            f"{fmt_pct(dados.get('pct_pp'))} do plano"
         ),
     ]
     for item in dados.get("linhas") or []:
-        extra.append(f"• {_fmt_linha_ritmo(item)}")
+        extra.append(f"• {_fmt_linha_pct(item)}")
     return base + "\n".join(extra)
 
 
@@ -535,7 +537,6 @@ def mensagem_parcial_pdv(linha: dict, dados: dict) -> str:
         mes=dados.get("mes"),
     ) + (
         f"\n\n📈 *Parcial · {dados.get('rotulo_turno', '—')}*\n"
-        f"Total: *{linha['vendas']}* VB · plano {fmt_plano(linha.get('plano', 0))} · "
-        f"ritmo {fmt_ritmo(linha.get('ritmo', 0))} · "
-        f"∆ {_fmt_delta(int(linha.get('delta', 0)))} vs esp."
+        f"Total: *{linha['vendas']}* VB · plano {fmt_plano(linha.get('plano'))} · "
+        f"{fmt_pct(linha.get('pct_plano'))} do plano"
     )
