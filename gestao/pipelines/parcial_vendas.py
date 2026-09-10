@@ -420,25 +420,24 @@ def _chave_pct(linha: dict) -> float:
     return float(pct) if pct is not None else float("-inf")
 
 
-def _chave_plano(linha: dict) -> float:
-    plano = linha.get("plano")
-    return float(plano) if plano is not None else 0.0
+def _chave_vendas(linha: dict) -> int:
+    return int(linha.get("vendas") or 0)
 
 
 def _top_e_piores(linhas: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Top 5 / Bottom 5 por % do plano (maior entrega); empate → plano maior."""
+    """Top 5 / Bottom 5 por total absoluto; empate → % do plano."""
     elegiveis = [l for l in linhas if l.get("elegivel")]
     ordenado = sorted(
         elegiveis,
-        key=lambda l: (-_chave_pct(l), -_chave_plano(l), l["pdv"].upper()),
+        key=lambda l: (-_chave_vendas(l), -_chave_pct(l), l["pdv"].upper()),
     )
     top5 = ordenado[:5]
     ids_top = {l["parceiro_id"] for l in top5}
     restantes = [l for l in elegiveis if l.get("parceiro_id") not in ids_top]
-    # Piores: menor %; no empate, plano maior entra no Bottom 5
+    # Piores: menor total; no empate, menor % do plano
     pior5 = sorted(
         restantes,
-        key=lambda l: (_chave_pct(l), -_chave_plano(l), l["pdv"].upper()),
+        key=lambda l: (_chave_vendas(l), _chave_pct(l), l["pdv"].upper()),
     )[:5]
     return top5, pior5
 
@@ -622,12 +621,12 @@ def mensagem_parcial_gerencia(dados: dict) -> str:
             f"{fmt_pct(dados.get('pct_pp'))} do plano"
         ),
         "",
-        "*Top 5 (% do plano)*",
+        "*Top 5 (total)*",
     ]
     for i, item in enumerate(dados.get("top5") or [], start=1):
         partes.append(f"{i}. {_fmt_linha_pct(item)}")
     partes.append("")
-    partes.append("*Bottom 5 (% do plano)*")
+    partes.append("*Bottom 5 (total)*")
     for i, item in enumerate(dados.get("pior5") or [], start=1):
         partes.append(f"{i}. {_fmt_linha_pct(item)}")
     qtd_fora = int(dados.get("qtd_sem_plano") or 0)

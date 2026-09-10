@@ -138,7 +138,7 @@ class ParcialResultadoForm(forms.Form):
         required=False,
         help_text=(
             "Exporte da dashboard: colunas Parceiro/PDV, Vendas Total e Plano Dia "
-            "(.xlsx, .xls ou .xlsb). Ranking por % do plano (elegível se plano ≥ 2)."
+            "(.xlsx, .xls ou .xlsb). Ranking por total absoluto (empate: % do plano; elegível se plano ≥ 2)."
         ),
     )
     turno = forms.ChoiceField(

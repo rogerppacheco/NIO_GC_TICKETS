@@ -59,7 +59,7 @@
     {% if parcial_gerencia_linhas %}
     <div class="parcial-todos-pdvs">
       <h3>Todos os PDVs da gerência PP ({{ parcial_gerencia_linhas|length }})</h3>
-      <p class="help" style="margin:0 0 0.5rem">Lista completa ordenada por % do plano. A imagem do WhatsApp leva só top/bottom 5 (elegíveis com plano ≥ 2).</p>
+      <p class="help" style="margin:0 0 0.5rem">Lista completa ordenada por total. A imagem do WhatsApp leva só top/bottom 5 (elegíveis com plano ≥ 2; empate por % do plano).</p>
       <div class="table-scroll parcial-todos-scroll">
         <table class="table">
           <thead>
@@ -212,7 +212,7 @@
         <form method="post" class="parcial-aside-envio" data-parcial-envio>
           {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
           <input type="hidden" name="parcial_sub" value="gerencia">
-          <p class="help" style="margin:0">Top/bottom 5 por % do plano (elegível se plano ≥ 2).</p>
+          <p class="help" style="margin:0">Top/bottom 5 por total absoluto (empate: % do plano; elegível se plano ≥ 2).</p>
           <select name="destinatario" required>
             <option value="">Grupo gerência…</option>
             {% for g in grupos_parcial %}
