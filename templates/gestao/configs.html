@@ -6,7 +6,13 @@
 <div class="hero">
   <div>
     <h1>Metas {{ mes|stringformat:"02d" }}/{{ ano }}</h1>
-    <p>Capilaridade (vendedores) e OSAB (VL/Gross/comissões) por parceiro.{% if not pode_editar %} A grade, a política PAP e o calendário só o admin altera; a importação da base está liberada.{% endif %}</p>
+    <p>Capilaridade (vendedores) e OSAB (VL/Gross/comissões) por parceiro.
+      {% if not pode_editar and not pode_editar_metas %}
+      A grade, a política PAP e o calendário só o admin altera; a importação da base está liberada.
+      {% elif not pode_editar %}
+      Especialistas podem editar a aba Metas por PDV (escopo atual). Política PAP e calendário só o admin altera.
+      {% endif %}
+    </p>
   </div>
 </div>
 
@@ -225,6 +231,7 @@
   <div class="tab-panel is-active" role="tabpanel">
     <p class="help" style="margin:0 0 0.75rem">
       <strong>Plano dia</strong> alimenta o parcial quando o PDV não aparece no Excel (ex.: zero vendas).
+      Ao importar o parcial, o Excel atualiza automaticamente o Plano dia em Metas.
       Se o Excel trouxer o PDV com plano, o valor da planilha prevalece.
     </p>
     <form method="post">
@@ -254,21 +261,21 @@
                 {{ linha.parceiro.nome }}
                 {% include "gestao/_especialista.html" with parceiro=linha.parceiro %}
               </td>
-              <td><input type="number" name="p{{ linha.parceiro.id }}_meta_vendedores" min="0" value="{{ linha.meta.meta_vendedores|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
-              <td><input type="number" name="p{{ linha.parceiro.id }}_meta_vl" min="0" value="{{ linha.osab.meta_vl|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
-              <td><input type="number" step="0.1" min="0" name="p{{ linha.parceiro.id }}_plano_dia" value="{% if linha.osab.plano_dia %}{{ linha.osab.plano_dia|unlocalize }}{% else %}0{% endif %}" title="Usado no parcial se o PDV não vier no Excel" {% if not pode_editar %}disabled{% endif %}></td>
-              <td><input type="number" step="0.1" name="p{{ linha.parceiro.id }}_du_vl" min="0" value="{% if linha.osab.du_vl %}{{ linha.osab.du_vl|unlocalize }}{% else %}{{ calendario_totais.du_vl|unlocalize }}{% endif %}" {% if not pode_editar %}disabled{% endif %}></td>
-              <td><input type="number" name="p{{ linha.parceiro.id }}_meta_gross" min="0" value="{{ linha.osab.meta_gross|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
-              <td><input type="number" step="0.1" name="p{{ linha.parceiro.id }}_du_gross" min="0" value="{% if linha.osab.du_gross %}{{ linha.osab.du_gross|unlocalize }}{% else %}{{ calendario_totais.du_gross|unlocalize }}{% endif %}" {% if not pode_editar %}disabled{% endif %}></td>
-              <td><input type="checkbox" name="p{{ linha.parceiro.id }}_tem_bonus" {% if linha.osab.tem_bonus %}checked{% endif %} {% if not pode_editar %}disabled{% endif %}></td>
-              <td><input type="number" name="p{{ linha.parceiro.id }}_comissao_bonus" min="0" value="{{ linha.osab.comissao_bonus|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
-              <td><input type="checkbox" name="p{{ linha.parceiro.id }}_tem_bonus_m10" {% if linha.osab.tem_bonus_m10 %}checked{% endif %} {% if not pode_editar %}disabled{% endif %}></td>
+              <td><input type="number" name="p{{ linha.parceiro.id }}_meta_vendedores" min="0" value="{{ linha.meta.meta_vendedores|default:0 }}" {% if not pode_editar_metas %}disabled{% endif %}></td>
+              <td><input type="number" name="p{{ linha.parceiro.id }}_meta_vl" min="0" value="{{ linha.osab.meta_vl|default:0 }}" {% if not pode_editar_metas %}disabled{% endif %}></td>
+              <td><input type="number" step="0.1" min="0" name="p{{ linha.parceiro.id }}_plano_dia" value="{% if linha.osab.plano_dia %}{{ linha.osab.plano_dia|unlocalize }}{% else %}0{% endif %}" title="Usado no parcial se o PDV não vier no Excel" {% if not pode_editar_metas %}disabled{% endif %}></td>
+              <td><input type="number" step="0.1" name="p{{ linha.parceiro.id }}_du_vl" min="0" value="{% if linha.osab.du_vl %}{{ linha.osab.du_vl|unlocalize }}{% else %}{{ calendario_totais.du_vl|unlocalize }}{% endif %}" {% if not pode_editar_metas %}disabled{% endif %}></td>
+              <td><input type="number" name="p{{ linha.parceiro.id }}_meta_gross" min="0" value="{{ linha.osab.meta_gross|default:0 }}" {% if not pode_editar_metas %}disabled{% endif %}></td>
+              <td><input type="number" step="0.1" name="p{{ linha.parceiro.id }}_du_gross" min="0" value="{% if linha.osab.du_gross %}{{ linha.osab.du_gross|unlocalize }}{% else %}{{ calendario_totais.du_gross|unlocalize }}{% endif %}" {% if not pode_editar_metas %}disabled{% endif %}></td>
+              <td><input type="checkbox" name="p{{ linha.parceiro.id }}_tem_bonus" {% if linha.osab.tem_bonus %}checked{% endif %} {% if not pode_editar_metas %}disabled{% endif %}></td>
+              <td><input type="number" name="p{{ linha.parceiro.id }}_comissao_bonus" min="0" value="{{ linha.osab.comissao_bonus|default:0 }}" {% if not pode_editar_metas %}disabled{% endif %}></td>
+              <td><input type="checkbox" name="p{{ linha.parceiro.id }}_tem_bonus_m10" {% if linha.osab.tem_bonus_m10 %}checked{% endif %} {% if not pode_editar_metas %}disabled{% endif %}></td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
-      {% if pode_editar %}
+      {% if pode_editar_metas %}
       <p style="margin-top:1rem"><button class="btn btn-primary" type="submit">Salvar metas</button></p>
       {% endif %}
     </form>

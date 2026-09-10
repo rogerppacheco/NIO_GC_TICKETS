@@ -99,6 +99,40 @@ def planos_cadastrados(
     return {int(c.parceiro_id): float(c.plano_dia) for c in qs.only("parceiro_id", "plano_dia")}
 
 
+def sincronizar_planos_dia_metas(dados: dict) -> int:
+    """Grava em Metas o Plano Dia vindo do Excel (só PDVs presentes na planilha)."""
+    from ..models import ConfiguracaoOSAB
+
+    ano = dados.get("ano")
+    mes = dados.get("mes")
+    if not ano or not mes:
+        return 0
+    bruto = dados.get("vendas_por_id") or {}
+    atualizados = 0
+    for chave, linha in bruto.items():
+        try:
+            pid = int(chave) if not isinstance(chave, int) else chave
+        except (TypeError, ValueError):
+            continue
+        plano = plano_lido((linha or {}).get("plano"))
+        if plano is None:
+            continue
+        obj, criado = ConfiguracaoOSAB.objects.get_or_create(
+            parceiro_id=pid,
+            ano=int(ano),
+            mes=int(mes),
+            defaults={"plano_dia": plano},
+        )
+        if criado:
+            atualizados += 1
+            continue
+        if float(obj.plano_dia or 0) != float(plano):
+            obj.plano_dia = plano
+            obj.save(update_fields=["plano_dia"])
+            atualizados += 1
+    return atualizados
+
+
 def plano_com_fallback(
     plano_excel: float | None,
     parceiro_id: int | None,

@@ -2771,6 +2771,25 @@ class ResultadosTests(TestCase):
         self.assertTrue(point["elegivel"])
         self.assertEqual(point["pct_pct"], 0)
 
+    def test_parcial_sincroniza_plano_dia_em_metas(self):
+        from gestao.models import ConfiguracaoOSAB
+        from gestao.pipelines.parcial_vendas import (
+            processar_parcial_excel,
+            sincronizar_planos_dia_metas,
+        )
+
+        arquivo = _xlsx(
+            [["INOVA MG", 45, 38]],
+            ["PDV", "Vendas Total", "Plano Dia"],
+        )
+        resumo = processar_parcial_excel(
+            arquivo, "parcial.xlsx", [self.pdv], turno=15, ano=2026, mes=9
+        )
+        n = sincronizar_planos_dia_metas(resumo)
+        self.assertEqual(n, 1)
+        cfg = ConfiguracaoOSAB.objects.get(parceiro=self.pdv, ano=2026, mes=9)
+        self.assertAlmostEqual(cfg.plano_dia, 38.0)
+
     def test_parcial_import_lê_excel_da_gerencia_inteira(self):
         from gestao.pipelines.parcial_vendas import aplicar_escopo_parcial, processar_parcial_excel
 

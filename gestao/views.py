@@ -121,6 +121,7 @@ from .pipelines.parcial_vendas import (
     aplicar_escopo_parcial,
     linha_pdv,
     processar_parcial_excel,
+    sincronizar_planos_dia_metas,
     sub_parcial,
     turno_parcial,
 )
@@ -860,10 +861,13 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                         mes=mes,
                         ids_gerencia=ids_gerencia,
                     )
+                    n_planos = sincronizar_planos_dia_metas(resumo)
                     _lote(request, LoteImportacao.Tipo.PARCIAL, arquivo.name, True, resumo)
                     aviso = ""
                     if resumo.get("sem_cadastro"):
                         aviso = f" {len(resumo['sem_cadastro'])} PDV(s) da planilha sem cadastro."
+                    if n_planos:
+                        aviso += f" Plano dia atualizado em Metas para {n_planos} PDV(s)."
                     pct_txt = (
                         f"{resumo['pct_pct']}%"
                         if resumo.get("pct_pct") is not None
@@ -1700,9 +1704,28 @@ def configs_view(request: HttpRequest) -> HttpResponse:
             else:
                 messages.error(request, "Selecione o Consolidado_DU (.xlsx).")
             return _voltar(request, "gestao_configs", "aba=calendario")
-        if not eh_gestor(request.user):
+
+        salvando_metas = (request.POST.get("aba") or aba) == "metas" and action in {
+            "salvar",
+            "",
+        }
+        if action in {
+            "salvar_politica",
+            "salvar_calendario",
+            "add_feriado",
+            "del_feriado",
+        }:
+            if not eh_gestor(request.user):
+                messages.error(request, "Só o admin altera política e calendário.")
+                return _voltar(request, "gestao_configs", aba_qs)
+        elif salvando_metas:
+            if not tem_acesso_interno(request.user):
+                messages.error(request, "Sem permissão para alterar metas.")
+                return _voltar(request, "gestao_configs", "aba=metas")
+        elif not eh_gestor(request.user):
             messages.error(request, "Só o admin altera metas, política e calendário.")
             return _voltar(request, "gestao_configs", aba_qs)
+
         if action == "salvar_politica":
             politica = PoliticaComissao.vigente()
             campos = [
@@ -1826,6 +1849,7 @@ def configs_view(request: HttpRequest) -> HttpResponse:
             "mes": mes,
             "linhas": linhas,
             "pode_editar": eh_gestor(request.user),
+            "pode_editar_metas": tem_acesso_interno(request.user),
             "form_import": form_import,
             "politica": PoliticaComissao.vigente(),
             "calendario": estrutura_calendario(ano, mes),
