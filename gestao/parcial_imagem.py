@@ -39,8 +39,9 @@ COLS = [
 ]
 
 COLS_CARTEIRA = [
-    ("Parceiro", 180),
-    ("Especialista", 140),
+    ("#", 36),
+    ("Parceiro", 170),
+    ("Especialista", 130),
     ("TOTAL", 60),
     ("Plano", 60),
     ("% Plano", 70),
@@ -133,7 +134,9 @@ def _celulas_linha(item: dict, cols: list[tuple[str, int]]) -> list[tuple[str, t
     eh_total = rotulo.upper().startswith("TOTAL")
     plano = item.get("plano")
     esp = nome_especialista_curto(item.get("especialista") or "") if not eh_total else ""
+    pos = item.get("posicao")
     mapa = {
+        "#": (str(pos) if pos is not None and not eh_total else "", MUTED),
         "Parceiro": (_truncar(rotulo, 26), INK),
         "Especialista": (_truncar(esp, 18), INK),
         "TOTAL": (str(int(item.get("vendas") or 0)), INK),
@@ -462,7 +465,7 @@ def _desenhar_por_especialista(
 
 
 def imagem_parcial_especialistas(dados: dict, *, titulo: str = "Carteira PP") -> tuple[bytes, str]:
-    """Visão completa plana: Parceiro | Especialista | TOTAL | Plano | % + TOTAL PP."""
+    """Visão completa plana: # | Parceiro | Especialista | TOTAL | Plano | % + TOTAL PP."""
     font_banner = _fonte(24, negrito=True)
     font_sub = _fonte(13)
     font_head = _fonte(12, negrito=True)
@@ -508,12 +511,13 @@ def imagem_parcial_especialistas(dados: dict, *, titulo: str = "Carteira PP") ->
         y_cur += ALT_LINHA
     else:
         for idx, item in enumerate(linhas):
+            linha = {**item, "posicao": idx + 1}
             y_cur = _desenhar_linha_dados(
                 draw,
                 x=x,
                 y=y_cur,
                 largura=tab_w,
-                item=item,
+                item=linha,
                 cols=cols,
                 font_cell=font_cell,
                 fundo=ALT_ROW if idx % 2 == 1 else None,
