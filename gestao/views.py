@@ -1787,6 +1787,7 @@ def configs_view(request: HttpRequest) -> HttpResponse:
                 "du_vl": du_vl,
                 "meta_gross": int(request.POST.get(prefix + "meta_gross") or 0),
                 "du_gross": du_gross,
+                "plano_dia": float(request.POST.get(prefix + "plano_dia") or 0),
                 "tem_bonus": prefix + "tem_bonus" in request.POST,
                 "comissao_bonus": int(request.POST.get(prefix + "comissao_bonus") or 0),
                 "tem_bonus_m10": prefix + "tem_bonus_m10" in request.POST,

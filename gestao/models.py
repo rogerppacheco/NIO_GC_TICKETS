@@ -211,6 +211,10 @@ class ConfiguracaoOSAB(models.Model):
     du_vl = models.FloatField(default=0)
     meta_gross = models.IntegerField(default=0)
     du_gross = models.FloatField(default=0)
+    plano_dia = models.FloatField(
+        default=0,
+        help_text="Plano do dia (VB) usado no parcial quando o PDV não vem no Excel.",
+    )
     pesos_diarios_vl = models.TextField(blank=True)
     pesos_diarios_gross = models.TextField(blank=True)
     comissao_500 = models.IntegerField(default=0)

@@ -2744,6 +2744,33 @@ class ResultadosTests(TestCase):
         self.assertFalse(linha_zero["elegivel"])
         self.assertEqual(resumo["qtd_sem_plano"], 1)
 
+    def test_parcial_usa_plano_cadastrado_em_metas(self):
+        from gestao.models import ConfiguracaoOSAB
+        from gestao.pipelines.parcial_vendas import processar_parcial_excel
+
+        outro = Parceiro.objects.create(codigo_pdv="r2b", nome="POINT CELL")
+        ConfiguracaoOSAB.objects.create(
+            parceiro=outro, ano=2026, mes=9, meta_vl=10, plano_dia=4.5
+        )
+        # Excel sem POINT CELL; INOVA com plano próprio (não usa Metas)
+        ConfiguracaoOSAB.objects.create(
+            parceiro=self.pdv, ano=2026, mes=9, meta_vl=20, plano_dia=99
+        )
+        arquivo = _xlsx(
+            [["INOVA MG", 45, 38]],
+            ["PDV", "Vendas Total", "Plano Dia"],
+        )
+        resumo = processar_parcial_excel(
+            arquivo, "parcial.xlsx", [self.pdv, outro], turno=15, ano=2026, mes=9
+        )
+        inova = next(l for l in resumo["linhas"] if l["pdv"] == "INOVA MG")
+        self.assertEqual(inova["plano"], 38)
+        point = next(l for l in resumo["linhas"] if l["pdv"] == "POINT CELL")
+        self.assertEqual(point["vendas"], 0)
+        self.assertAlmostEqual(point["plano"], 4.5)
+        self.assertTrue(point["elegivel"])
+        self.assertEqual(point["pct_pct"], 0)
+
     def test_parcial_import_lê_excel_da_gerencia_inteira(self):
         from gestao.pipelines.parcial_vendas import aplicar_escopo_parcial, processar_parcial_excel
 

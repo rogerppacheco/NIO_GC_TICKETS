@@ -85,6 +85,33 @@ def plano_lido(valor) -> float | None:
     return bruto
 
 
+def planos_cadastrados(
+    ano: int,
+    mes: int,
+    parceiro_ids: Iterable[int] | None = None,
+) -> dict[int, float]:
+    """Plano dia cadastrado em Metas (ConfiguracaoOSAB) para o período."""
+    from ..models import ConfiguracaoOSAB
+
+    qs = ConfiguracaoOSAB.objects.filter(ano=ano, mes=mes, plano_dia__gt=0)
+    if parceiro_ids is not None:
+        qs = qs.filter(parceiro_id__in=list(parceiro_ids))
+    return {int(c.parceiro_id): float(c.plano_dia) for c in qs.only("parceiro_id", "plano_dia")}
+
+
+def plano_com_fallback(
+    plano_excel: float | None,
+    parceiro_id: int | None,
+    planos_meta: dict[int, float],
+) -> float | None:
+    """Excel prevalece; se vazio, usa plano cadastrado em Metas."""
+    if plano_excel is not None:
+        return plano_excel
+    if parceiro_id is None:
+        return None
+    return planos_meta.get(int(parceiro_id))
+
+
 def elegivel_ranking(plano: float | None, *, min_plano: float = MIN_PLANO) -> bool:
     return plano is not None and plano >= min_plano
 
@@ -151,13 +178,16 @@ def _eh_total_planilha(nome: str) -> bool:
 def _completar_parceiros_escopo(
     linhas: list[dict],
     mapa_parceiros: dict[int, Parceiro],
+    *,
+    planos_meta: dict[int, float] | None = None,
 ) -> list[dict]:
-    """PDVs do escopo ausentes na planilha entram com zero e sem plano."""
+    """PDVs do escopo ausentes na planilha entram com zero e plano de Metas, se houver."""
+    planos_meta = planos_meta or {}
     vistos = {l["parceiro_id"] for l in linhas}
     out = list(linhas)
     for pid, parceiro in sorted(mapa_parceiros.items(), key=lambda x: (x[1].nome or "").upper()):
         if pid not in vistos:
-            out.append(_linha_parceiro(parceiro))
+            out.append(_linha_parceiro(parceiro, plano=planos_meta.get(pid)))
     return out
 
 
@@ -203,12 +233,13 @@ def processar_parcial_excel(
     indice = indice_parceiros()
     por_id: dict[int, dict] = {}
     sem_cadastro: list[str] = []
+    ids_para_meta = set(escopo_ids or ()) | set(ids_gerencia)
+    planos_meta = planos_cadastrados(ano, mes, ids_para_meta or None)
     for _, row in df.iterrows():
         nome_pdv = texto(row.get("pdv"))
         if not nome_pdv or _eh_total_planilha(nome_pdv):
             continue
         vendas = _int_valor(row.get(col_vendas))
-        plano = plano_lido(row.get(col_plano))
         pid = resolver_parceiro_id(nome_pdv, indice)
         if pid is None:
             sem_cadastro.append(nome_pdv)
@@ -216,6 +247,7 @@ def processar_parcial_excel(
         if escopo_ids is not None and pid not in escopo_ids:
             if pid not in ids_gerencia:
                 continue
+        plano = plano_com_fallback(plano_lido(row.get(col_plano)), pid, planos_meta)
         parceiro = mapa_parceiros.get(pid)
         if parceiro is None and (escopo_ids is not None or pid in ids_gerencia):
             parceiro = Parceiro.objects.filter(pk=pid).select_related("especialista").first()
@@ -232,7 +264,7 @@ def processar_parcial_excel(
     vendas_por_id = dict(por_id)
     linhas = list(por_id.values())
     if mapa_parceiros:
-        linhas = _completar_parceiros_escopo(linhas, mapa_parceiros)
+        linhas = _completar_parceiros_escopo(linhas, mapa_parceiros, planos_meta=planos_meta)
 
     if not linhas:
         raise ValueError(
@@ -264,14 +296,16 @@ def _mapa_vendas_parcial(dados: dict) -> dict[int, dict]:
     return {l["parceiro_id"]: l for l in dados.get("linhas") or []}
 
 
-def _recalcular_linha(linha: dict) -> dict:
-    """Garante métricas de % do plano; lotes antigos com D-7 ficam sem plano."""
+def _recalcular_linha(linha: dict, planos_meta: dict[int, float] | None = None) -> dict:
+    """Garante métricas de % do plano; usa Metas se plano do Excel estiver vazio."""
     vendas = int(linha.get("vendas") or 0)
+    pid = linha.get("parceiro_id")
     if "plano" in linha:
-        plano = plano_lido(linha.get("plano"))
+        plano_excel = plano_lido(linha.get("plano"))
     else:
-        # Bases antigas (D-7): não inventar plano — fora do ranking até reimportar.
-        plano = None
+        # Bases antigas (D-7): tenta só o cadastro em Metas.
+        plano_excel = None
+    plano = plano_com_fallback(plano_excel, pid, planos_meta or {})
     met = _metricas(vendas, plano)
     out = dict(linha)
     out.update(met)
@@ -283,10 +317,13 @@ def aplicar_escopo_parcial(dados: dict, parceiros: list) -> dict:
     """Recalcula totais/top/bottom para o escopo atual (ausentes entram com zero)."""
     mapa = {p.pk: p for p in parceiros}
     por_id = _mapa_vendas_parcial(dados)
+    ano = int(dados.get("ano") or periodo_ativo()[0])
+    mes = int(dados.get("mes") or periodo_ativo()[1])
+    planos_meta = planos_cadastrados(ano, mes, mapa.keys())
     linhas: list[dict] = []
     for pid in sorted(mapa.keys(), key=lambda x: (mapa[x].nome or "").upper()):
         if pid in por_id:
-            linha = _recalcular_linha(por_id[pid])
+            linha = _recalcular_linha(por_id[pid], planos_meta)
             if not linha.get("especialista_id") and mapa[pid].especialista_id:
                 linha = _linha_parceiro(
                     mapa[pid],
@@ -295,7 +332,7 @@ def aplicar_escopo_parcial(dados: dict, parceiros: list) -> dict:
                 )
             linhas.append(linha)
         else:
-            linhas.append(_linha_parceiro(mapa[pid]))
+            linhas.append(_linha_parceiro(mapa[pid], plano=planos_meta.get(pid)))
     return {**dados, **_totais_parcial(linhas), "linhas": linhas}
 
 

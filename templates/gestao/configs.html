@@ -223,6 +223,10 @@
 
   {% if aba == "metas" %}
   <div class="tab-panel is-active" role="tabpanel">
+    <p class="help" style="margin:0 0 0.75rem">
+      <strong>Plano dia</strong> alimenta o parcial quando o PDV não aparece no Excel (ex.: zero vendas).
+      Se o Excel trouxer o PDV com plano, o valor da planilha prevalece.
+    </p>
     <form method="post">
       {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       <input type="hidden" name="action" value="salvar">
@@ -234,6 +238,7 @@
               <th>PDV</th>
               <th>Meta vend.</th>
               <th>Meta VL</th>
+              <th>Plano dia</th>
               <th>DU VL</th>
               <th>Meta Gross</th>
               <th>DU Gross</th>
@@ -251,6 +256,7 @@
               </td>
               <td><input type="number" name="p{{ linha.parceiro.id }}_meta_vendedores" min="0" value="{{ linha.meta.meta_vendedores|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
               <td><input type="number" name="p{{ linha.parceiro.id }}_meta_vl" min="0" value="{{ linha.osab.meta_vl|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
+              <td><input type="number" step="0.1" min="0" name="p{{ linha.parceiro.id }}_plano_dia" value="{% if linha.osab.plano_dia %}{{ linha.osab.plano_dia|unlocalize }}{% else %}0{% endif %}" title="Usado no parcial se o PDV não vier no Excel" {% if not pode_editar %}disabled{% endif %}></td>
               <td><input type="number" step="0.1" name="p{{ linha.parceiro.id }}_du_vl" min="0" value="{% if linha.osab.du_vl %}{{ linha.osab.du_vl|unlocalize }}{% else %}{{ calendario_totais.du_vl|unlocalize }}{% endif %}" {% if not pode_editar %}disabled{% endif %}></td>
               <td><input type="number" name="p{{ linha.parceiro.id }}_meta_gross" min="0" value="{{ linha.osab.meta_gross|default:0 }}" {% if not pode_editar %}disabled{% endif %}></td>
               <td><input type="number" step="0.1" name="p{{ linha.parceiro.id }}_du_gross" min="0" value="{% if linha.osab.du_gross %}{{ linha.osab.du_gross|unlocalize }}{% else %}{{ calendario_totais.du_gross|unlocalize }}{% endif %}" {% if not pode_editar %}disabled{% endif %}></td>
