@@ -229,6 +229,18 @@
         <div class="parcial-aside-envio">
           <p class="help" style="margin:0">Parceiro + especialista · zerados em A–Z · linha <strong>TOTAL PP</strong> no rodapé.</p>
           {% if pode_enviar %}
+          {% if ranking_grupo_padrao %}
+          <form method="post" data-parcial-envio style="margin-bottom:0.5rem">
+            {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+            <input type="hidden" name="parcial_sub" value="consolidado">
+            <input type="hidden" name="destinatario" value="{{ ranking_grupo_padrao.id }}">
+            <button class="btn btn-primary" type="submit" name="action" value="enviar_parcial_consolidado">
+              Enviar no {{ ranking_grupo_padrao.nome }}
+            </button>
+          </form>
+          {% else %}
+          <p class="help err" style="margin:0 0 0.5rem">Cadastre/ative o grupo Parceiros_PP_Nio em Destinatários (Ranking consolidado + Resultados).</p>
+          {% endif %}
           <form method="post" data-parcial-envio>
             {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
             <input type="hidden" name="parcial_sub" value="consolidado">

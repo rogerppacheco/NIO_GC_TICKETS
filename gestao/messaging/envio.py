@@ -1546,6 +1546,39 @@ def enviar_parcial_gerencia(
     )
 
 
+def enviar_parcial_consolidado(
+    dados: dict,
+    user: AbstractBaseUser | None,
+    *,
+    destinatario_id: int | None = None,
+    parceiros: list[Parceiro] | None = None,
+    nota: str = "",
+) -> ResumoEnvio:
+    """Envia a imagem Carteira PP (todos os PDVs) para o grupo Parceiros_PP_Nio."""
+    from ..parcial_imagem import imagem_parcial_especialistas
+    from ..pipelines.parcial_vendas import caption_imagem_parcial
+
+    if not dados or not dados.get("linhas"):
+        return ResumoEnvio(erros=1, detalhes=["Importe a base Excel antes de enviar."])
+    if user is not None and not eh_gestor(user):
+        return ResumoEnvio(erros=1, detalhes=["Somente gestores enviam a Carteira PP no grupo."])
+    if not destinatario_id:
+        return ResumoEnvio(erros=1, detalhes=["Grupo Parceiros_PP_Nio não encontrado nos Destinatários."])
+    destinos = _destino_grupo(destinatario_id, parceiros)
+    if not destinos:
+        return ResumoEnvio(erros=1, detalhes=["Grupo inválido ou sem flag Resultados."])
+    png, nome = imagem_parcial_especialistas(dados, titulo="Carteira PP")
+    caption = caption_imagem_parcial(dados, sufixo="Carteira PP", nota=nota)
+    return _enviar_parcial_imagem(
+        png=png,
+        nome=nome,
+        caption=caption,
+        destinos=destinos,
+        parceiro=None,
+        user=user,
+    )
+
+
 def enviar_parcial_especialista(
     dados: dict,
     user: AbstractBaseUser | None,

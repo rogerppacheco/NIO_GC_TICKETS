@@ -57,6 +57,7 @@ from .messaging.envio import (
     enviar_venda_indevida_lote,
     enviar_parcial_especialista,
     enviar_parcial_carteira,
+    enviar_parcial_consolidado,
     enviar_parcial_gerencia,
     enviar_parcial_grupos,
     enviar_parcial_pdv,
@@ -907,6 +908,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
         if action in {
             "enviar_parcial_gerencia",
             "enviar_parcial_carteira",
+            "enviar_parcial_consolidado",
             "enviar_parcial_especialista",
             "enviar_parcial_grupos",
             "enviar_parcial_pdv",
@@ -923,6 +925,23 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                     request,
                     "Parcial gerência",
                     enviar_parcial_gerencia(
+                        dados,
+                        request.user,
+                        destinatario_id=dest_id,
+                        parceiros=visiveis,
+                        nota=nota_envio,
+                    ),
+                )
+            elif action == "enviar_parcial_consolidado":
+                dest_raw = (request.POST.get("destinatario") or "").strip()
+                dest_id = int(dest_raw) if dest_raw.isdigit() else None
+                if dest_id is None:
+                    padrao = _grupo_ranking_padrao(_grupos_parcial(visiveis))
+                    dest_id = padrao.pk if padrao else None
+                _flash_resumo(
+                    request,
+                    "Carteira PP (grupo)",
+                    enviar_parcial_consolidado(
                         dados,
                         request.user,
                         destinatario_id=dest_id,
