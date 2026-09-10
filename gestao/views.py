@@ -1039,9 +1039,8 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             parcial_gerencia_linhas = sorted(
                 parcial_dados.get("linhas") or [],
                 key=lambda l: (
-                    0 if l.get("pct_plano") is not None else 1,
-                    -(l.get("pct_plano") if l.get("pct_plano") is not None else 0),
                     -int(l.get("vendas") or 0),
+                    -(l.get("pct_plano") if l.get("pct_plano") is not None else float("-inf")),
                     l.get("pdv", "").upper(),
                 ),
             )
