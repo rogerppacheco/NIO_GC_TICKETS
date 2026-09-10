@@ -2666,8 +2666,8 @@ class ResultadosTests(TestCase):
         top, pior = _top_e_piores(linhas)
         self.assertEqual(len(top), 4)
         self.assertEqual(pior, [])
-        # Seleção por %; exibição por plano ↓ (C/VISION=4, B=3, A=2)
-        self.assertEqual([l["pdv"] for l in top], ["C", "VISION", "B", "A"])
+        # Ordenado por % do plano (maior entrega)
+        self.assertEqual([l["pdv"] for l in top], ["A", "B", "C", "VISION"])
 
         # GENESIS plano 0,11 e CENTRALNET sem plano ficam fora do ranking
         linhas6 = linhas + [
@@ -2679,8 +2679,8 @@ class ResultadosTests(TestCase):
         top6, pior6 = _top_e_piores(linhas6)
         self.assertEqual(len(top6), 5)
         self.assertEqual(len(pior6), 1)
-        # Top por %: A,B,E,C,VISION → exibido por plano ↓
-        self.assertEqual([l["pdv"] for l in top6], ["C", "VISION", "B", "A", "E"])
+        # Top por %: A, B, E, C, VISION
+        self.assertEqual([l["pdv"] for l in top6], ["A", "B", "E", "C", "VISION"])
         # Bottom do restante após top: só F (VISION já no top)
         self.assertEqual(pior6[0]["pdv"], "F")
         ids_top = {l["parceiro_id"] for l in top6}
@@ -2689,16 +2689,30 @@ class ResultadosTests(TestCase):
         self.assertNotIn(7, ids_top | ids_pior)
         self.assertNotIn(8, ids_top | ids_pior)
 
-    def test_top_desempate_por_volume(self):
+    def test_top_desempate_por_plano(self):
         from gestao.pipelines.parcial_vendas import _top_e_piores
 
+        # Mesmo %: quem tem plano maior entra/fica na frente
         linhas = [
-            {"parceiro_id": 1, "pdv": "PEQ", "vendas": 2, "plano": 2, "pct_plano": 1.0, "elegivel": True},
-            {"parceiro_id": 2, "pdv": "GRD", "vendas": 10, "plano": 10, "pct_plano": 1.0, "elegivel": True},
+            {"parceiro_id": 1, "pdv": "PEQ", "vendas": 100, "plano": 2, "pct_plano": 1.0, "elegivel": True},
+            {"parceiro_id": 2, "pdv": "GRD", "vendas": 5, "plano": 10, "pct_plano": 1.0, "elegivel": True},
         ]
         top, _ = _top_e_piores(linhas)
         self.assertEqual(top[0]["pdv"], "GRD")
         self.assertEqual(top[1]["pdv"], "PEQ")
+
+        # Bottom: empate em % baixo — plano maior entra no Bottom 5
+        bottom_linhas = [
+            {"parceiro_id": 1, "pdv": "TOPA", "vendas": 10, "plano": 5, "pct_plano": 2.0, "elegivel": True},
+            {"parceiro_id": 2, "pdv": "TOPB", "vendas": 9, "plano": 5, "pct_plano": 1.8, "elegivel": True},
+            {"parceiro_id": 3, "pdv": "TOPC", "vendas": 8, "plano": 5, "pct_plano": 1.6, "elegivel": True},
+            {"parceiro_id": 4, "pdv": "TOPD", "vendas": 7, "plano": 5, "pct_plano": 1.4, "elegivel": True},
+            {"parceiro_id": 5, "pdv": "TOPE", "vendas": 6, "plano": 5, "pct_plano": 1.2, "elegivel": True},
+            {"parceiro_id": 6, "pdv": "BAIXO_PLANO", "vendas": 1, "plano": 3, "pct_plano": 0.1, "elegivel": True},
+            {"parceiro_id": 7, "pdv": "BAIXO_ALTO", "vendas": 2, "plano": 20, "pct_plano": 0.1, "elegivel": True},
+        ]
+        _, pior = _top_e_piores(bottom_linhas)
+        self.assertEqual([l["pdv"] for l in pior], ["BAIXO_ALTO", "BAIXO_PLANO"])
 
     def test_parcial_aplica_escopo_todos(self):
         from gestao.pipelines.parcial_vendas import aplicar_escopo_parcial, montar_parcial

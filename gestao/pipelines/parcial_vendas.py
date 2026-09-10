@@ -425,29 +425,22 @@ def _chave_plano(linha: dict) -> float:
     return float(plano) if plano is not None else 0.0
 
 
-def _ordenar_por_plano(itens: list[dict]) -> list[dict]:
-    """Exibe Top/Bottom do maior plano para o menor (desempate: volume)."""
-    return sorted(
-        itens,
-        key=lambda l: (-_chave_plano(l), -int(l.get("vendas") or 0), l["pdv"].upper()),
-    )
-
-
 def _top_e_piores(linhas: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Top 5 / Bottom 5 por % do plano; lista exibida ordenada por plano ↓."""
+    """Top 5 / Bottom 5 por % do plano (maior entrega); empate → plano maior."""
     elegiveis = [l for l in linhas if l.get("elegivel")]
     ordenado = sorted(
         elegiveis,
-        key=lambda l: (-_chave_pct(l), -int(l.get("vendas") or 0), l["pdv"].upper()),
+        key=lambda l: (-_chave_pct(l), -_chave_plano(l), l["pdv"].upper()),
     )
     top5 = ordenado[:5]
     ids_top = {l["parceiro_id"] for l in top5}
     restantes = [l for l in elegiveis if l.get("parceiro_id") not in ids_top]
+    # Piores: menor %; no empate, plano maior entra no Bottom 5
     pior5 = sorted(
         restantes,
-        key=lambda l: (_chave_pct(l), int(l.get("vendas") or 0), l["pdv"].upper()),
+        key=lambda l: (_chave_pct(l), -_chave_plano(l), l["pdv"].upper()),
     )[:5]
-    return _ordenar_por_plano(top5), _ordenar_por_plano(pior5)
+    return top5, pior5
 
 
 def _totais_parcial(linhas: list[dict]) -> dict:
