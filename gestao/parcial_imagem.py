@@ -181,7 +181,14 @@ def _desenhar_tabela_simples(
     )
     draw.rounded_rectangle((x, y, x + largura, y + altura), radius=10, outline=LINE, fill=BG)
     draw.rectangle((x, y, x + largura, y + 28), fill=BRAND)
-    draw.text((x + 10, y + 5), titulo_secao, fill=(255, 255, 255), font=font_titulo)
+    if titulo_secao.startswith("▼"):
+        draw.text((x + 10, y + 5), "▼", fill=NEG, font=font_titulo)
+        resto = titulo_secao[1:]
+        if resto:
+            bbox = draw.textbbox((0, 0), "▼", font=font_titulo)
+            draw.text((x + 10 + (bbox[2] - bbox[0]), y + 5), resto, fill=(255, 255, 255), font=font_titulo)
+    else:
+        draw.text((x + 10, y + 5), titulo_secao, fill=(255, 255, 255), font=font_titulo)
 
     if sem_cabecalho_cols:
         y_row = y + 32

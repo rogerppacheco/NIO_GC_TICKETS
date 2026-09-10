@@ -2661,7 +2661,8 @@ class ResultadosTests(TestCase):
         top, pior = _top_e_piores(linhas)
         self.assertEqual(len(top), 4)
         self.assertEqual(pior, [])
-        self.assertEqual(top[0]["pdv"], "A")
+        # Seleção por %; exibição por plano ↓ (C/VISION=4, B=3, A=2)
+        self.assertEqual([l["pdv"] for l in top], ["C", "VISION", "B", "A"])
 
         # GENESIS plano 0,11 e CENTRALNET sem plano ficam fora do ranking
         linhas6 = linhas + [
@@ -2673,7 +2674,8 @@ class ResultadosTests(TestCase):
         top6, pior6 = _top_e_piores(linhas6)
         self.assertEqual(len(top6), 5)
         self.assertEqual(len(pior6), 1)
-        self.assertEqual([l["pdv"] for l in top6], ["A", "B", "E", "C", "VISION"])
+        # Top por %: A,B,E,C,VISION → exibido por plano ↓
+        self.assertEqual([l["pdv"] for l in top6], ["C", "VISION", "B", "A", "E"])
         # Bottom do restante após top: só F (VISION já no top)
         self.assertEqual(pior6[0]["pdv"], "F")
         ids_top = {l["parceiro_id"] for l in top6}

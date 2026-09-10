@@ -304,8 +304,21 @@ def _chave_pct(linha: dict) -> float:
     return float(pct) if pct is not None else float("-inf")
 
 
+def _chave_plano(linha: dict) -> float:
+    plano = linha.get("plano")
+    return float(plano) if plano is not None else 0.0
+
+
+def _ordenar_por_plano(itens: list[dict]) -> list[dict]:
+    """Exibe Top/Bottom do maior plano para o menor (desempate: volume)."""
+    return sorted(
+        itens,
+        key=lambda l: (-_chave_plano(l), -int(l.get("vendas") or 0), l["pdv"].upper()),
+    )
+
+
 def _top_e_piores(linhas: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Top 5 / Bottom 5 por % do plano; só elegíveis (plano ≥ MIN_PLANO)."""
+    """Top 5 / Bottom 5 por % do plano; lista exibida ordenada por plano ↓."""
     elegiveis = [l for l in linhas if l.get("elegivel")]
     ordenado = sorted(
         elegiveis,
@@ -318,7 +331,7 @@ def _top_e_piores(linhas: list[dict]) -> tuple[list[dict], list[dict]]:
         restantes,
         key=lambda l: (_chave_pct(l), int(l.get("vendas") or 0), l["pdv"].upper()),
     )[:5]
-    return top5, pior5
+    return _ordenar_por_plano(top5), _ordenar_por_plano(pior5)
 
 
 def _totais_parcial(linhas: list[dict]) -> dict:
