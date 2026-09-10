@@ -2647,6 +2647,11 @@ class ResultadosTests(TestCase):
 
         msg = caption_imagem_parcial(resumo, sufixo="Gerência PP")
         self.assertIn("Parcial", msg)
+        com_nota = caption_imagem_parcial(
+            resumo, sufixo="Gerência PP", nota="Vendas que entraram até 12:26:36"
+        )
+        self.assertIn("Vendas que entraram até 12:26:36", com_nota)
+        self.assertIn(msg, com_nota.split("\n\n")[0])
 
     def test_top_e_piores_sem_repetir(self):
         from gestao.pipelines.parcial_vendas import _top_e_piores

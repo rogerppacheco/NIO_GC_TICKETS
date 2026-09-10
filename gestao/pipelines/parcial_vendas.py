@@ -571,11 +571,20 @@ def agrupar_por_especialista(linhas: list[dict]) -> list[dict]:
     return grupos
 
 
-def caption_imagem_parcial(dados: dict, *, sufixo: str = "") -> str:
+def caption_imagem_parcial(
+    dados: dict,
+    *,
+    sufixo: str = "",
+    nota: str = "",
+) -> str:
     mes, ano = dados.get("mes"), dados.get("ano")
     rotulo = dados.get("rotulo_turno") or "—"
     base = f"📊 Parcial · {mes:02d}/{ano} · {rotulo}" if mes and ano else f"📊 Parcial · {rotulo}"
-    return f"{base} · {sufixo}" if sufixo else base
+    linha = f"{base} · {sufixo}" if sufixo else base
+    extra = (nota or "").strip()
+    if extra:
+        return f"{linha}\n\n{extra}"
+    return linha
 
 
 def linha_pdv(dados: dict, parceiro_id: int) -> dict | None:

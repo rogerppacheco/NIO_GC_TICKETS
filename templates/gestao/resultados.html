@@ -111,7 +111,7 @@
           <strong>{{ esp.especialista }}</strong>
           <p class="help" style="margin:0.25rem 0 0">{{ esp.qtd_pdvs }} PDV(s) · {{ esp.total_vendas }} VB · plano {{ esp.total_plano|floatformat:1 }} · {% if esp.pct_pct is not None %}{{ esp.pct_pct }}%{% else %}—{% endif %}</p>
           {% if pode_enviar and esp.especialista_id %}
-          <form method="post" style="margin-top:0.65rem">
+          <form method="post" style="margin-top:0.65rem" data-parcial-envio>
             {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
             <input type="hidden" name="parcial_sub" value="especialistas">
             <input type="hidden" name="especialista" value="{{ esp.especialista_id }}">
@@ -141,7 +141,7 @@
           <strong>{{ linha.pdv }}</strong>
           <p class="help" style="margin:0.25rem 0 0">{{ linha.vendas }} VB · plano {% if linha.plano is not None %}{{ linha.plano|floatformat:1 }}{% else %}—{% endif %} · {% if linha.pct_pct is not None %}{{ linha.pct_pct }}%{% else %}—{% endif %} · {{ linha.especialista }}</p>
           {% if pode_enviar %}
-          <form method="post" style="margin-top:0.65rem">
+          <form method="post" style="margin-top:0.65rem" data-parcial-envio>
             {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
             <input type="hidden" name="parcial_sub" value="parceiros">
             <input type="hidden" name="parceiro" value="{{ linha.parceiro_id }}">
@@ -198,8 +198,18 @@
         </form>
         {% endif %}
 
+        {% if parcial_dados and pode_enviar %}
+        <div class="parcial-aside-envio" id="parcial-nota-box">
+          <label for="parcial-nota-envio" style="display:block;font-weight:600;margin:0 0 0.35rem">Texto no envio (legenda)</label>
+          <textarea id="parcial-nota-envio" rows="2" maxlength="500"
+            placeholder="Ex.: Vendas que entraram até 12:26:36"
+            style="width:100%;box-sizing:border-box;resize:vertical"></textarea>
+          <p class="help" style="margin:0.35rem 0 0">Vai junto com a imagem em qualquer envio desta tela. Deixe em branco se não quiser.</p>
+        </div>
+        {% endif %}
+
         {% if parcial_dados and parcial_sub == "gerencia" and eh_gestor and pode_enviar %}
-        <form method="post" class="parcial-aside-envio">
+        <form method="post" class="parcial-aside-envio" data-parcial-envio>
           {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
           <input type="hidden" name="parcial_sub" value="gerencia">
           <p class="help" style="margin:0">Top/bottom 5 por % do plano (elegível se plano ≥ 2).</p>
@@ -219,7 +229,7 @@
         <div class="parcial-aside-envio">
           <p class="help" style="margin:0">Especialista → parceiros · linha <strong>TOTAL PP</strong> no rodapé.</p>
           {% if pode_enviar %}
-          <form method="post">
+          <form method="post" data-parcial-envio>
             {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
             <input type="hidden" name="parcial_sub" value="consolidado">
             <button class="btn btn-secondary" type="submit" name="action" value="enviar_parcial_grupos">Enviar a todos os grupos</button>
@@ -229,7 +239,7 @@
         {% endif %}
 
         {% if parcial_dados and parcial_sub == "parceiros" and pode_enviar and eh_gestor and parcial_pdvs|length > 1 %}
-        <form method="post" class="parcial-aside-envio">
+        <form method="post" class="parcial-aside-envio" data-parcial-envio>
           {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
           <input type="hidden" name="parcial_sub" value="parceiros">
           <button class="btn btn-secondary" type="submit" name="action" value="enviar_parcial_grupos">Enviar imagem em todos os grupos</button>
@@ -238,6 +248,27 @@
       </aside>
     </div>
   </div>
+  {% if parcial_dados and pode_enviar %}
+  <script>
+  (function () {
+    var nota = document.getElementById("parcial-nota-envio");
+    if (!nota) return;
+    function anexarNota(form) {
+      var input = form.querySelector('input[name="nota_envio"]');
+      if (!input) {
+        input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "nota_envio";
+        form.appendChild(input);
+      }
+      input.value = (nota.value || "").trim();
+    }
+    document.querySelectorAll("form[data-parcial-envio]").forEach(function (form) {
+      form.addEventListener("submit", function () { anexarNota(form); });
+    });
+  })();
+  </script>
+  {% endif %}
   {% endif %}
 
   {% if aba == "acumulado" %}

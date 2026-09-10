@@ -1520,6 +1520,7 @@ def enviar_parcial_gerencia(
     *,
     destinatario_id: int | None = None,
     parceiros: list[Parceiro] | None = None,
+    nota: str = "",
 ) -> ResumoEnvio:
     from ..parcial_imagem import imagem_parcial_gerencia
     from ..pipelines.parcial_vendas import caption_imagem_parcial
@@ -1534,7 +1535,7 @@ def enviar_parcial_gerencia(
     if not destinos:
         return ResumoEnvio(erros=1, detalhes=["Grupo inválido ou sem flag Resultados."])
     png, nome = imagem_parcial_gerencia(dados)
-    caption = caption_imagem_parcial(dados, sufixo="Parceiros PP")
+    caption = caption_imagem_parcial(dados, sufixo="Parceiros PP", nota=nota)
     return _enviar_parcial_imagem(
         png=png,
         nome=nome,
@@ -1550,6 +1551,7 @@ def enviar_parcial_especialista(
     user: AbstractBaseUser | None,
     *,
     especialista_id: int,
+    nota: str = "",
 ) -> ResumoEnvio:
     from ..parcial_imagem import imagem_parcial_especialista
     from ..pipelines.parcial_vendas import agrupar_por_especialista, caption_imagem_parcial
@@ -1568,7 +1570,7 @@ def enviar_parcial_especialista(
     if not destinos:
         return ResumoEnvio(erros=1, detalhes=["WhatsApp do especialista não cadastrado."])
     png, nome = imagem_parcial_especialista(grupo, dados)
-    caption = caption_imagem_parcial(dados, sufixo=grupo["especialista"])
+    caption = caption_imagem_parcial(dados, sufixo=grupo["especialista"], nota=nota)
     return _enviar_parcial_imagem(
         png=png,
         nome=nome,
@@ -1583,6 +1585,8 @@ def enviar_parcial_carteira(
     parceiros: list[Parceiro],
     user: AbstractBaseUser | None,
     dados: dict,
+    *,
+    nota: str = "",
 ) -> ResumoEnvio:
     """Envia a carteira do usuário logado (especialista)."""
     if user is None:
@@ -1591,6 +1595,7 @@ def enviar_parcial_carteira(
         dados,
         user,
         especialista_id=user.id,
+        nota=nota,
     )
 
 
@@ -1598,6 +1603,8 @@ def enviar_parcial_grupos(
     parceiros: list[Parceiro],
     user: AbstractBaseUser | None,
     dados: dict,
+    *,
+    nota: str = "",
 ) -> ResumoEnvio:
     """Envia imagem individual para o grupo de cada PDV no escopo."""
     from ..parcial_imagem import imagem_parcial_pdv
@@ -1613,7 +1620,7 @@ def enviar_parcial_grupos(
             total.detalhes.append(f"— {parceiro.nome}: fora da base importada.")
             continue
         png, nome = imagem_parcial_pdv(linha, dados)
-        caption = caption_imagem_parcial(dados, sufixo=parceiro.nome)
+        caption = caption_imagem_parcial(dados, sufixo=parceiro.nome, nota=nota)
         parte = _enviar_parcial_imagem(
             png=png,
             nome=nome,
@@ -1636,6 +1643,8 @@ def enviar_parcial_pdv(
     parceiro: Parceiro,
     user: AbstractBaseUser | None,
     dados: dict,
+    *,
+    nota: str = "",
 ) -> ResumoEnvio:
     from ..parcial_imagem import imagem_parcial_pdv
     from ..pipelines.parcial_vendas import caption_imagem_parcial, linha_pdv
@@ -1644,7 +1653,7 @@ def enviar_parcial_pdv(
     if not linha:
         return ResumoEnvio(ignorados=1, detalhes=[f"{parceiro.nome}: fora da base importada."])
     png, nome = imagem_parcial_pdv(linha, dados)
-    caption = caption_imagem_parcial(dados, sufixo=parceiro.nome)
+    caption = caption_imagem_parcial(dados, sufixo=parceiro.nome, nota=nota)
     return _enviar_parcial_imagem(
         png=png,
         nome=nome,

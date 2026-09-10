@@ -915,6 +915,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             if not dados:
                 messages.error(request, "Importe a base Excel antes de enviar.")
                 return _voltar(request, "gestao_resultados", extra=_parcial_extra(request))
+            nota_envio = (request.POST.get("nota_envio") or "").strip()
             if action == "enviar_parcial_gerencia":
                 dest_raw = (request.POST.get("destinatario") or "").strip()
                 dest_id = int(dest_raw) if dest_raw.isdigit() else None
@@ -926,13 +927,14 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                         request.user,
                         destinatario_id=dest_id,
                         parceiros=visiveis,
+                        nota=nota_envio,
                     ),
                 )
             elif action == "enviar_parcial_carteira":
                 _flash_resumo(
                     request,
                     "Parcial carteira",
-                    enviar_parcial_carteira(visiveis, request.user, dados),
+                    enviar_parcial_carteira(visiveis, request.user, dados, nota=nota_envio),
                 )
             elif action == "enviar_parcial_especialista":
                 esp_raw = (request.POST.get("especialista") or "").strip()
@@ -946,13 +948,14 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                             dados,
                             request.user,
                             especialista_id=int(esp_raw),
+                            nota=nota_envio,
                         ),
                     )
             elif action == "enviar_parcial_grupos":
                 _flash_resumo(
                     request,
                     "Parcial grupos",
-                    enviar_parcial_grupos(visiveis, request.user, dados),
+                    enviar_parcial_grupos(visiveis, request.user, dados, nota=nota_envio),
                 )
             else:
                 parceiro = get_object_or_404(
@@ -962,7 +965,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                 _flash_resumo(
                     request,
                     "Parcial PDV",
-                    enviar_parcial_pdv(parceiro, request.user, dados),
+                    enviar_parcial_pdv(parceiro, request.user, dados, nota=nota_envio),
                 )
             return _voltar(request, "gestao_resultados", extra=_parcial_extra(request))
         if action == "enviar_acumulado_pdv" and _pode_enviar(request):
