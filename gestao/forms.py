@@ -137,8 +137,8 @@ class ParcialResultadoForm(forms.Form):
         label="Base Excel",
         required=False,
         help_text=(
-            "Exporte da dashboard: colunas PDV, vendas totais do mês e referência D-7 "
-            "(TOTAL / REALIZADO e D-7 ou VENDAS_D7). .xlsx, .xls ou .xlsb."
+            "Exporte da dashboard: colunas Parceiro/PDV, Vendas Total e Plano Dia "
+            "(.xlsx, .xls ou .xlsb). Sem plano ou plano zerado vira 2."
         ),
     )
     turno = forms.ChoiceField(

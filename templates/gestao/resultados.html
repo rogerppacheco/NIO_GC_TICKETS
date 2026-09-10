@@ -59,7 +59,7 @@
     {% if parcial_gerencia_linhas %}
     <div class="parcial-todos-pdvs">
       <h3>Todos os PDVs da gerência PP ({{ parcial_gerencia_linhas|length }})</h3>
-      <p class="help" style="margin:0 0 0.5rem">Lista completa ordenada por ∆ D-7. A imagem do WhatsApp leva só top/bottom 5.</p>
+      <p class="help" style="margin:0 0 0.5rem">Lista completa ordenada por ritmo do turno. A imagem do WhatsApp leva só top/bottom 5.</p>
       <div class="table-scroll parcial-todos-scroll">
         <table class="table">
           <thead>
@@ -67,8 +67,9 @@
               <th>#</th>
               <th>PDV</th>
               <th>Total</th>
-              <th>D-7</th>
-              <th>∆</th>
+              <th>Plano</th>
+              <th>Ritmo</th>
+              <th>∆ vs esp.</th>
               <th>Especialista</th>
             </tr>
           </thead>
@@ -78,7 +79,8 @@
               <td>{{ forloop.counter }}</td>
               <td>{{ linha.pdv }}</td>
               <td>{{ linha.vendas }}</td>
-              <td>{{ linha.d7 }}</td>
+              <td>{{ linha.plano }}</td>
+              <td>{{ linha.ritmo_pct }}%</td>
               <td>{{ linha.delta|stringformat:"+d" }}</td>
               <td>{{ linha.especialista }}</td>
             </tr>
@@ -109,7 +111,7 @@
         </div>
         <div class="parcial-card-acao">
           <strong>{{ esp.especialista }}</strong>
-          <p class="help" style="margin:0.25rem 0 0">{{ esp.qtd_pdvs }} PDV(s) · {{ esp.total_vendas }} VB · ∆ {{ esp.delta|stringformat:"+d" }}</p>
+          <p class="help" style="margin:0.25rem 0 0">{{ esp.qtd_pdvs }} PDV(s) · {{ esp.total_vendas }} VB · ritmo {{ esp.ritmo_pct }}% · ∆ {{ esp.delta|stringformat:"+d" }} vs esp.</p>
           {% if pode_enviar and esp.especialista_id %}
           <form method="post" style="margin-top:0.65rem">
             {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
@@ -139,7 +141,7 @@
         </div>
         <div class="parcial-card-acao">
           <strong>{{ linha.pdv }}</strong>
-          <p class="help" style="margin:0.25rem 0 0">{{ linha.vendas }} VB · D-7 {{ linha.d7 }} · ∆ {{ linha.delta|stringformat:"+d" }} · {{ linha.especialista }}</p>
+          <p class="help" style="margin:0.25rem 0 0">{{ linha.vendas }} VB · plano {{ linha.plano }} · ritmo {{ linha.ritmo_pct }}% · ∆ {{ linha.delta|stringformat:"+d" }} vs esp. · {{ linha.especialista }}</p>
           {% if pode_enviar %}
           <form method="post" style="margin-top:0.65rem">
             {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
@@ -166,12 +168,13 @@
       <aside class="parcial-workspace-aside">
         <div class="parcial-intro">
           <p class="help" style="margin:0">
-            Importe a base Excel da dashboard (<strong>Total / D-7</strong>), gere a imagem automaticamente e envie nos turnos
-            <strong>12h · 15h · 18h</strong>.
+            Importe a base Excel da dashboard (<strong>Vendas Total / Plano Dia</strong>), gere a imagem automaticamente e envie nos turnos
+            <strong>12h · 15h · 18h</strong> (ritmo vs plano).
             {% if parcial_dados %}
-            Base ativa: {{ parcial_dados.qtd_pdvs }} PDV(s) · {{ parcial_dados.total_pp }} VB · ∆ D-7 {{ parcial_dados.delta_pp|stringformat:"+d" }}
+            Base ativa: {{ parcial_dados.qtd_pdvs }} PDV(s) · {{ parcial_dados.total_pp }} VB · ritmo {{ parcial_dados.ritmo_pct }}%
+            · ∆ vs esp. {{ parcial_dados.delta_pp|stringformat:"+d" }}
             · turno {{ parcial_dados.rotulo_turno }}
-            {% if ultimo_parcial %} · importada {{ ultimo_parcial.criado_em|date:"d/m H:i" }}{% endif %}.
+            {% if ultimo_parcial %} · importada {{ ultimo_parcial.criado_em|date:"d/m/Y H:i" }}{% if ultimo_parcial.criado_por %} por {{ ultimo_parcial.criado_por.get_full_name|default:ultimo_parcial.criado_por.username }}{% endif %}{% endif %}.
             {% if parcial_sub == "gerencia" and eh_gestor and gestao_escopo != "todos" %}
             <span class="help">Gerência usa todos os PDVs da gerência PP.</span>
             {% endif %}
@@ -180,6 +183,7 @@
             {% endif %}
             {% else %}
             Turno sugerido agora: <strong>{{ parcial_turno }}</strong>.
+            {% include "gestao/_ultima_importacao.html" %}
             {% endif %}
           </p>
         </div>
@@ -420,7 +424,7 @@
             </form>
             <p class="help">
               BTU = portfólio <strong>NOVO ESPECIAL</strong> no GDP.
-              {% if ultimo_gdp %}Último import: {{ ultimo_gdp.arquivo_nome }} em {{ ultimo_gdp.criado_em|date:"d/m H:i" }}.{% endif %}
+              {% if ultimo_gdp %}Último import GDP: {{ ultimo_gdp.arquivo_nome }} em {{ ultimo_gdp.criado_em|date:"d/m/Y H:i" }}{% if ultimo_gdp.criado_por %} por {{ ultimo_gdp.criado_por.get_full_name|default:ultimo_gdp.criado_por.username }}{% endif %}.{% else %}Nenhuma importação GDP ainda.{% endif %}
             </p>
             <form method="post" class="fila-toolbar" style="margin-bottom:0.8rem">
               {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}

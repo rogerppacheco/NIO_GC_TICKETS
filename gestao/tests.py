@@ -987,6 +987,16 @@ class GestaoViewsTests(TestCase):
         r = self.client.get(reverse("gestao_hub"))
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "Gestão de bases")
+        self.assertContains(r, "Última importação por base")
+
+    def test_hub_especialista_nao_da_500(self):
+        User = get_user_model()
+        esp = User.objects.create_user("esp_hub", "eh@x.com", "x")
+        PerfilStaff.objects.create(user=esp, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self.client.force_login(esp)
+        r = self.client.get(reverse("gestao_hub"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Última importação por base")
 
     def test_salvar_periodo(self):
         self.client.force_login(self.gestor)
@@ -2610,6 +2620,7 @@ class ResultadosTests(TestCase):
         from gestao.pipelines.parcial_vendas import (
             agrupar_por_especialista,
             caption_imagem_parcial,
+            fracao_turno,
             processar_parcial_excel,
             turno_parcial,
         )
@@ -2618,22 +2629,27 @@ class ResultadosTests(TestCase):
         self.assertEqual(turno_parcial(14), (15, "15h"))
         self.assertEqual(turno_parcial(16), (18, "18h"))
         self.assertEqual(turno_parcial(20), (18, "18h"))
+        self.assertEqual(fracao_turno(15), 15 / 24)
 
+        # 15h: esperado = 38 * 15/24 = 23.75 → ritmo = 45/23.75 ≈ 1.895 · delta ≈ +21
         arquivo = _xlsx(
             [["INOVA MG", 45, 38]],
-            ["PDV", "TOTAL", "D-7"],
+            ["PDV", "TOTAL", "Plano Dia"],
         )
         resumo = processar_parcial_excel(arquivo, "parcial.xlsx", [self.pdv], turno=15, ano=2026, mes=9)
         self.assertEqual(resumo["total_pp"], 45)
-        self.assertEqual(resumo["delta_pp"], 7)
         self.assertEqual(resumo["rotulo_turno"], "15h")
         self.assertEqual(len(resumo["linhas"]), 1)
+        linha = resumo["linhas"][0]
+        self.assertEqual(linha["plano"], 38)
+        self.assertAlmostEqual(linha["esperado"], 38 * 15 / 24, places=2)
+        self.assertEqual(resumo["delta_pp"], linha["delta"])
+        self.assertGreater(linha["ritmo"], 1)
 
         png, nome = imagem_parcial_gerencia(resumo)
         self.assertTrue(png.startswith(b"\x89PNG"))
         self.assertIn("Gerencia", nome)
 
-        linha = resumo["linhas"][0]
         png_pdv, _ = imagem_parcial_pdv(linha, resumo)
         self.assertTrue(png_pdv.startswith(b"\x89PNG"))
 
@@ -2645,22 +2661,35 @@ class ResultadosTests(TestCase):
         msg = caption_imagem_parcial(resumo, sufixo="Gerência PP")
         self.assertIn("Parcial", msg)
 
+    def test_parcial_plano_zerado_vira_default(self):
+        from gestao.pipelines.parcial_vendas import PLANO_DEFAULT, processar_parcial_excel
+
+        arquivo = _xlsx(
+            [["INOVA MG", 4, 0]],
+            ["Parceiro", "Vendas Total", "Plano Dia"],
+        )
+        resumo = processar_parcial_excel(arquivo, "parcial.xlsx", [self.pdv], turno=12, ano=2026, mes=9)
+        linha = resumo["linhas"][0]
+        self.assertEqual(linha["plano"], PLANO_DEFAULT)
+        self.assertEqual(linha["esperado"], PLANO_DEFAULT * 0.5)
+        self.assertEqual(linha["ritmo_pct"], 400)
+
     def test_top_e_piores_sem_repetir(self):
         from gestao.pipelines.parcial_vendas import _top_e_piores
 
         linhas = [
-            {"parceiro_id": 1, "pdv": "A", "vendas": 6, "d7": 0, "delta": 6},
-            {"parceiro_id": 2, "pdv": "B", "vendas": 5, "d7": 1, "delta": 4},
-            {"parceiro_id": 3, "pdv": "C", "vendas": 2, "d7": 0, "delta": 2},
-            {"parceiro_id": 4, "pdv": "VISION", "vendas": 3, "d7": 6, "delta": -3},
+            {"parceiro_id": 1, "pdv": "A", "vendas": 6, "plano": 2, "ritmo": 6.0, "delta": 5},
+            {"parceiro_id": 2, "pdv": "B", "vendas": 5, "plano": 2, "ritmo": 4.0, "delta": 4},
+            {"parceiro_id": 3, "pdv": "C", "vendas": 2, "plano": 2, "ritmo": 2.0, "delta": 1},
+            {"parceiro_id": 4, "pdv": "VISION", "vendas": 3, "plano": 10, "ritmo": 0.3, "delta": -3},
         ]
         top, pior = _top_e_piores(linhas)
         self.assertEqual(len(top), 4)
         self.assertEqual(pior, [])
 
         linhas6 = linhas + [
-            {"parceiro_id": 5, "pdv": "E", "vendas": 1, "d7": 0, "delta": 1},
-            {"parceiro_id": 6, "pdv": "F", "vendas": 0, "d7": 0, "delta": 0},
+            {"parceiro_id": 5, "pdv": "E", "vendas": 1, "plano": 2, "ritmo": 1.0, "delta": 0},
+            {"parceiro_id": 6, "pdv": "F", "vendas": 1, "plano": 2, "ritmo": 0.5, "delta": -1},
         ]
         top6, pior6 = _top_e_piores(linhas6)
         self.assertEqual(len(top6), 5)
@@ -2680,8 +2709,11 @@ class ResultadosTests(TestCase):
                     "parceiro_id": self.pdv.pk,
                     "pdv": self.pdv.nome,
                     "vendas": 10,
-                    "d7": 8,
-                    "delta": 2,
+                    "plano": 8,
+                    "esperado": 5,
+                    "ritmo": 2.0,
+                    "ritmo_pct": 200,
+                    "delta": 5,
                     "especialista_id": None,
                     "especialista": "—",
                 }
@@ -2696,14 +2728,15 @@ class ResultadosTests(TestCase):
         self.assertEqual(expandido["total_pp"], 10)
         linha_zero = next(l for l in expandido["linhas"] if l["pdv"] == "OUTRO PDV")
         self.assertEqual(linha_zero["vendas"], 0)
+        self.assertEqual(linha_zero["plano"], 2)
 
     def test_parcial_completa_ausentes_com_zero(self):
-        from gestao.pipelines.parcial_vendas import processar_parcial_excel
+        from gestao.pipelines.parcial_vendas import PLANO_DEFAULT, processar_parcial_excel
 
         outro = Parceiro.objects.create(codigo_pdv="r2", nome="POINT CELL")
         arquivo = _xlsx(
             [["INOVA MG", 45, 38]],
-            ["PDV", "TOTAL", "D-7"],
+            ["PDV", "TOTAL", "Plano Dia"],
         )
         resumo = processar_parcial_excel(
             arquivo, "parcial.xlsx", [self.pdv, outro], turno=15, ano=2026, mes=9
@@ -2712,8 +2745,8 @@ class ResultadosTests(TestCase):
         self.assertEqual(resumo["total_pp"], 45)
         linha_zero = next(l for l in resumo["linhas"] if l["pdv"] == "POINT CELL")
         self.assertEqual(linha_zero["vendas"], 0)
-        self.assertEqual(linha_zero["d7"], 0)
-        self.assertEqual(linha_zero["delta"], 0)
+        self.assertEqual(linha_zero["plano"], PLANO_DEFAULT)
+        self.assertLess(linha_zero["delta"], 0)
 
     def test_parcial_import_lê_excel_da_gerencia_inteira(self):
         from gestao.pipelines.parcial_vendas import aplicar_escopo_parcial, processar_parcial_excel
@@ -2731,7 +2764,7 @@ class ResultadosTests(TestCase):
                 ["INOVA MG", 10, 8],
                 ["FABRETTI", 20, 15],
             ],
-            ["PDV", "TOTAL", "D-7"],
+            ["PDV", "TOTAL", "Plano Dia"],
         )
         todos = list(__import__("tickets.acesso", fromlist=["parceiros_gestao"]).parceiros_gestao(self.gestor, "todos"))
         ids_g = {p.pk for p in todos}
@@ -2762,8 +2795,10 @@ class ResultadosTests(TestCase):
                 "parceiro_id": 1,
                 "pdv": "PDV A",
                 "vendas": 5,
-                "d7": 0,
-                "delta": 5,
+                "plano": 4,
+                "esperado": 2,
+                "ritmo": 2.5,
+                "delta": 3,
                 "especialista_id": 1,
                 "especialista": "Ana Silva Costa",
             },
@@ -2771,8 +2806,10 @@ class ResultadosTests(TestCase):
                 "parceiro_id": 2,
                 "pdv": "PDV B",
                 "vendas": 10,
-                "d7": 0,
-                "delta": 10,
+                "plano": 8,
+                "esperado": 4,
+                "ritmo": 2.5,
+                "delta": 6,
                 "especialista_id": 2,
                 "especialista": "Bruno Santos Lima",
             },
@@ -2780,8 +2817,10 @@ class ResultadosTests(TestCase):
                 "parceiro_id": 3,
                 "pdv": "PDV C",
                 "vendas": 3,
-                "d7": 0,
-                "delta": 3,
+                "plano": 2,
+                "esperado": 1,
+                "ritmo": 3.0,
+                "delta": 2,
                 "especialista_id": 1,
                 "especialista": "Ana Silva Costa",
             },
@@ -2796,7 +2835,7 @@ class ResultadosTests(TestCase):
     def test_importar_parcial_pela_tela(self):
         arquivo = _xlsx(
             [["INOVA MG", 30, 25]],
-            ["PDV", "VENDAS", "D7"],
+            ["PDV", "VENDAS", "Plano Dia"],
         )
         r = self.client.post(
             reverse("gestao_resultados"),

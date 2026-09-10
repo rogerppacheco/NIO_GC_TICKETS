@@ -25,8 +25,11 @@
       <p class="help">Arquivo do e-mail (APELIDO, REF_VENCTO) ou export do Power BI (<code>nm_pdv_rel</code>, <code>MES_VENC</code>). O sistema normaliza as colunas e usa só INDICADOR=FPD na janela de 3 meses.</p>
       <button class="btn btn-primary" type="submit" style="margin-top:0.7rem">Processar FPD</button>
     </form>
+    {% include "gestao/_ultima_importacao.html" %}
   </div>
 </div>
+{% else %}
+{% include "gestao/_ultima_importacao.html" %}
 {% endif %}
 {% for r in relatorios %}
   <div class="mask-card">

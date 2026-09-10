@@ -1,0 +1,14 @@
+{% if ultima_importacao %}
+<p class="help ultima-importacao" style="margin:0.55rem 0 0">
+  Última importação:
+  <strong>{{ ultima_importacao.criado_em|date:"d/m/Y H:i" }}</strong>
+  {% if ultima_importacao.arquivo_nome %}
+  · {{ ultima_importacao.arquivo_nome }}
+  {% endif %}
+  {% if ultima_importacao.criado_por %}
+  · por {{ ultima_importacao.criado_por.get_full_name|default:ultima_importacao.criado_por.username }}
+  {% endif %}
+</p>
+{% else %}
+<p class="help ultima-importacao" style="margin:0.55rem 0 0">Nenhuma importação registrada ainda.</p>
+{% endif %}

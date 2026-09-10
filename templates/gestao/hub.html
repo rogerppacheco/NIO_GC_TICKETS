@@ -55,16 +55,20 @@
     </div>
   </div>
   <div class="panel">
-    <div class="panel-h"><h2>Últimas importações</h2></div>
+    <div class="panel-h"><h2>Última importação por base</h2></div>
     <table class="table">
-      <thead><tr><th>Tipo</th><th>Arquivo</th><th>Quando</th><th></th></tr></thead>
+      <thead><tr><th>Base</th><th>Arquivo</th><th>Quando</th><th>Por</th></tr></thead>
       <tbody>
-        {% for lote in lotes %}
+        {% for item in ultimos_por_tipo %}
         <tr>
-          <td>{{ lote.get_tipo_display }}</td>
-          <td>{{ lote.arquivo_nome }}</td>
-          <td>{{ lote.criado_em|date:"d/m H:i" }}</td>
-          <td>{% if lote.ok %}<span class="pill resolvido">ok</span>{% else %}<span class="pill cancelado">erro</span>{% endif %}</td>
+          <td>{{ item.rotulo }}</td>
+          {% if item.lote %}
+          <td>{{ item.lote.arquivo_nome|truncatechars:28 }}</td>
+          <td>{{ item.lote.criado_em|date:"d/m/Y H:i" }}</td>
+          <td>{{ item.lote.criado_por.get_full_name|default:item.lote.criado_por.username|default:"—" }}</td>
+          {% else %}
+          <td colspan="3" class="help">Sem importação ok</td>
+          {% endif %}
         </tr>
         {% empty %}
         <tr><td colspan="4">Nenhuma importação ainda.</td></tr>
@@ -72,5 +76,24 @@
       </tbody>
     </table>
   </div>
+</div>
+
+<div class="panel" style="margin-top:1rem">
+  <div class="panel-h"><h2>Últimas importações (histórico)</h2></div>
+  <table class="table">
+  <thead><tr><th>Tipo</th><th>Arquivo</th><th>Quando</th><th></th></tr></thead>
+  <tbody>
+    {% for lote in lotes %}
+    <tr>
+      <td>{{ lote.get_tipo_display }}</td>
+      <td>{{ lote.arquivo_nome }}</td>
+      <td>{{ lote.criado_em|date:"d/m/Y H:i" }}</td>
+      <td>{% if lote.ok %}<span class="pill resolvido">ok</span>{% else %}<span class="pill cancelado">erro</span>{% endif %}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="4">Nenhuma importação ainda.</td></tr>
+    {% endfor %}
+  </tbody>
+  </table>
 </div>
 {% endblock %}

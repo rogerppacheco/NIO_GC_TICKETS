@@ -29,12 +29,15 @@
       </label>
       <button class="btn btn-primary" type="submit" style="margin-top:0.7rem">Processar</button>
     </form>
+    {% include "gestao/_ultima_importacao.html" %}
     <p class="help" style="margin-top:0.6rem">
       Abertas: destinatários do PDV com flag <strong>Tarefas</strong>.
       Fechadas/futuros: grupos com a mesma flag.
     </p>
   </div>
 </div>
+{% else %}
+{% include "gestao/_ultima_importacao.html" %}
 {% endif %}
 
 {% if pode_enviar and lotes %}

@@ -6,7 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
-from django.db.models import Q
+from django.db.models import Count, Max, Q
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -147,6 +147,24 @@ def _lote(request, tipo: str, arquivo_nome: str, ok: bool, resumo: dict, erro: s
         resumo=resumo or {},
         criado_por=request.user if request.user.is_authenticated else None,
     )
+
+
+def _ultimo_lote_ok(tipo: str) -> LoteImportacao | None:
+    """Última importação ok do tipo (global — gestor e especialistas veem a mesma)."""
+    return (
+        LoteImportacao.objects.filter(tipo=tipo, ok=True)
+        .select_related("criado_por")
+        .order_by("-criado_em")
+        .first()
+    )
+
+
+def _ultimos_lotes_por_tipo() -> list[dict]:
+    """Uma entrada por tipo de base com a última importação ok."""
+    return [
+        {"tipo": tipo, "rotulo": rotulo, "lote": _ultimo_lote_ok(tipo)}
+        for tipo, rotulo in LoteImportacao.Tipo.choices
+    ]
 
 
 def _pode_enviar(request) -> bool:
@@ -303,7 +321,7 @@ def hub(request: HttpRequest) -> HttpResponse:
     ultima_churn = HistoricoChurn.objects.filter(parceiro__in=visiveis).aggregate(
         n=Count("id"), dt=Max("data_analise")
     )
-    lotes = LoteImportacao.objects.all()[:8]
+    lotes = LoteImportacao.objects.select_related("criado_por").all()[:8]
     return render(
         request,
         "gestao/hub.html",
@@ -317,6 +335,7 @@ def hub(request: HttpRequest) -> HttpResponse:
             "fpd": ultima_fpd,
             "churn": ultima_churn,
             "lotes": lotes,
+            "ultimos_por_tipo": _ultimos_lotes_por_tipo(),
         },
     )
 
@@ -360,6 +379,7 @@ def importar_sysmap_view(request: HttpRequest) -> HttpResponse:
             "vinculados": CadastroTerceiro.objects.filter(
                 filtro, parceiro__isnull=False
             ).count(),
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.SYSMAP),
         },
     )
 
@@ -508,6 +528,7 @@ def osab_view(request: HttpRequest) -> HttpResponse:
             "cadastro_osab": classificar_parceiros_osab() if _pode_importar(request) else None,
             "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.OSAB),
         },
     )
 
@@ -550,15 +571,7 @@ def _escopo_parcial(request, *, visao: str | None = None) -> str:
 
 
 def _parcial_dados(request, *, visao: str | None = None) -> dict | None:
-    lote = (
-        LoteImportacao.objects.filter(
-            tipo=LoteImportacao.Tipo.PARCIAL,
-            ok=True,
-            criado_por=request.user,
-        )
-        .order_by("-criado_em")
-        .first()
-    )
+    lote = _ultimo_lote_ok(LoteImportacao.Tipo.PARCIAL)
     if not lote or not lote.resumo:
         return None
     parceiros = _parceiros_parcial(request, visao=visao)
@@ -823,7 +836,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             if form.is_valid():
                 arquivo = form.cleaned_data.get("arquivo")
                 if not arquivo:
-                    messages.error(request, "Envie a base Excel com PDV, total e D-7.")
+                    messages.error(request, "Envie a base Excel com PDV, vendas e Plano Dia.")
                     return _voltar(request, "gestao_resultados", extra="aba=parcial&parcial_sub=gerencia")
                 try:
                     parceiros_todos = list(parceiros_gestao(request.user, "todos"))
@@ -851,16 +864,18 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                     aviso = ""
                     if resumo.get("sem_cadastro"):
                         aviso = f" {len(resumo['sem_cadastro'])} PDV(s) da planilha sem cadastro."
+                    ritmo_pct = int(round(float(resumo.get("ritmo_pp") or 0) * 100))
                     messages.success(
                         request,
                         f"Base importada: {resumo['qtd_pdvs']} PDV(s) · total {resumo['total_pp']} VB · "
-                        f"∆ D-7 {resumo['delta_pp']:+d} · turno {resumo['rotulo_turno']}.{aviso}",
+                        f"ritmo {ritmo_pct}% · ∆ vs esp. {resumo['delta_pp']:+d} · "
+                        f"turno {resumo['rotulo_turno']}.{aviso}",
                     )
                 except Exception as exc:
                     _lote(request, LoteImportacao.Tipo.PARCIAL, arquivo.name, False, {}, str(exc))
                     messages.error(request, f"Falha ao importar parcial: {exc}")
             else:
-                messages.error(request, "Envie a base Excel com PDV, total e D-7.")
+                messages.error(request, "Envie a base Excel com PDV, vendas e Plano Dia.")
             return _voltar(request, "gestao_resultados", extra="aba=parcial&parcial_sub=gerencia")
         if action in {
             "enviar_parcial_gerencia",
@@ -993,11 +1008,13 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
         if parcial_sub == "gerencia" and eh_gestor(request.user):
             parcial_gerencia_linhas = sorted(
                 parcial_dados.get("linhas") or [],
-                key=lambda l: (-l.get("delta", 0), l.get("pdv", "").upper()),
+                key=lambda l: (
+                    -float(l.get("ritmo") or 0),
+                    -int(l.get("vendas") or 0),
+                    l.get("pdv", "").upper(),
+                ),
             )
-    ultimo_parcial = LoteImportacao.objects.filter(
-        tipo=LoteImportacao.Tipo.PARCIAL, ok=True, criado_por=request.user
-    ).first()
+    ultimo_parcial = _ultimo_lote_ok(LoteImportacao.Tipo.PARCIAL)
     return render(
         request,
         "gestao/resultados.html",
@@ -1026,7 +1043,8 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             "grupo_pp_wa": grupo_pp_wa,
             "pracas_btu": pracas_ativas,
             "pracas_btu_mg": pracas_ativas.filter(uf="MG").count(),
-            "ultimo_gdp": LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.GDP).first(),
+            "ultimo_gdp": _ultimo_lote_ok(LoteImportacao.Tipo.GDP),
+            "ultima_importacao": ultimo_parcial,
             "pode_enviar": _pode_enviar(request),
             "pode_editar": _pode_importar(request),
             "eh_gestor": eh_gestor(request.user),
@@ -1098,7 +1116,13 @@ def _render_fpd(request, form):
     return render(
         request,
         "gestao/fpd.html",
-        {"form": form, "relatorios": relatorios, "pode_importar": _pode_importar(request), "pode_enviar": _pode_enviar(request)},
+        {
+            "form": form,
+            "relatorios": relatorios,
+            "pode_importar": _pode_importar(request),
+            "pode_enviar": _pode_enviar(request),
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.FPD),
+        },
     )
 
 
@@ -1187,6 +1211,7 @@ def _render_churn(request, form):
             "gross": GrossMensal.objects.select_related("parceiro").filter(parceiro__in=visiveis).order_by("-anomes")[:40],
             "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.CHURN),
         },
     )
 
@@ -1353,6 +1378,7 @@ def _render_comissionamento(request, form):
             "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
             "syncwa_ok": syncwa_configurado(),
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.COMISSIONAMENTO),
         },
     )
 
@@ -1436,6 +1462,7 @@ def _render_tarefas(request, form):
             "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
             "syncwa_ok": syncwa_configurado(),
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.TAREFAS),
         },
     )
 
@@ -1514,6 +1541,7 @@ def _render_venda_indevida(request, form):
             "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
             "syncwa_ok": syncwa_configurado(),
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.VENDA_INDEVIDA),
         },
     )
 
@@ -1590,6 +1618,7 @@ def _render_recompra(request, form):
             "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
             "syncwa_ok": syncwa_configurado(),
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.RECOMPRA),
         },
     )
 
@@ -1797,6 +1826,7 @@ def configs_view(request: HttpRequest) -> HttpResponse:
             "feriados": feriados_do_mes(ano, mes),
             "cal_nav": nav,
             "aba": aba,
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.METAS),
         },
     )
 
