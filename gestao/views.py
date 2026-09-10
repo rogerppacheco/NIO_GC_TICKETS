@@ -176,6 +176,24 @@ def _pode_importar(request) -> bool:
     return pode_importar_bases(request.user)
 
 
+def _float_form(valor) -> float:
+    """Aceita decimal com ponto ou vírgula (ex.: 2,778468896999999)."""
+    if valor is None:
+        return 0.0
+    txt = str(valor).strip().replace(" ", "")
+    if not txt:
+        return 0.0
+    if "," in txt and "." in txt:
+        # 1.234,56 → remove milhar
+        txt = txt.replace(".", "").replace(",", ".")
+    elif "," in txt:
+        txt = txt.replace(",", ".")
+    try:
+        return float(txt)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _filtros_capilaridade(request) -> dict:
     src = request.POST if request.method == "POST" else request.GET
     return {
