@@ -323,6 +323,12 @@ class EspecialistaForm(forms.Form):
             },
         )
         user.perfil_staff = perfil
+        if papel == PerfilStaff.Papel.ESPECIALISTA:
+            from gestao.destinatarios_especialista import sincronizar_destinatarios_especialistas
+
+            sincronizar_destinatarios_especialistas(
+                Parceiro.objects.filter(especialista=user)
+            )
         return user
 
 
@@ -445,6 +451,12 @@ class StaffPerfilForm(forms.Form):
                 "mascara_numero",
                 "mascara_numero_nome",
             ])
+            if perfil.papel == PerfilStaff.Papel.ESPECIALISTA:
+                from gestao.destinatarios_especialista import sincronizar_destinatarios_especialistas
+
+                sincronizar_destinatarios_especialistas(
+                    Parceiro.objects.filter(especialista=user)
+                )
         return user
 
 

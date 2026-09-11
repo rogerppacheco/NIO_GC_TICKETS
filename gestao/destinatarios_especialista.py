@@ -25,11 +25,21 @@ FLAGS_RELATORIO = {
 
 
 def jid_individual(whatsapp: str) -> str:
+    """Normaliza celular BR para dígitos com DDI 55.
+
+    Aceita 10/11 dígitos (sem DDI), 12 (55+DDD+8, mobile antigo sem o 9)
+    ou 13 (55+DDD+9xxxxxxxx).
+    """
     digitos = re.sub(r"\D", "", whatsapp or "")
     if not digitos:
         return ""
     if len(digitos) in (10, 11):
         digitos = f"55{digitos}"
+    # Mobile antigo: 55 + DDD(2) + 8 dígitos → inserir 9 após o DDD.
+    if len(digitos) == 12 and digitos.startswith("55"):
+        ddd, local = digitos[2:4], digitos[4:]
+        if len(local) == 8 and not local.startswith("9"):
+            digitos = f"55{ddd}9{local}"
     return digitos
 
 

@@ -1366,6 +1366,53 @@ class DestinatarioEnvioTests(TestCase):
         self.pdv = Parceiro.objects.create(codigo_pdv="99", nome="INOVA TESTE")
         self.client.force_login(self.gestor)
 
+    def test_jid_individual_insere_nove_apos_ddd(self):
+        from gestao.destinatarios_especialista import jid_individual
+
+        self.assertEqual(jid_individual("559281997561"), "5592981997561")
+        self.assertEqual(jid_individual("55 92 8199-7561"), "5592981997561")
+        self.assertEqual(jid_individual("5592981997561"), "5592981997561")
+        self.assertEqual(jid_individual("92981997561"), "5592981997561")
+
+    def test_sincroniza_destinatario_ao_atualizar_whatsapp_no_form(self):
+        from gestao.models import Destinatario
+        from tickets.forms import EspecialistaForm
+
+        User = get_user_model()
+        spec = User.objects.create_user(
+            "carlafix", "c@x.com", "x", is_staff=True, first_name="Carla Fix"
+        )
+        PerfilStaff.objects.create(
+            user=spec, papel=PerfilStaff.Papel.ESPECIALISTA, whatsapp="5599281997561"
+        )
+        pdv = Parceiro.objects.create(codigo_pdv="am1", nome="AMAZONTECH", especialista=spec)
+        Destinatario.objects.create(
+            parceiro=pdv,
+            nome="Especialista: Carla Fix",
+            jid="5599281997561",
+            tipo=Destinatario.TipoDestino.INDIVIDUAL,
+            ativo=True,
+            envio_capilaridade=True,
+        )
+        form = EspecialistaForm(
+            {
+                "first_name": "Carla Fix",
+                "username": "carlafix",
+                "email": "c@x.com",
+                "password": "",
+                "fte": "1.00",
+                "whatsapp": "559281997561",
+                "is_active": True,
+                "eh_admin": False,
+                "tipo_destino_mascara": "proprio",
+            },
+            instance=spec,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        dest = Destinatario.objects.get(parceiro=pdv)
+        self.assertEqual(dest.jid, "5592981997561")
+
     def test_cria_destinatario(self):
         from gestao.models import Destinatario
 
