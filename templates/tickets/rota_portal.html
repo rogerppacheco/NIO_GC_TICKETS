@@ -32,9 +32,12 @@
   <form id="rota-form" class="rota-form" hidden>
     {% csrf_token %}
     <div class="rota-grid">
-      <section class="panel rota-panel">
-        <div class="panel-h"><h2>Check-in</h2></div>
-        <div class="panel-b rota-fields">
+      <section class="rota-card" aria-labelledby="rota-checkin-title">
+        <header class="rota-card-h">
+          <p class="rota-kicker">Check-in diário</p>
+          <h2 id="rota-checkin-title">Rota de hoje</h2>
+        </header>
+        <div class="rota-card-b rota-fields">
           <div class="rota-field">
             <span class="rota-label">Qual será a sua rota hoje?</span>
             <div class="rota-segment" role="group" aria-label="Tipo de rota">
@@ -51,40 +54,48 @@
 
           <div class="rota-field">
             <label for="qtd_vendedores">Quantos vendedores atuarão hoje?</label>
-            <input type="number" id="qtd_vendedores" name="qtd_vendedores" min="1" step="1" required>
+            <input class="rota-input" type="number" inputmode="numeric" id="qtd_vendedores" name="qtd_vendedores" min="1" step="1" required>
           </div>
 
           <div class="rota-field" id="bloco-semana" hidden>
-            <label for="vendas_planejadas_semana">
-              Qual a quantidade de vendas planejada para a semana?
-            </label>
-            <input type="number" id="vendas_planejadas_semana" name="vendas_planejadas_semana" min="0" step="1">
+            <label for="vendas_planejadas_semana">Quantidade de vendas planejada para a semana</label>
+            <input class="rota-input" type="number" inputmode="numeric" id="vendas_planejadas_semana" name="vendas_planejadas_semana" min="0" step="1">
             <p class="help" id="meta-semana-hint"></p>
-            <div id="alerta-semana" class="rota-alerta" hidden></div>
+            <div id="alerta-semana" class="rota-callout" hidden role="status">
+              <span class="rota-callout-ico" id="alerta-semana-ico" aria-hidden="true"></span>
+              <div>
+                <strong id="alerta-semana-titulo"></strong>
+                <p id="alerta-semana-msg"></p>
+              </div>
+            </div>
           </div>
 
           <div id="bloco-local" class="rota-local">
-            <div class="rota-field">
+            <div class="rota-field" id="field-uf">
               <label for="rota_uf">UF</label>
-              <select id="rota_uf" name="uf">
-                <option value="">Selecione</option>
-              </select>
-              <span class="rota-spinner" id="spin-uf" hidden></span>
-            </div>
-            <div class="rota-field">
-              <label for="rota_cidade">Cidade</label>
-              <select id="rota_cidade" name="cidade" disabled>
-                <option value="">Selecione a UF</option>
-              </select>
-              <span class="rota-spinner" id="spin-cidade" hidden></span>
-            </div>
-            <div class="rota-field">
-              <label for="rota_bairro">Bairro</label>
-              <div class="rota-bairro-wrap">
-                <input list="rota_bairros_list" id="rota_bairro" name="bairro" autocomplete="off" disabled placeholder="Selecione a cidade">
-                <datalist id="rota_bairros_list"></datalist>
+              <div class="rota-control">
+                <select class="rota-input" id="rota_uf" name="uf">
+                  <option value="">Selecione</option>
+                </select>
+                <span class="rota-spinner" id="spin-uf" hidden></span>
               </div>
-              <span class="rota-spinner" id="spin-bairro" hidden></span>
+            </div>
+            <div class="rota-field" id="field-cidade">
+              <label for="rota_cidade">Cidade</label>
+              <div class="rota-control">
+                <select class="rota-input" id="rota_cidade" name="cidade" disabled>
+                  <option value="">Selecione a UF</option>
+                </select>
+                <span class="rota-spinner" id="spin-cidade" hidden></span>
+              </div>
+            </div>
+            <div class="rota-field rota-field-bairro" id="field-bairro">
+              <label for="rota_bairro">Bairro</label>
+              <div class="rota-control">
+                <input class="rota-input" list="rota_bairros_list" id="rota_bairro" name="bairro" autocomplete="off" disabled placeholder="Selecione a cidade">
+                <datalist id="rota_bairros_list"></datalist>
+                <span class="rota-spinner" id="spin-bairro" hidden></span>
+              </div>
               <p class="help" id="bairro-fonte"></p>
             </div>
           </div>
@@ -92,35 +103,50 @@
           <p class="rota-error" id="rota-form-error" hidden></p>
 
           <div class="rota-actions">
-            <button type="submit" class="btn btn-primary" id="btn-salvar-rota">
+            <button type="submit" class="btn btn-primary rota-submit" id="btn-salvar-rota">
               <span class="btn-label">Registrar rota</span>
               <span class="rota-spinner rota-spinner-btn" id="spin-salvar" hidden></span>
             </button>
-            <p class="help" id="rota-status-salvo" hidden></p>
+            <p class="rota-saved" id="rota-status-salvo" hidden>Check-in registrado</p>
           </div>
         </div>
       </section>
 
-      <section class="panel rota-panel" id="painel-dfv">
-        <div class="panel-h">
-          <h2>DFV do bairro</h2>
-          <span class="help" id="dfv-local-label">Selecione o bairro</span>
-        </div>
-        <div class="panel-b">
+      <section class="rota-card rota-card-dfv" id="painel-dfv" aria-labelledby="rota-dfv-title">
+        <header class="rota-card-h">
+          <div>
+            <p class="rota-kicker">Disponibilidade</p>
+            <h2 id="rota-dfv-title">DFV do bairro</h2>
+          </div>
+          <span class="rota-chip" id="dfv-local-label">Selecione o bairro</span>
+        </header>
+        <div class="rota-card-b">
           <div id="dfv-empty" class="rota-dfv-empty">
-            Os indicadores aparecem ao escolher o bairro da rota presencial.
+            Escolha o bairro da rota presencial para ver HPs livres, crédito e alertas.
           </div>
-          <div id="dfv-loading" class="rota-dfv-loading" hidden>
-            <span class="rota-spinner rota-spinner-lg"></span>
-            Consultando disponibilidade de fibra…
+          <div id="dfv-loading" class="rota-dfv-skel" hidden aria-live="polite">
+            <span class="visually-hidden">Consultando disponibilidade de fibra</span>
+            <div class="skel skel-hero"></div>
+            <div class="skel-row">
+              <div class="skel skel-tile"></div>
+              <div class="skel skel-tile"></div>
+              <div class="skel skel-tile"></div>
+            </div>
           </div>
-          <div id="dfv-erro" class="rota-alerta critico" hidden></div>
-          <div id="dfv-conteudo" hidden>
+          <div id="dfv-erro" class="rota-callout critico" hidden role="alert">
+            <span class="rota-callout-ico" aria-hidden="true"></span>
+            <div>
+              <strong>Não foi possível carregar a disponibilidade do DFV no momento.</strong>
+              <p id="dfv-erro-msg">Tente escolher o bairro novamente em instantes.</p>
+            </div>
+          </div>
+          <div id="dfv-conteudo" class="rota-fade" hidden>
+            <div class="rota-hero-kpi">
+              <span class="rota-kpi-label">HPs livres</span>
+              <strong id="kpi-hp-livre">—</strong>
+              <span class="rota-hero-sub" id="kpi-ocupacao"></span>
+            </div>
             <div class="rota-kpis">
-              <div class="rota-kpi">
-                <span class="rota-kpi-label">HPs livres</span>
-                <strong id="kpi-hp-livre">—</strong>
-              </div>
               <div class="rota-kpi">
                 <span class="rota-kpi-label">HPs totais</span>
                 <strong id="kpi-hps">—</strong>
