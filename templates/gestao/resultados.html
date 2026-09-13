@@ -1,41 +1,30 @@
 {% extends "base.html" %}
 {% block title %}Resultados · Gestão{% endblock %}
-{% block body_class %}page-resultados page-gestao-sidebar{% endblock %}
-{% block main_class %}wrap wrap-resultados wrap-gestao-sidebar{% endblock %}
+{% block body_class %}page-resultados{% endblock %}
+{% block main_class %}wrap wrap-resultados{% endblock %}
 {% block content %}
-<div class="gestao-page-shell">
-  <aside class="gestao-page-sidebar" aria-label="Navegação">
-    {% include "gestao/_nav_sidebar.html" %}
-    <div class="gestao-sidebar-block">
-      {% include "gestao/_escopo.html" %}
+<div class="gestao-page-main">
+    <div class="hero hero-compact">
+      <div>
+        <h1>Resultados</h1>
+        <p class="help" style="margin:0.15rem 0 0">Parcial, acumulado {{ mes|stringformat:"02d" }}/{{ ano }} e ranking VB.</p>
+      </div>
     </div>
-    <nav class="gestao-sidebar-block gestao-sidebar-tabs" aria-label="Resultados">
-      <span class="gestao-sidebar-label">Resultados</span>
-      <a class="gestao-sidebar-tab{% if aba == 'parcial' %} is-on{% endif %}"
-         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial">Parcial de vendas</a>
-      <a class="gestao-sidebar-tab{% if aba == 'acumulado' %} is-on{% endif %}"
-         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=acumulado">Acumulado do mês</a>
-      <a class="gestao-sidebar-tab{% if aba == 'ranking' %} is-on{% endif %}"
-         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=ranking">Ranking de VB</a>
+    <nav class="page-tabs" aria-label="Visão de resultados">
+      <a class="page-tab{% if aba == 'parcial' %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial">Parcial de vendas</a>
+      <a class="page-tab{% if aba == 'acumulado' %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&aba=acumulado">Acumulado do mês</a>
+      <a class="page-tab{% if aba == 'ranking' %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&aba=ranking">Ranking de VB</a>
     </nav>
     {% if aba == "parcial" and parcial_dados %}
-    <nav class="gestao-sidebar-block gestao-sidebar-tabs" aria-label="Parcial">
-      <span class="gestao-sidebar-label">Parcial</span>
-      <a class="gestao-sidebar-tab{% if parcial_sub == 'gerencia' %} is-on{% endif %}"
-         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=gerencia">Gerência</a>
+    <nav class="page-tabs page-tabs-sub" aria-label="Recorte do parcial">
+      <a class="page-tab{% if parcial_sub == 'gerencia' %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=gerencia">Gerência</a>
       {% if eh_gestor %}
-      <a class="gestao-sidebar-tab{% if parcial_sub == 'consolidado' %} is-on{% endif %}"
-         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=consolidado">Carteira PP</a>
+      <a class="page-tab{% if parcial_sub == 'consolidado' %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=consolidado">Carteira PP</a>
       {% endif %}
-      <a class="gestao-sidebar-tab{% if parcial_sub == 'especialistas' %} is-on{% endif %}"
-         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=especialistas">Especialistas</a>
-      <a class="gestao-sidebar-tab{% if parcial_sub == 'parceiros' %} is-on{% endif %}"
-         href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=parceiros">Parceiros</a>
+      <a class="page-tab{% if parcial_sub == 'especialistas' %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=especialistas">Especialistas</a>
+      <a class="page-tab{% if parcial_sub == 'parceiros' %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=parceiros">Parceiros</a>
     </nav>
     {% endif %}
-  </aside>
-
-  <div class="gestao-page-main">
     <div class="hero hero-compact">
       <div>
         <h1>Resultados</h1>
@@ -501,5 +490,4 @@
   {% endif %}
     </div>
   </div>
-</div>
 {% endblock %}

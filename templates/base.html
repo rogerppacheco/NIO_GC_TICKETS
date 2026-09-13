@@ -4,24 +4,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}NIO GC Tickets{% endblock %}</title>
+  <title>{% block title %}NIO ESPECIALISTA Tickets{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="{% block body_class %}{% endblock %}{% if tem_acesso_interno %} has-app-sidebar{% endif %}">
+  {% if tem_acesso_interno %}
+    {% include "gestao/_nav_sidebar.html" %}
+  {% endif %}
+  <div class="app-frame">
   <header class="topbar">
     <div class="topbar-inner">
+      {% if tem_acesso_interno %}
+      <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-expanded="true" aria-controls="app-sidebar">Menu</button>
+      {% endif %}
       <a class="brand" href="{% url 'home' %}">
-        <span>NIO</span> GC Tickets
-        <small>demandas parceiros</small>
+        <span>NIO</span> ESPECIALISTA Tickets
       </a>
       <button type="button" class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="site-nav">
         Menu
       </button>
       <nav class="nav" id="site-nav" aria-label="Principal">
         {% if user.is_authenticated %}
-          <a href="{% url 'dashboard' %}" {% if request.resolver_match.url_name == 'dashboard' %}class="is-on"{% endif %}>Dashboard</a>
           <a href="{% url 'fila' %}" {% if request.resolver_match.url_name == 'fila' %}class="is-on"{% endif %}>Fila {% if nav_novos %}<span class="badge">{{ nav_novos }}</span>{% endif %}</a>
           <a href="{% url 'ticket_criar' %}" {% if request.resolver_match.url_name == 'ticket_criar' %}class="is-on"{% endif %}>Nova demanda</a>
+          {% if not tem_acesso_interno %}
+          <a href="{% url 'dashboard' %}">Dashboard</a>
+          {% endif %}
           <details class="nav-more">
             <summary>Mais</summary>
             <div class="nav-more-panel">
@@ -66,16 +74,6 @@
         {% endif %}
       </nav>
     </div>
-    {% if tem_acesso_interno %}
-    <div class="topbar-gestao" id="gestao-bar">
-      <button type="button" class="gestao-toggle" id="gestao-toggle" aria-expanded="true" aria-controls="gestao-nav-wrap">
-        Gestão
-      </button>
-      <div id="gestao-nav-wrap">
-        {% include "gestao/_nav.html" %}
-      </div>
-    </div>
-    {% endif %}
   </header>
 
   <main class="{% block main_class %}wrap{% endblock %}">
@@ -96,5 +94,6 @@
   {% endif %}
   {% block extra_js %}{% endblock %}
   <script src="{% static 'js/shell.js' %}"></script>
+  </div>
 </body>
 </html>

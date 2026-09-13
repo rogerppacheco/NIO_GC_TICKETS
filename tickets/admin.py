@@ -18,8 +18,8 @@ from .models import (
     ConfigRespostaTipo,
 )
 
-admin.site.site_header = "NIO GC Tickets"
-admin.site.site_title = "NIO GC Tickets"
+admin.site.site_header = "NIO ESPECIALISTA Tickets"
+admin.site.site_title = "NIO ESPECIALISTA Tickets"
 
 
 class ContatoParceiroInline(admin.TabularInline):

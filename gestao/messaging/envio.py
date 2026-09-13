@@ -293,7 +293,7 @@ def _talvez_email(
     pdv = parceiro.nome if parceiro else "Gestão"
     ok, erro = enviar_email_com_anexos(
         destinos,
-        assunto=assunto or f"[NIO GC] {titulo} — {pdv}",
+        assunto=assunto or f"[NIO ESPECIALISTA] {titulo} — {pdv}",
         corpo_texto=corpo_texto or (mensagem or "").replace("*", ""),
         corpo_html=corpo_html,
         anexos=anexos,
@@ -427,7 +427,7 @@ def _enviar_para_lista(
 
 def enviar_teste(user: AbstractBaseUser | None = None) -> ResumoEnvio:
     texto = (
-        "✅ *NIO GC Tickets — teste WhatsApp*\n\n"
+        "✅ *NIO ESPECIALISTA Tickets — teste WhatsApp*\n\n"
         "Se você recebeu esta mensagem, a integração está ok."
     )
     from django.conf import settings
@@ -1050,7 +1050,7 @@ def formatar_html_email_comissionamento(rel: RelatorioComissionamento, nome_esp:
     {f"<tr><td>{orientacao_box}</td></tr>" if orientacao_box else ""}
     <tr>
       <td style="padding-top: 20px; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9;">
-        NIO GC Tickets · Gestão de Parceiros
+        NIO ESPECIALISTA Tickets · Gestão de Parceiros
       </td>
     </tr>
   </table>

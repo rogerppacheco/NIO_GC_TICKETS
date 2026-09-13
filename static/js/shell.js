@@ -16,11 +16,19 @@
     });
   }
 
-  var gestaoBtn = document.getElementById("gestao-toggle");
-  var gestaoBar = document.getElementById("gestao-bar");
-  if (!gestaoBtn || !gestaoBar) return;
+  var groups = document.querySelectorAll("[data-acc]");
+  groups.forEach(function (item) {
+    item.addEventListener("toggle", function () {
+      if (!item.open) return;
+      groups.forEach(function (other) {
+        if (other !== item) other.open = false;
+      });
+    });
+  });
 
-  var key = "nio-gestao-nav";
+  var sideBtn = document.getElementById("sidebar-toggle");
+  if (!sideBtn) return;
+  var key = "nio-sidebar";
   var onFila = document.body.classList.contains("page-fila");
   var saved = null;
   try {
@@ -30,14 +38,14 @@
   }
   var open = saved === "1" || (saved !== "0" && !onFila);
   function apply(isOpen) {
-    gestaoBar.classList.add("ready");
-    gestaoBar.classList.toggle("is-collapsed", !isOpen);
-    gestaoBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
-    gestaoBtn.textContent = isOpen ? "Ocultar gestão" : "Gestão";
+    document.body.classList.add("sidebar-ready");
+    document.body.classList.toggle("sidebar-collapsed", !isOpen);
+    sideBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    sideBtn.textContent = isOpen ? "Ocultar menu" : "Menu";
   }
   apply(open);
-  gestaoBtn.addEventListener("click", function () {
-    var next = gestaoBar.classList.contains("is-collapsed");
+  sideBtn.addEventListener("click", function () {
+    var next = document.body.classList.contains("sidebar-collapsed");
     apply(next);
     try {
       localStorage.setItem(key, next ? "1" : "0");

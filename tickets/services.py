@@ -113,7 +113,7 @@ def notificar_mascaras_por_email(ticket: Ticket) -> int:
         corpo = render_mascara(mascara, ticket)
         ok, _erro = enviar_email_com_anexos(
             vistos,
-            assunto=f"[NIO GC] {mascara.nome} · {ticket.protocolo} · {ticket.parceiro.nome}",
+            assunto=f"[NIO ESPECIALISTA] {mascara.nome} · {ticket.protocolo} · {ticket.parceiro.nome}",
             corpo_texto=corpo,
         )
         if ok:

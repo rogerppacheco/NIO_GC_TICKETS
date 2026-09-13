@@ -1,36 +1,88 @@
-<nav class="gestao-sidebar-nav" aria-label="Gestão">
-  {% with esc=gestao_escopo|default:"meus" %}
-  <a href="{% url 'gestao_hub' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_hub' %}class="is-on"{% endif %}>Início</a>
-  <a href="{% url 'gestao_sysmap' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_sysmap' %}class="is-on"{% endif %}>Sysmap</a>
-  <a href="{% url 'gestao_osab' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_osab' %}class="is-on"{% endif %}>OSAB</a>
-  <a href="{% url 'gestao_resultados' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_resultados' %}class="is-on"{% endif %}>Resultados</a>
-  <a href="{% url 'gestao_capilaridade' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_capilaridade' %}class="is-on"{% endif %}>Capilaridade</a>
-  <a href="{% url 'gestao_fpd' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_fpd' %}class="is-on"{% endif %}>FPD</a>
-  <a href="{% url 'gestao_churn' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_churn' %}class="is-on"{% endif %}>Churn</a>
-  <a href="{% url 'gestao_comissionamento' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_comissionamento' %}class="is-on"{% endif %}>Comissionamento</a>
-  <a href="{% url 'gestao_tarefas' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_tarefas' %}class="is-on"{% endif %}>Tarefas</a>
-  <a href="{% url 'gestao_venda_indevida' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_venda_indevida' %}class="is-on"{% endif %}>Venda indevida</a>
-  <a href="{% url 'gestao_recompra' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_recompra' %}class="is-on"{% endif %}>Recompra</a>
-  <a href="{% url 'gestao_configs' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_configs' %}class="is-on"{% endif %}>Metas</a>
-  {% if eh_gestor %}
-  <a href="{% url 'gestao_whatsapp' %}" {% if request.resolver_match.url_name == 'gestao_whatsapp' %}class="is-on"{% endif %}>WhatsApp</a>
-  <a href="{% url 'gestao_destinatarios' %}" {% if 'destinatario' in request.resolver_match.url_name %}class="is-on"{% endif %}>Destinatários</a>
-  {% endif %}
-  <a href="{% url 'gestao_envios' %}?escopo={{ esc }}" {% if request.resolver_match.url_name == 'gestao_envios' %}class="is-on"{% endif %}>Envios</a>
-  {% if eh_gestor %}
-  <form method="post" action="{% url 'gestao_gerencia' %}" class="gestao-sidebar-gerencia">
-    {% csrf_token %}
-    <input type="hidden" name="next" value="{{ request.get_full_path }}">
-    <label>
-      <span>Gerência</span>
-      <select name="gerencia" class="fila-pick" onchange="this.form.submit()" aria-label="Gerência das bases">
-        <option value="{{ gestao_gerencia_todas|default:'__todas__' }}" {% if gestao_gerencia_sel == gestao_gerencia_todas %}selected{% endif %}>Todas</option>
-        {% for g in gestao_gerencias %}
-        <option value="{{ g }}" {% if gestao_gerencia_sel == g %}selected{% endif %}>{{ g }}</option>
-        {% endfor %}
-      </select>
-    </label>
-  </form>
-  {% endif %}
-  {% endwith %}
-</nav>
+{% with esc=gestao_escopo|default:"meus" name=request.resolver_match.url_name|default:"" %}
+<aside class="app-sidebar" id="app-sidebar" aria-label="Navegação">
+  <div class="app-sidebar-brand">
+    <a class="brand" href="{% url 'fila' %}">
+      <span>NIO</span> ESPECIALISTA
+      <small>Tickets</small>
+    </a>
+  </div>
+
+  <nav class="app-acc" id="app-acc">
+    <details class="app-acc-item" data-acc {% if name == "gestao_hub" or name == "dashboard" or name == "gestao_osab" or name == "gestao_sysmap" or name == "gestao_capilaridade" %}open{% endif %}>
+      <summary>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 16v-5M12 16V8M16 16v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        Painéis e operação
+      </summary>
+      <div class="app-acc-panel">
+        <a href="{% url 'gestao_hub' %}?escopo={{ esc }}" {% if name == "gestao_hub" %}class="is-on"{% endif %}>Início</a>
+        <a href="{% url 'dashboard' %}" {% if name == "dashboard" %}class="is-on"{% endif %}>Dashboard</a>
+        <a href="{% url 'gestao_osab' %}?escopo={{ esc }}" {% if name == "gestao_osab" %}class="is-on"{% endif %}>OSAB</a>
+        <a href="{% url 'gestao_sysmap' %}?escopo={{ esc }}" {% if name == "gestao_sysmap" %}class="is-on"{% endif %}>Sysmap</a>
+        <a href="{% url 'gestao_capilaridade' %}?escopo={{ esc }}" {% if name == "gestao_capilaridade" %}class="is-on"{% endif %}>Capilaridade</a>
+      </div>
+    </details>
+
+    <details class="app-acc-item" data-acc {% if name == "gestao_resultados" or name == "gestao_configs" or name == "gestao_comissionamento" %}open{% endif %}>
+      <summary>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M7 16l4-5 3 3 5-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Resultados e metas
+      </summary>
+      <div class="app-acc-panel">
+        <a href="{% url 'gestao_resultados' %}?escopo={{ esc }}" {% if name == "gestao_resultados" and request.GET.aba and request.GET.aba != "parcial" %}class="is-on"{% endif %}>Resultados</a>
+        <a href="{% url 'gestao_resultados' %}?escopo={{ esc }}&aba=parcial" {% if name == "gestao_resultados" and request.GET.aba != "acumulado" and request.GET.aba != "ranking" %}class="is-on"{% endif %}>Parcial de vendas</a>
+        <a href="{% url 'gestao_configs' %}?escopo={{ esc }}" {% if name == "gestao_configs" %}class="is-on"{% endif %}>Metas</a>
+        <a href="{% url 'gestao_comissionamento' %}?escopo={{ esc }}" {% if name == "gestao_comissionamento" %}class="is-on"{% endif %}>Comissionamento</a>
+      </div>
+    </details>
+
+    <details class="app-acc-item" data-acc {% if name == "gestao_fpd" or name == "gestao_churn" or name == "gestao_venda_indevida" or name == "gestao_recompra" or name == "gestao_tarefas" %}open{% endif %}>
+      <summary>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        Qualidade e auditoria
+      </summary>
+      <div class="app-acc-panel">
+        <a href="{% url 'gestao_fpd' %}?escopo={{ esc }}" {% if name == "gestao_fpd" %}class="is-on"{% endif %}>FPD</a>
+        <a href="{% url 'gestao_churn' %}?escopo={{ esc }}" {% if name == "gestao_churn" %}class="is-on"{% endif %}>Churn</a>
+        <a href="{% url 'gestao_venda_indevida' %}?escopo={{ esc }}" {% if name == "gestao_venda_indevida" %}class="is-on"{% endif %}>Venda indevida</a>
+        <a href="{% url 'gestao_recompra' %}?escopo={{ esc }}" {% if name == "gestao_recompra" %}class="is-on"{% endif %}>Recompra</a>
+        <a href="{% url 'gestao_tarefas' %}?escopo={{ esc }}" {% if name == "gestao_tarefas" %}class="is-on"{% endif %}>Tarefas</a>
+      </div>
+    </details>
+
+    <details class="app-acc-item" data-acc {% if name == "gestao_whatsapp" or name == "gestao_envios" or "destinatario" in name %}open{% endif %}>
+      <summary>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h9M5 17h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        Comunicação e setup
+      </summary>
+      <div class="app-acc-panel">
+        {% if eh_gestor %}
+        <a href="{% url 'gestao_whatsapp' %}" {% if name == "gestao_whatsapp" %}class="is-on"{% endif %}>WhatsApp</a>
+        <a href="{% url 'gestao_destinatarios' %}" {% if "destinatario" in name %}class="is-on"{% endif %}>Destinatários</a>
+        {% endif %}
+        <a href="{% url 'gestao_envios' %}?escopo={{ esc }}" {% if name == "gestao_envios" %}class="is-on"{% endif %}>Envios</a>
+      </div>
+    </details>
+  </nav>
+
+  <div class="app-sidebar-foot">
+    {% if eh_gestor %}
+    <form method="post" action="{% url 'gestao_gerencia' %}" class="app-sidebar-gerencia">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <label>
+        Gerência
+        <select name="gerencia" onchange="this.form.submit()" aria-label="Gerência das bases">
+          <option value="{{ gestao_gerencia_todas|default:'__todas__' }}" {% if gestao_gerencia_sel == gestao_gerencia_todas %}selected{% endif %}>Todas</option>
+          {% for g in gestao_gerencias %}
+          <option value="{{ g }}" {% if gestao_gerencia_sel == g %}selected{% endif %}>{{ g }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </form>
+    {% endif %}
+    <div class="app-sidebar-escopo">
+      {% include "gestao/_escopo.html" %}
+    </div>
+  </div>
+</aside>
+{% endwith %}

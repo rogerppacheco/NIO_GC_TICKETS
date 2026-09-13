@@ -61,7 +61,7 @@ class LoginForm(AuthenticationForm):
 
         if not tem_acesso_interno(user):
             raise forms.ValidationError(
-                "Este login não tem acesso ao NIO GC Tickets. "
+                "Este login não tem acesso ao NIO ESPECIALISTA Tickets. "
                 "Use um usuário criado em Especialistas ou Meu perfil.",
                 code="sem_acesso",
             )

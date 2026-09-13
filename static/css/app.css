@@ -1,9 +1,9 @@
 :root {
-  --bg: #f3f5f7;
+  --bg: #f3f4f6;
   --surface: #ffffff;
   --ink: #15202b;
   --muted: #5b6b7c;
-  --line: #d7dee7;
+  --line: #e7ebf0;
   --brand: #0f6b5c;
   --brand-2: #148f7c;
   --accent: #c45c26;
@@ -29,10 +29,7 @@ body.page-fila .topbar-gestao { flex-shrink: 0; }
 body {
   font-family: var(--font);
   color: var(--ink);
-  background:
-    radial-gradient(1200px 500px at 10% -10%, rgba(20, 143, 124, 0.12), transparent 60%),
-    radial-gradient(900px 400px at 100% 0%, rgba(196, 92, 38, 0.08), transparent 55%),
-    var(--bg);
+  background: var(--bg);
   min-height: 100vh;
 }
 
@@ -192,6 +189,7 @@ body.page-fila .topbar-gestao:not(.ready) #gestao-nav-wrap { display: none; }
 }
 
 .wrap { max-width: 1180px; margin: 0 auto; padding: 1.4rem 1.25rem 3rem; }
+.has-app-sidebar:not(.page-fila) .wrap { padding: 1.55rem 1.7rem 2.75rem; }
 .wrap-wide { max-width: 1600px; }
 .wrap-fila {
   max-width: none;
@@ -366,8 +364,10 @@ body.page-fila .topbar-gestao:not(.ready) #gestao-nav-wrap { display: none; }
 .card .value { font-size: 1.7rem; font-weight: 800; margin-top: 0.2rem; letter-spacing: -0.03em; }
 
 .panel {
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  background: #fff;
+  border: 1px solid #eef1f4;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(21, 32, 43, 0.05);
 }
 .panel-h {
   padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--line);
@@ -549,13 +549,134 @@ a.tab { text-decoration: none; display: inline-block; }
   color: var(--brand); border-bottom-color: var(--brand);
 }
 .resultados-tabs-panel .tab-panel { padding: 1rem 1.1rem 1.15rem; }
-.page-resultados .wrap-resultados {
-  max-width: none;
-  width: 100%;
-  padding-left: 0.85rem;
-  padding-right: 0.85rem;
+.page-resultados .wrap-resultados { max-width: none; width: 100%; padding: 1.25rem 1.5rem 2.25rem; }
+.has-app-sidebar { display: flex; min-height: 100vh; background: #f3f4f6; }
+.app-frame { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 100vh; }
+.app-sidebar {
+  width: 248px;
+  flex-shrink: 0;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-right: 1px solid #eef1f4;
+  overflow: hidden;
 }
-body.page-gestao-sidebar .topbar-gestao { display: none; }
+.app-sidebar-brand { padding: 0.95rem 1rem 0.55rem; }
+.app-sidebar-brand .brand { flex-wrap: wrap; font-size: 0.95rem; line-height: 1.15; }
+.app-sidebar-brand .brand small { display: block; width: 100%; margin-top: 0.1rem; font-size: 0.72rem; }
+.app-acc { flex: 1; min-height: 0; overflow: hidden; padding: 0.15rem 0.55rem 0.4rem; }
+.app-acc-item { border: 0; }
+.app-acc-item summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: #3d4d5c;
+  padding: 0.55rem 0.4rem;
+  border-radius: 8px;
+}
+.app-acc-item summary::-webkit-details-marker { display: none; }
+.app-acc-item summary svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--brand); }
+.app-acc-item summary:hover { background: #f6f8f9; }
+.app-acc-panel { display: flex; flex-direction: column; gap: 0.1rem; padding-bottom: 0.25rem; }
+.app-acc-panel a {
+  display: block;
+  margin-left: 1.55rem;
+  padding: 0.38rem 0.55rem;
+  border-radius: 8px;
+  color: #5b6b7c;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.app-acc-panel a:hover { background: #f6f8f9; color: var(--ink); text-decoration: none; }
+.app-acc-panel a.is-on { background: #eef8f5; color: var(--brand); font-weight: 800; }
+.app-sidebar-foot {
+  flex-shrink: 0;
+  padding: 0.7rem 0.75rem 0.85rem;
+  background: #fafbfc;
+  border-top: 1px solid #f0f2f5;
+}
+.app-sidebar-gerencia label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.app-sidebar-gerencia select { width: 100%; min-height: 40px; font-size: 0.88rem; }
+.app-sidebar-escopo { margin-top: 0.55rem; }
+.app-sidebar-escopo .gestao-escopo { flex-direction: column; margin: 0; gap: 0.2rem; }
+.app-sidebar-escopo .gestao-escopo a {
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.82rem;
+}
+.app-sidebar-escopo .help { display: none; }
+.sidebar-toggle {
+  display: none;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 800;
+  font-size: 0.8rem;
+  padding: 0.35rem 0.65rem;
+  cursor: pointer;
+}
+.has-app-sidebar .sidebar-toggle { display: inline-flex; }
+.has-app-sidebar .topbar .brand { display: none; }
+.has-app-sidebar .topbar {
+  background: #fff;
+  border-bottom: 1px solid #f0f2f5;
+  box-shadow: none;
+}
+body.sidebar-collapsed .app-sidebar { width: 0; border: 0; overflow: hidden; }
+body.page-fila.has-app-sidebar:not(.sidebar-ready) .app-sidebar { width: 0; border: 0; }
+body.page-fila .app-frame > main { flex: 1; min-height: 0; }
+@media (max-width: 900px) {
+  .app-sidebar {
+    position: fixed;
+    z-index: 50;
+    transform: translateX(-105%);
+    box-shadow: 16px 0 40px rgba(21, 32, 43, 0.08);
+  }
+  body.has-app-sidebar:not(.sidebar-collapsed) .app-sidebar { transform: none; width: 248px; }
+  body.sidebar-collapsed .app-sidebar { width: 248px; }
+}
+body.page-fila.has-app-sidebar { height: 100vh; overflow: hidden; }
+body.page-fila .app-frame { height: 100vh; min-height: 0; overflow: hidden; }
+.page-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 0.85rem;
+}
+.page-tabs-sub { margin-top: -0.35rem; }
+.page-tab {
+  border-radius: 999px;
+  padding: 0.4rem 0.8rem;
+  background: #fff;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.86rem;
+  box-shadow: 0 1px 2px rgba(21, 32, 43, 0.04);
+}
+.page-tab.is-on { background: #eef8f5; color: var(--brand); }
+.page-tab:hover { text-decoration: none; color: var(--ink); }
+.page-resultados .wrap-resultados { max-width: none; width: 100%; padding: 1.25rem 1.5rem 2.25rem; }
+.gestao-page-main { display: flex; flex-direction: column; gap: 0.15rem; }
 .wrap-gestao-sidebar {
   max-width: none;
   width: 100%;
