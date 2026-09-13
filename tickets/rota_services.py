@@ -164,12 +164,21 @@ def defaults_localizacao(parceiro: Parceiro) -> dict[str, Any]:
 
 
 def listar_ufs(parceiro: Parceiro) -> list[dict[str, str]]:
-    pracas = (
-        ParceiroPraca.objects.filter(parceiro=parceiro, ativo=True)
-        .values_list("uf", flat=True)
-        .distinct()
-    )
-    items = [{"uf": u.upper(), "origem": "praca_parceiro"} for u in pracas if u]
+    seen: set[str] = set()
+    items: list[dict[str, str]] = []
+
+    def _add(uf_raw: str, origem: str) -> None:
+        uf = (uf_raw or "").strip().upper()[:2]
+        if len(uf) != 2 or uf in seen:
+            return
+        seen.add(uf)
+        items.append({"uf": uf, "origem": origem})
+
+    for u in ParceiroPraca.objects.filter(parceiro=parceiro, ativo=True).values_list(
+        "uf", flat=True
+    ):
+        _add(u, "praca_parceiro")
+
     if items:
         return sorted(items, key=lambda x: x["uf"])
 
@@ -177,51 +186,50 @@ def listar_ufs(parceiro: Parceiro) -> list[dict[str, str]]:
     try:
         from gestao.models import PracaBTU
 
-        ufs = (
-            PracaBTU.objects.filter(ativo=True)
-            .exclude(uf="")
-            .values_list("uf", flat=True)
-            .distinct()
-        )
-        return sorted(
-            ({"uf": u.upper(), "origem": "catalogo"} for u in ufs if u),
-            key=lambda x: x["uf"],
-        )
+        for u in PracaBTU.objects.filter(ativo=True).exclude(uf="").values_list(
+            "uf", flat=True
+        ):
+            _add(u, "catalogo")
     except Exception:
-        return []
+        pass
+    return sorted(items, key=lambda x: x["uf"])
 
 
 def listar_cidades(parceiro: Parceiro, uf: str) -> list[dict[str, str]]:
     uf_limpo = (uf or "").strip().upper()[:2]
     if not uf_limpo:
         return []
-    pracas = (
-        ParceiroPraca.objects.filter(parceiro=parceiro, ativo=True, uf=uf_limpo)
-        .values_list("cidade", flat=True)
-        .distinct()
-    )
-    items = [
-        {"cidade": c, "origem": "praca_parceiro"}
-        for c in pracas
-        if (c or "").strip()
-    ]
+    seen: set[str] = set()
+    items: list[dict[str, str]] = []
+
+    def _add(cidade_raw: str, origem: str) -> None:
+        cidade = (cidade_raw or "").strip()
+        if not cidade:
+            return
+        key = cidade.casefold()
+        if key in seen:
+            return
+        seen.add(key)
+        items.append({"cidade": cidade, "origem": origem})
+
+    for c in ParceiroPraca.objects.filter(
+        parceiro=parceiro, ativo=True, uf=uf_limpo
+    ).values_list("cidade", flat=True):
+        _add(c, "praca_parceiro")
+
     if items:
         return sorted(items, key=lambda x: x["cidade"].upper())
 
     try:
         from gestao.models import PracaBTU
 
-        cidades = (
-            PracaBTU.objects.filter(ativo=True, uf=uf_limpo)
-            .values_list("nome", flat=True)
-            .distinct()
-        )
-        return sorted(
-            ({"cidade": c, "origem": "catalogo"} for c in cidades if c),
-            key=lambda x: x["cidade"].upper(),
-        )
+        for c in PracaBTU.objects.filter(ativo=True, uf=uf_limpo).values_list(
+            "nome", flat=True
+        ):
+            _add(c, "catalogo")
     except Exception:
-        return []
+        pass
+    return sorted(items, key=lambda x: x["cidade"].upper())
 
 
 def listar_bairros_parceiro(parceiro: Parceiro, uf: str, cidade: str) -> list[dict[str, str]]:

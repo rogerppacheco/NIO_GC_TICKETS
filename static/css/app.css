@@ -1198,6 +1198,25 @@ body.page-gestao-sidebar .topbar-gestao { display: none; }
 }
 .rota-spinner-lg { width: 1.35rem; height: 1.35rem; }
 .rota-spinner-btn { margin-left: 0.45rem; }
+/* display: do .rota-spinner/.rota-dfv-* sobrescrevia [hidden] e o spinner nunca sumia */
+.rota-spinner[hidden],
+.rota-dfv-loading[hidden],
+.rota-dfv-empty[hidden],
+.rota-alerta[hidden],
+.rota-skeleton[hidden],
+.rota-form[hidden],
+.rota-local[hidden],
+#bloco-semana[hidden],
+#dfv-conteudo[hidden],
+#dfv-erro[hidden],
+#rota-form-error[hidden],
+#rota-status-salvo[hidden],
+#spin-salvar[hidden],
+#spin-uf[hidden],
+#spin-cidade[hidden],
+#spin-bairro[hidden] {
+  display: none !important;
+}
 @keyframes rota-spin { to { transform: rotate(360deg); } }
 .rota-skeleton { display: flex; flex-direction: column; gap: 0.75rem; }
 .skel {

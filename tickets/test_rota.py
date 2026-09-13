@@ -94,15 +94,21 @@ class RotaApiTests(TestCase):
         self.assertEqual(body["data"]["meta_semana"]["valor"], 25)
 
     def test_ufs_e_cidades(self):
+        # Duplicata com casing diferente não deve repetir UF na API
+        ParceiroPraca.objects.create(
+            parceiro=self.pdv, uf="mg", cidade="Contagem", bairro="Centro"
+        )
         r = self.client.get(reverse("rota_api_ufs"))
         self.assertEqual(r.status_code, 200)
         ufs = [i["uf"] for i in r.json()["data"]["items"]]
-        self.assertIn("MG", ufs)
+        self.assertEqual(ufs.count("MG"), 1)
+        self.assertEqual(len(ufs), len(set(ufs)))
 
         r = self.client.get(reverse("rota_api_cidades"), {"uf": "MG"})
         self.assertEqual(r.status_code, 200)
         cidades = [i["cidade"] for i in r.json()["data"]["items"]]
-        self.assertIn("BELO HORIZONTE", cidades)
+        self.assertTrue(any(c.upper() == "BELO HORIZONTE" for c in cidades))
+        self.assertEqual(len(cidades), len({c.casefold() for c in cidades}))
 
     def test_bairros_da_praca(self):
         r = self.client.get(

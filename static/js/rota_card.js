@@ -57,6 +57,8 @@
     dfvResumo: null,
     bairroTimer: null,
     bairroReq: 0,
+    cidadeReq: 0,
+    bairrosListReq: 0,
   };
 
   function csrfToken() {
@@ -66,11 +68,20 @@
 
   function show(node, on) {
     if (!node) return;
-    node.hidden = !on;
+    if (on) node.removeAttribute("hidden");
+    else node.setAttribute("hidden", "");
   }
 
   function setSpinner(node, on) {
     show(node, !!on);
+  }
+
+  function clearAllSpinners() {
+    setSpinner(el.spinUf, false);
+    setSpinner(el.spinCidade, false);
+    setSpinner(el.spinBairro, false);
+    setSpinner(el.spinSalvar, false);
+    show(el.dfvLoading, false);
   }
 
   function fmtNum(n) {
@@ -119,19 +130,35 @@
     opt0.value = "";
     opt0.textContent = "Selecione";
     select.appendChild(opt0);
+    var seen = {};
     (items || []).forEach(function (item) {
+      var value = String(item[valueKey] || "").trim();
+      if (!value) return;
+      var key = value.toUpperCase();
+      if (seen[key]) return;
+      seen[key] = true;
       var opt = document.createElement("option");
-      opt.value = item[valueKey];
-      opt.textContent = item[labelKey] || item[valueKey];
-      if (selected && String(selected) === String(item[valueKey])) {
+      opt.value = value;
+      opt.textContent = item[labelKey] || value;
+      if (selected && String(selected).trim().toUpperCase() === key) {
         opt.selected = true;
       }
       select.appendChild(opt);
     });
   }
 
+  function resetBairroField(message) {
+    el.bairro.value = "";
+    el.bairrosList.innerHTML = "";
+    el.bairro.disabled = true;
+    el.bairro.placeholder = "Selecione a cidade";
+    el.bairroFonte.textContent = message || "";
+    resetDfv();
+  }
+
   function resetDfv() {
     state.dfvResumo = null;
+    state.bairroReq += 1;
     show(el.dfvEmpty, true);
     show(el.dfvLoading, false);
     show(el.dfvErro, false);
@@ -183,61 +210,86 @@
 
   async function loadUfs(selectedUf) {
     setSpinner(el.spinUf, true);
-    var out = await api(urls.ufs);
-    setSpinner(el.spinUf, false);
-    if (!out.data.ok) return;
-    fillSelect(el.uf, out.data.data.items, "uf", "uf", selectedUf);
+    try {
+      var out = await api(urls.ufs);
+      if (!out.data.ok) return;
+      fillSelect(el.uf, out.data.data.items, "uf", "uf", selectedUf);
+    } finally {
+      setSpinner(el.spinUf, false);
+    }
   }
 
   async function loadCidades(uf, selectedCidade) {
+    var reqId = ++state.cidadeReq;
     el.cidade.disabled = !uf;
-    el.bairro.disabled = true;
-    el.bairro.value = "";
-    el.bairrosList.innerHTML = "";
-    el.bairroFonte.textContent = "";
-    resetDfv();
+    resetBairroField(uf ? "Selecione a cidade para carregar os bairros." : "");
     if (!uf) {
       fillSelect(el.cidade, [], "cidade", "cidade");
       return;
     }
     setSpinner(el.spinCidade, true);
-    var out = await api(urls.cidades + "?uf=" + encodeURIComponent(uf));
-    setSpinner(el.spinCidade, false);
-    if (!out.data.ok) return;
-    fillSelect(el.cidade, out.data.data.items, "cidade", "cidade", selectedCidade);
-    el.cidade.disabled = false;
+    try {
+      var out = await api(urls.cidades + "?uf=" + encodeURIComponent(uf));
+      if (reqId !== state.cidadeReq) return;
+      if (!out.data.ok) return;
+      fillSelect(el.cidade, out.data.data.items, "cidade", "cidade", selectedCidade);
+      el.cidade.disabled = false;
+    } finally {
+      if (reqId === state.cidadeReq) setSpinner(el.spinCidade, false);
+    }
   }
 
-  async function loadBairros(uf, cidade) {
-    el.bairro.disabled = !(uf && cidade);
+  /** Só chama após seleção de cidade (não no carregamento inicial de UF). */
+  async function loadBairros(uf, cidade, preserveBairro) {
+    var reqId = ++state.bairrosListReq;
+    var keep = (preserveBairro || "").trim();
     el.bairrosList.innerHTML = "";
     el.bairroFonte.textContent = "";
-    if (!(uf && cidade)) return;
-    setSpinner(el.spinBairro, true);
-    var out = await api(
-      urls.bairros +
-        "?uf=" +
-        encodeURIComponent(uf) +
-        "&cidade=" +
-        encodeURIComponent(cidade)
-    );
-    setSpinner(el.spinBairro, false);
-    if (!out.data.ok) {
-      el.bairroFonte.textContent = "Não foi possível listar bairros; digite manualmente.";
-      el.bairro.disabled = false;
+    if (!(uf && cidade)) {
+      resetBairroField();
       return;
     }
-    var items = out.data.data.items || [];
-    items.forEach(function (item) {
-      var opt = document.createElement("option");
-      opt.value = item.bairro;
-      el.bairrosList.appendChild(opt);
-    });
     el.bairro.disabled = false;
-    var fonte = out.data.data.fonte || "";
-    el.bairroFonte.textContent = items.length
-      ? items.length + " bairros (" + fonte + ")"
-      : "Digite o bairro (lista vazia — " + fonte + ")";
+    el.bairro.placeholder = "Carregando bairros…";
+    if (!keep) el.bairro.value = "";
+    setSpinner(el.spinBairro, true);
+    try {
+      var out = await api(
+        urls.bairros +
+          "?uf=" +
+          encodeURIComponent(uf) +
+          "&cidade=" +
+          encodeURIComponent(cidade)
+      );
+      if (reqId !== state.bairrosListReq) return;
+      if (!out.data.ok) {
+        el.bairro.placeholder = "Digite o bairro";
+        el.bairroFonte.textContent =
+          "Não foi possível listar bairros; digite manualmente.";
+        if (keep) el.bairro.value = keep;
+        return;
+      }
+      var items = out.data.data.items || [];
+      var seen = {};
+      items.forEach(function (item) {
+        var nome = String(item.bairro || "").trim();
+        if (!nome) return;
+        var key = nome.toUpperCase();
+        if (seen[key]) return;
+        seen[key] = true;
+        var opt = document.createElement("option");
+        opt.value = nome;
+        el.bairrosList.appendChild(opt);
+      });
+      el.bairro.placeholder = "Selecione ou digite o bairro";
+      if (keep) el.bairro.value = keep;
+      var fonte = out.data.data.fonte || "";
+      el.bairroFonte.textContent = items.length
+        ? items.length + " bairros carregados após a cidade (" + fonte + ")"
+        : "Nenhum bairro na lista — digite manualmente (" + fonte + ")";
+    } finally {
+      if (reqId === state.bairrosListReq) setSpinner(el.spinBairro, false);
+    }
   }
 
   async function loadDfv(uf, cidade, bairro) {
@@ -252,32 +304,43 @@
     show(el.dfvLoading, true);
     el.dfvLocal.textContent = bairro + " · " + cidade + "/" + uf;
 
-    var out = await api(
-      urls.dfv +
-        "?uf=" +
-        encodeURIComponent(uf) +
-        "&cidade=" +
-        encodeURIComponent(cidade) +
-        "&bairro=" +
-        encodeURIComponent(bairro)
-    );
-    if (reqId !== state.bairroReq) return;
-
-    if (!out.data.ok) {
-      show(el.dfvLoading, false);
+    try {
+      var out = await api(
+        urls.dfv +
+          "?uf=" +
+          encodeURIComponent(uf) +
+          "&cidade=" +
+          encodeURIComponent(cidade) +
+          "&bairro=" +
+          encodeURIComponent(bairro)
+      );
+      if (reqId !== state.bairroReq) return;
+      if (!out.data.ok) {
+        show(el.dfvErro, true);
+        el.dfvErro.textContent =
+          (out.data.error && out.data.error.message) || "Falha ao consultar DFV.";
+        return;
+      }
+      renderDfv(out.data.data);
+    } catch (e) {
+      if (reqId !== state.bairroReq) return;
       show(el.dfvErro, true);
-      el.dfvErro.textContent =
-        (out.data.error && out.data.error.message) || "Falha ao consultar DFV.";
-      return;
+      el.dfvErro.textContent = "Falha de rede ao consultar DFV.";
+    } finally {
+      if (reqId === state.bairroReq) show(el.dfvLoading, false);
     }
-    renderDfv(out.data.data);
   }
 
   function scheduleDfv() {
     clearTimeout(state.bairroTimer);
+    var bairro = (el.bairro.value || "").trim();
+    if (!bairro) {
+      resetDfv();
+      return;
+    }
     state.bairroTimer = setTimeout(function () {
-      loadDfv(el.uf.value, el.cidade.value, (el.bairro.value || "").trim());
-    }, 350);
+      loadDfv(el.uf.value, el.cidade.value, bairro);
+    }, 400);
   }
 
   async function validarSemana() {
@@ -313,60 +376,60 @@
   }
 
   async function init() {
-    var out = await api(urls.hoje);
-    show(el.skeleton, false);
-    show(el.form, true);
-    if (!out.data.ok) {
-      show(el.formError, true);
-      el.formError.textContent =
-        (out.data.error && out.data.error.message) || "Falha ao carregar.";
-      return;
-    }
-    var data = out.data.data;
-    state.ehSegunda = !!data.eh_segunda;
-    state.metaSemana = data.meta_semana || {};
-    show(el.blocoSemana, state.ehSegunda);
-    if (state.ehSegunda) {
-      el.metaHint.textContent =
-        "Meta semanal de referência: " +
-        fmtNum(state.metaSemana.valor) +
-        " (meta mensal VL " +
-        fmtNum(state.metaSemana.meta_mensal_vl) +
-        " ÷ 4).";
-      if (data.planejamento_semana) {
-        el.vendas.value = data.planejamento_semana.vendas_planejadas;
-        el.alertaSemana.className =
-          "rota-alerta " + (data.planejamento_semana.status_alerta || "ok");
-        el.alertaSemana.textContent = data.planejamento_semana.mensagem || "";
-        show(el.alertaSemana, true);
+    try {
+      var out = await api(urls.hoje);
+      show(el.skeleton, false);
+      show(el.form, true);
+      if (!out.data.ok) {
+        show(el.formError, true);
+        el.formError.textContent =
+          (out.data.error && out.data.error.message) || "Falha ao carregar.";
+        return;
       }
-    }
-
-    var defaults = data.defaults || {};
-    await loadUfs(defaults.uf || "");
-    if (defaults.uf) {
-      await loadCidades(defaults.uf, defaults.cidade || "");
-      if (defaults.cidade) {
-        await loadBairros(defaults.uf, defaults.cidade);
-      }
-    }
-
-    if (data.checkin) {
-      applyCheckin(data.checkin);
-      var loc = data.checkin.local || {};
-      if (loc.uf) {
-        el.uf.value = loc.uf;
-        await loadCidades(loc.uf, loc.cidade || "");
-        if (loc.cidade) {
-          await loadBairros(loc.uf, loc.cidade);
-          el.bairro.value = loc.bairro || "";
-          if (loc.bairro && data.checkin.tipo_rota === "PRESENCIAL") {
-            scheduleDfv();
-          }
+      var data = out.data.data;
+      state.ehSegunda = !!data.eh_segunda;
+      state.metaSemana = data.meta_semana || {};
+      show(el.blocoSemana, state.ehSegunda);
+      if (state.ehSegunda) {
+        el.metaHint.textContent =
+          "Meta semanal de referência: " +
+          fmtNum(state.metaSemana.valor) +
+          " (meta mensal VL " +
+          fmtNum(state.metaSemana.meta_mensal_vl) +
+          " ÷ 4).";
+        if (data.planejamento_semana) {
+          el.vendas.value = data.planejamento_semana.vendas_planejadas;
+          el.alertaSemana.className =
+            "rota-alerta " + (data.planejamento_semana.status_alerta || "ok");
+          el.alertaSemana.textContent = data.planejamento_semana.mensagem || "";
+          show(el.alertaSemana, true);
         }
       }
+
+      var loc = (data.checkin && data.checkin.local) || data.defaults || {};
+      var uf = loc.uf || "";
+      var cidade = loc.cidade || "";
+      var bairro = loc.bairro || "";
+
+      await loadUfs(uf);
+      if (uf) {
+        await loadCidades(uf, cidade);
+        // Bairros só depois da cidade definida (check-in ou default com cidade)
+        if (cidade) {
+          await loadBairros(uf, cidade, bairro);
+          if (bairro && (!data.checkin || data.checkin.tipo_rota === "PRESENCIAL")) {
+            scheduleDfv();
+          }
+        } else {
+          resetBairroField("Selecione a cidade para carregar os bairros.");
+        }
+      }
+
+      if (data.checkin) applyCheckin(data.checkin);
+      syncTipo();
+    } finally {
+      clearAllSpinners();
     }
-    syncTipo();
   }
 
   el.form.addEventListener("change", function (ev) {
@@ -374,11 +437,17 @@
   });
 
   el.uf.addEventListener("change", function () {
+    // Trocar UF: limpa cidade/bairro; bairros só após nova cidade
     loadCidades(el.uf.value, "");
   });
 
   el.cidade.addEventListener("change", function () {
-    loadBairros(el.uf.value, el.cidade.value);
+    var cidade = el.cidade.value;
+    if (!cidade) {
+      resetBairroField("Selecione a cidade para carregar os bairros.");
+      return;
+    }
+    loadBairros(el.uf.value, cidade, "");
   });
 
   el.bairro.addEventListener("input", scheduleDfv);
@@ -406,28 +475,31 @@
       payload.vendas_planejadas_semana = Number(el.vendas.value);
     }
 
-    var out = await api(urls.checkin, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    setSpinner(el.spinSalvar, false);
-    el.btnSalvar.disabled = false;
-
-    if (!out.data.ok) {
-      show(el.formError, true);
-      var err = out.data.error || {};
-      var fields = err.fields || {};
-      var parts = Object.keys(fields).map(function (k) {
-        return fields[k];
+    try {
+      var out = await api(urls.checkin, {
+        method: "POST",
+        body: JSON.stringify(payload),
       });
-      el.formError.textContent =
-        parts.join(" ") || err.message || "Não foi possível salvar.";
-      return;
-    }
 
-    applyCheckin(out.data.data);
-    el.statusSalvo.textContent = "Rota salva com sucesso.";
-    show(el.statusSalvo, true);
+      if (!out.data.ok) {
+        show(el.formError, true);
+        var err = out.data.error || {};
+        var fields = err.fields || {};
+        var parts = Object.keys(fields).map(function (k) {
+          return fields[k];
+        });
+        el.formError.textContent =
+          parts.join(" ") || err.message || "Não foi possível salvar.";
+        return;
+      }
+
+      applyCheckin(out.data.data);
+      el.statusSalvo.textContent = "Rota salva com sucesso.";
+      show(el.statusSalvo, true);
+    } finally {
+      setSpinner(el.spinSalvar, false);
+      el.btnSalvar.disabled = false;
+    }
   });
 
   if (document.readyState === "loading") {
