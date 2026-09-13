@@ -554,7 +554,8 @@ a.tab { text-decoration: none; display: inline-block; }
 .page-resultados .wrap-resultados { max-width: none; width: 100%; padding: 1.25rem 1.5rem 2.25rem; }
 .has-app-sidebar { display: flex; min-height: 100vh; background: #f3f4f6; }
 body.page-fila.has-app-sidebar { flex-direction: row; height: 100vh; overflow: hidden; }
-.app-frame { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 100vh; margin-left: 22px; }
+.app-frame { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 100vh; }
+.has-app-sidebar .app-frame { margin-left: 22px; }
 .app-sidebar {
   width: 22px;
   height: 100vh;
@@ -1147,6 +1148,66 @@ body.page-fila .app-frame { height: 100vh; min-height: 0; overflow: hidden; }
 }
 .portal-cards {
   margin-top: 0.25rem;
+}
+body.page-portal {
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+body.page-portal .app-frame {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  overflow: hidden;
+}
+body.page-portal .wrap-portal {
+  flex: 1;
+  min-height: 0;
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 0.85rem 1.15rem 1rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+body.page-portal .hero {
+  flex-shrink: 0;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+body.page-portal .hero h1 { font-size: 1.35rem; }
+body.page-portal .hero p { margin-top: 0.15rem; font-size: 0.92rem; }
+body.page-portal .portal-cards {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.85rem;
+}
+body.page-portal .portal-cards > :nth-child(-n+3) { grid-column: span 2; }
+body.page-portal .portal-cards > :nth-child(n+4) { grid-column: span 3; }
+body.page-portal .consulta-card {
+  height: 100%;
+  min-height: 0;
+  justify-content: center;
+  padding: 1rem 1.1rem;
+}
+body.page-portal .consulta-card p { font-size: 0.88rem; }
+body.page-portal .consulta-forms-access { padding: 0.55rem 0.7rem; }
+@media (max-width: 900px), (max-height: 640px) {
+  body.page-portal { height: auto; overflow: auto; }
+  body.page-portal .app-frame { overflow: visible; }
+  body.page-portal .wrap-portal { overflow: visible; }
+  body.page-portal .portal-cards {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+  }
+  body.page-portal .portal-cards > :nth-child(-n+3),
+  body.page-portal .portal-cards > :nth-child(n+4) { grid-column: auto; }
 }
 .consultas-tabs {
   margin-top: 0.25rem;
