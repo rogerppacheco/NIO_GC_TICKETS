@@ -46,8 +46,29 @@ SELECT_COLS: list[str] = [
     "CODIGO_CDO",
 ]
 
+# Colunas extras para o card Rota (agregação por bairro).
+# Nomes alinhados ao modelo BASE_HP_F; conjuntos em cascata se o Power BI rejeitar Property.
+SELECT_COLS_ROTA_FULL: list[str] = SELECT_COLS + [
+    "HP_LIVRE",
+    "HPS",
+    "HCS",
+    "CLASSIFICACAO",
+    "CELULA",
+    "FAIXA_APROVACAO_TI",
+    "FLAG_GROSS_6M",
+    "FLAG_HP_NOVO",
+]
+SELECT_COLS_ROTA_MIN: list[str] = SELECT_COLS + [
+    "HP_LIVRE",
+    "HPS",
+    "HCS",
+]
+SELECT_COLS_BAIRROS: list[str] = ["UF", "MUNICIPIO", "BAIRRO"]
+
 CACHE_KEY_PREFIX = "dfv_pbi:cep:"
 CACHE_KEY_PREFIX_CDO = "dfv_pbi:cdo:"
+CACHE_KEY_PREFIX_BAIRRO = "dfv_pbi:bairro:"
+CACHE_KEY_PREFIX_BAIRROS_LIST = "dfv_pbi:bairros:"
 _local_cache_lock = threading.Lock()
 _local_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
@@ -398,7 +419,9 @@ def parse_dsr_rows(
 def _build_cmd(
     filters: list[tuple[str, str]],
     restart_tokens: Optional[list[Any]] = None,
+    select_cols: Optional[list[str]] = None,
 ) -> dict[str, Any]:
+    cols = list(select_cols or SELECT_COLS)
     window_count = int(_cfg("DFV_POWERBI_WINDOW_COUNT", 5000) or 5000)
     select = [
         {
@@ -408,7 +431,7 @@ def _build_cmd(
             },
             "Name": f"{ENTITY}.{col}",
         }
-        for col in SELECT_COLS
+        for col in cols
     ]
     window_obj: dict[str, Any] = {"Count": window_count}
     if restart_tokens is not None:
@@ -443,7 +466,7 @@ def _build_cmd(
                 "Where": where_clauses,
             },
             "Binding": {
-                "Primary": {"Groupings": [{"Projections": list(range(len(SELECT_COLS)))}]},
+                "Primary": {"Groupings": [{"Projections": list(range(len(cols)))}]},
                 "DataReduction": {
                     "DataVolume": 4,
                     "Primary": {"Window": window_obj},
@@ -489,12 +512,16 @@ def _query_page(cmd: dict[str, Any], region: DfvRegionConfig) -> dict[str, Any]:
         raise DfvPowerBiError("Resposta Power BI não é JSON válido.") from exc
 
 
-def _rows_to_dicts(rows: list[list[Any]]) -> list[dict[str, Any]]:
+def _rows_to_dicts(
+    rows: list[list[Any]],
+    select_cols: Optional[list[str]] = None,
+) -> list[dict[str, Any]]:
+    cols = list(select_cols or SELECT_COLS)
     out: list[dict[str, Any]] = []
     for row in rows:
         item = {
-            SELECT_COLS[i]: (row[i] if i < len(row) else None)
-            for i in range(len(SELECT_COLS))
+            cols[i]: (row[i] if i < len(row) else None)
+            for i in range(len(cols))
         }
         # Normaliza CEP vindo como número (ex.: 3013000 -> 03013000)
         cep_raw = item.get("CEP")
@@ -551,6 +578,8 @@ def _consultar_por_filtro(
     cache_key: str,
     log_label: str,
     region: DfvRegionConfig,
+    select_cols: Optional[list[str]] = None,
+    max_pages: Optional[int] = None,
 ) -> list[dict[str, Any]]:
     """Consulta paginada genérica no Power BI com cache (uma região)."""
     if not _feature_enabled():
@@ -561,6 +590,7 @@ def _consultar_por_filtro(
             f"Resource key não configurada para região {region.code}."
         )
 
+    cols = list(select_cols or SELECT_COLS)
     cached = _cache_get(cache_key)
     if cached is not None:
         logger.info("[DFV-PBI] cache hit %s (%s registros)", log_label, len(cached))
@@ -570,17 +600,21 @@ def _consultar_por_filtro(
     all_rows: list[dict[str, Any]] = []
     restart: Optional[list[Any]] = None
     page = 0
-    max_pages = int(_cfg("DFV_POWERBI_MAX_PAGES", 20) or 20)
+    pages_limit = int(
+        max_pages
+        if max_pages is not None
+        else (_cfg("DFV_POWERBI_MAX_PAGES", 20) or 20)
+    )
 
     try:
-        while page < max_pages:
+        while page < pages_limit:
             page += 1
             data = _query_page(
-                _build_cmd(filters, restart_tokens=restart),
+                _build_cmd(filters, restart_tokens=restart, select_cols=cols),
                 region=region,
             )
-            rows, incomplete, rt = parse_dsr_rows(data, len(SELECT_COLS))
-            dicts = _rows_to_dicts(rows)
+            rows, incomplete, rt = parse_dsr_rows(data, len(cols))
+            dicts = _rows_to_dicts(rows, select_cols=cols)
             for item in dicts:
                 item["_fonte_regiao"] = region.code
                 item["_fonte_label"] = region.label
@@ -618,6 +652,8 @@ def _consultar_em_regioes(
     cache_key_base: str,
     log_label: str,
     regions: Optional[list[DfvRegionConfig]] = None,
+    select_cols: Optional[list[str]] = None,
+    max_pages: Optional[int] = None,
 ) -> list[dict[str, Any]]:
     """
     Consulta uma ou mais regiões em paralelo e une os resultados.
@@ -632,6 +668,8 @@ def _consultar_em_regioes(
     if not alvos:
         raise DfvPowerBiError("Nenhuma região DFV Power BI configurada.")
 
+    cols = list(select_cols or SELECT_COLS)
+
     if len(alvos) == 1:
         regiao = alvos[0]
         return _consultar_por_filtro(
@@ -639,6 +677,8 @@ def _consultar_em_regioes(
             cache_key=f"{cache_key_base}:reg:{regiao.code.lower()}",
             log_label=f"{log_label}|{regiao.code}",
             region=regiao,
+            select_cols=cols,
+            max_pages=max_pages,
         )
 
     resultados: list[list[dict[str, Any]]] = []
@@ -650,6 +690,8 @@ def _consultar_em_regioes(
             cache_key=f"{cache_key_base}:reg:{regiao.code.lower()}",
             log_label=f"{log_label}|{regiao.code}",
             region=regiao,
+            select_cols=cols,
+            max_pages=max_pages,
         )
 
     max_workers = min(len(alvos), 5)
@@ -1129,3 +1171,351 @@ def formatar_numeros_rua_cdoe(codigo_cdo: str, grupo: dict[str, Any]) -> list[st
         f"{', '.join(linhas)}"
     )
     return _split_mensagem(texto)
+
+
+def _norm_local(texto: str) -> str:
+    return re.sub(r"\s+", " ", _sem_acentos(texto or "").upper().strip())
+
+
+def _to_number(valor: Any) -> float:
+    if valor is None or valor == "":
+        return 0.0
+    if isinstance(valor, (int, float)):
+        return float(valor)
+    texto = str(valor).strip().replace("%", "").replace(",", ".")
+    try:
+        return float(texto)
+    except ValueError:
+        return 0.0
+
+
+def _pick_field(row: dict[str, Any], *candidates: str) -> Any:
+    for key in candidates:
+        if key in row and row.get(key) is not None and str(row.get(key)).strip() != "":
+            return row.get(key)
+    # fallback case-insensitive
+    lower_map = {str(k).upper(): k for k in row.keys()}
+    for key in candidates:
+        real = lower_map.get(key.upper())
+        if real is not None and row.get(real) is not None:
+            return row.get(real)
+    return None
+
+
+def _moda_ponderada(
+    registros: list[dict[str, Any]],
+    field_candidates: tuple[str, ...],
+    peso_candidates: tuple[str, ...] = ("HPS", "HP_LIVRE"),
+) -> tuple[str, list[dict[str, Any]]]:
+    pesos: dict[str, float] = {}
+    for row in registros:
+        raw = _pick_field(row, *field_candidates)
+        if raw is None:
+            continue
+        label = str(raw).strip()
+        if not label or label.lower() in ("none", "null", "nan"):
+            continue
+        peso = _to_number(_pick_field(row, *peso_candidates)) or 1.0
+        pesos[label] = pesos.get(label, 0.0) + peso
+    if not pesos:
+        return "", []
+    total = sum(pesos.values()) or 1.0
+    distribuicao = sorted(
+        (
+            {
+                "faixa" if "FAIXA" in field_candidates[0].upper() else "valor": k,
+                "hps": int(round(v)),
+                "pct": round(100.0 * v / total, 1),
+            }
+            for k, v in pesos.items()
+        ),
+        key=lambda item: item.get("hps", 0),
+        reverse=True,
+    )
+    # Normaliza chave da distribuição
+    if "FAIXA" not in field_candidates[0].upper():
+        distribuicao = [
+            {
+                "valor": d.get("valor") or d.get("faixa"),
+                "hps": d["hps"],
+                "pct": d["pct"],
+            }
+            for d in distribuicao
+        ]
+    else:
+        distribuicao = [
+            {"faixa": d.get("faixa") or d.get("valor"), "hps": d["hps"], "pct": d["pct"]}
+            for d in distribuicao
+        ]
+    predominante = max(pesos.items(), key=lambda kv: kv[1])[0]
+    return predominante, distribuicao
+
+
+def _consultar_bairro_com_fallback(
+    filters: list[tuple[str, str]],
+    cache_key_base: str,
+    log_label: str,
+    region: DfvRegionConfig,
+) -> tuple[list[dict[str, Any]], list[str], bool]:
+    """
+    Tenta conjuntos de colunas em cascata (full → min → base).
+    Returns: (registros, cols_usadas, incompleto_por_limite)
+    """
+    conjuntos = [
+        list(SELECT_COLS_ROTA_FULL),
+        list(SELECT_COLS_ROTA_MIN),
+        list(SELECT_COLS),
+    ]
+    last_error: Optional[Exception] = None
+    max_pages = int(_cfg("DFV_POWERBI_ROTA_MAX_PAGES", 8) or 8)
+    for cols in conjuntos:
+        try:
+            rows = _consultar_por_filtro(
+                filters=filters,
+                cache_key=f"{cache_key_base}:cols:{len(cols)}",
+                log_label=f"{log_label}|cols={len(cols)}",
+                region=region,
+                select_cols=cols,
+                max_pages=max_pages,
+            )
+            incompleto = len(rows) >= max_pages * int(
+                _cfg("DFV_POWERBI_WINDOW_COUNT", 5000) or 5000
+            )
+            return rows, cols, incompleto
+        except DfvPowerBiError as exc:
+            last_error = exc
+            logger.warning(
+                "[DFV-PBI] fallback colunas Rota (%s): %s", len(cols), exc
+            )
+            continue
+    if last_error:
+        raise last_error
+    return [], list(SELECT_COLS), False
+
+
+def listar_bairros_dfv(uf: str, cidade: str) -> list[str]:
+    """Lista bairros distintos no DFV para UF + município."""
+    uf_limpo = limpar_uf(uf)
+    cidade_txt = str(cidade or "").strip()
+    if not uf_limpo or not cidade_txt:
+        raise DfvPowerBiError("UF e cidade são obrigatórios.")
+
+    regiao = regiao_por_uf(uf_limpo)
+    if regiao is None:
+        raise DfvPowerBiError(f"UF {uf_limpo} sem região DFV configurada.")
+
+    cidade_key = _norm_local(cidade_txt)
+    cache_base = f"{CACHE_KEY_PREFIX_BAIRROS_LIST}{uf_limpo}:{cidade_key}"
+    max_pages = int(_cfg("DFV_POWERBI_ROTA_BAIRROS_MAX_PAGES", 4) or 4)
+
+    # Tenta filtro exato pelo texto informado; se vazio, não há match de grafia.
+    filters = [("UF", uf_limpo), ("MUNICIPIO", cidade_txt)]
+    try:
+        rows = _consultar_por_filtro(
+            filters=filters,
+            cache_key=f"{cache_base}:list",
+            log_label=f"BAIRROS uf={uf_limpo} cidade={cidade_txt}",
+            region=regiao,
+            select_cols=SELECT_COLS_BAIRROS,
+            max_pages=max_pages,
+        )
+    except DfvPowerBiError:
+        # Fallback: só UF e filtra município em memória (grafias alternativas).
+        rows = _consultar_por_filtro(
+            filters=[("UF", uf_limpo)],
+            cache_key=f"{cache_base}:uf_only",
+            log_label=f"BAIRROS uf={uf_limpo} (scan)",
+            region=regiao,
+            select_cols=SELECT_COLS_BAIRROS,
+            max_pages=max_pages,
+        )
+        rows = [
+            r
+            for r in rows
+            if _norm_local(str(r.get("MUNICIPIO") or "")) == cidade_key
+        ]
+
+    bairros: set[str] = set()
+    for row in rows:
+        nome = str(row.get("BAIRRO") or "").strip()
+        if nome and nome.lower() not in ("none", "null", "nan"):
+            bairros.add(nome)
+    return sorted(bairros, key=lambda x: _norm_local(x))
+
+
+def consultar_agregado_por_bairro(
+    uf: str,
+    cidade: str,
+    bairro: str,
+) -> dict[str, Any]:
+    """
+    Agrega indicadores DFV (HP_LIVRE, crédito, alertas) para um bairro.
+    """
+    uf_limpo = limpar_uf(uf)
+    cidade_txt = str(cidade or "").strip()
+    bairro_txt = str(bairro or "").strip()
+    if not uf_limpo or not cidade_txt or not bairro_txt:
+        raise DfvPowerBiError("UF, cidade e bairro são obrigatórios.")
+
+    regiao = regiao_por_uf(uf_limpo)
+    if regiao is None:
+        raise DfvPowerBiError(f"UF {uf_limpo} sem região DFV configurada.")
+
+    cache_base = (
+        f"{CACHE_KEY_PREFIX_BAIRRO}{uf_limpo}:"
+        f"{_norm_local(cidade_txt)}:{_norm_local(bairro_txt)}"
+    )
+    filters = [
+        ("UF", uf_limpo),
+        ("MUNICIPIO", cidade_txt),
+        ("BAIRRO", bairro_txt),
+    ]
+    try:
+        rows, _cols, incompleto = _consultar_bairro_com_fallback(
+            filters=filters,
+            cache_key_base=cache_base,
+            log_label=f"BAIRRO={bairro_txt}",
+            region=regiao,
+        )
+    except DfvPowerBiError:
+        # Retry com filtro UF+BAIRRO e match de município em memória
+        rows, _cols, incompleto = _consultar_bairro_com_fallback(
+            filters=[("UF", uf_limpo), ("BAIRRO", bairro_txt)],
+            cache_key_base=f"{cache_base}:nobairro_muni",
+            log_label=f"BAIRRO={bairro_txt}|uf+bairro",
+            region=regiao,
+        )
+        cidade_key = _norm_local(cidade_txt)
+        rows = [
+            r
+            for r in rows
+            if _norm_local(str(r.get("MUNICIPIO") or "")) == cidade_key
+        ]
+
+    if not rows:
+        raise DfvPowerBiError("Nenhum registro DFV para este bairro.")
+
+    hp_livre = int(round(sum(_to_number(_pick_field(r, "HP_LIVRE")) for r in rows)))
+    hps = int(round(sum(_to_number(_pick_field(r, "HPS")) for r in rows)))
+    hcs = int(round(sum(_to_number(_pick_field(r, "HCS")) for r in rows)))
+    pct_hc = round(100.0 * hcs / hps, 2) if hps > 0 else 0.0
+
+    fachadas_total = len(rows)
+    fachadas_viaveis = sum(
+        1
+        for r in rows
+        if _eh_viavel(_pick_field(r, "VIABILIDADE_ATUAL", "VIABILIDADE"))
+    )
+
+    faixa_pred, faixa_dist = _moda_ponderada(
+        rows,
+        ("FAIXA_APROVACAO_TI", "FAIXA APROVAÇÃO TI", "FAIXA_CREDITO", "FAIXA CRÉDITO"),
+    )
+    class_pred, _ = _moda_ponderada(
+        rows, ("CLASSIFICACAO", "CLASSIFICAÇÃO"), ("HPS", "HP_LIVRE")
+    )
+
+    celulas: list[str] = []
+    for r in rows:
+        cel = _pick_field(r, "CELULA", "CÉLULA")
+        if cel is None:
+            continue
+        texto = str(cel).strip()
+        if texto and texto not in celulas:
+            celulas.append(texto)
+
+    cdos = {
+        str(_pick_field(r, "CODIGO_CDO", "CD_CDO") or "").strip()
+        for r in rows
+        if str(_pick_field(r, "CODIGO_CDO", "CD_CDO") or "").strip()
+    }
+
+    def _count_flag(*names: str) -> int:
+        total = 0
+        for r in rows:
+            val = _pick_field(r, *names)
+            if val is None:
+                continue
+            s = _sem_acentos(str(val)).upper().strip()
+            if s in {"1", "S", "SIM", "TRUE", "YES", "X"}:
+                total += 1
+            elif s and s not in {"0", "N", "NAO", "FALSE", "NO", "NONE", "NULL"}:
+                # valores textuais não-falsos contam
+                if s not in {"", "-"}:
+                    total += 1
+        return total
+
+    qtd_hp_novo = _count_flag("FLAG_HP_NOVO", "FLAG HP NOVO")
+    qtd_gross = _count_flag("FLAG_GROSS_6M", "FLAG GROSS 6M", "FLAG_GROSS_6MESES")
+
+    alertas: list[dict[str, Any]] = []
+    if qtd_hp_novo:
+        alertas.append(
+            {
+                "codigo": "hp_novo",
+                "severidade": "info",
+                "titulo": "Há HPs novos na área",
+                "detalhe": f"{qtd_hp_novo} fachadas com FLAG HP NOVO",
+            }
+        )
+    if qtd_gross:
+        alertas.append(
+            {
+                "codigo": "gross_6m",
+                "severidade": "warning",
+                "titulo": "Flag Gross 6 meses presente",
+                "detalhe": f"{qtd_gross} pontos com FLAG GROSS 6M",
+            }
+        )
+    if fachadas_viaveis == 0:
+        alertas.append(
+            {
+                "codigo": "sem_viaveis",
+                "severidade": "critical",
+                "titulo": "Sem fachadas viáveis",
+                "detalhe": "Nenhuma linha com viabilidade positiva neste bairro.",
+            }
+        )
+
+    ttl = int(_cfg("DFV_POWERBI_CACHE_TTL_SECONDS", 600) or 600)
+    return {
+        "local": {
+            "uf": uf_limpo,
+            "cidade": cidade_txt,
+            "bairro": bairro_txt,
+        },
+        "indicadores": {
+            "hp_livre": hp_livre,
+            "hps": hps,
+            "hcs": hcs,
+            "pct_hc": pct_hc,
+            "fachadas_viaveis": fachadas_viaveis,
+            "fachadas_total": fachadas_total,
+        },
+        "credito": {
+            "faixa_predominante": faixa_pred or "—",
+            "distribuicao": faixa_dist,
+        },
+        "perfil": {
+            "classificacao_predominante": class_pred or "—",
+            "celulas": celulas[:8],
+            "cdos_distintos": len(cdos),
+        },
+        "alertas": alertas,
+        "meta": {
+            "consultado_em": timezone_now_iso(),
+            "cache_hit": False,
+            "ttl_segundos": ttl,
+            "fonte": "powerbi_BASE_HP_F",
+            "incompleto": incompleto,
+        },
+    }
+
+
+def timezone_now_iso() -> str:
+    try:
+        from django.utils import timezone as dj_tz
+
+        return dj_tz.localtime(dj_tz.now()).isoformat()
+    except Exception:
+        return time.strftime("%Y-%m-%dT%H:%M:%S")

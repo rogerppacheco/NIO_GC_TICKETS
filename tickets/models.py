@@ -811,6 +811,142 @@ class ProcessoLink(models.Model):
         return self.titulo
 
 
+class ParceiroPraca(models.Model):
+    """Praça de atuação do PDV para pré-preencher a cascata do card Rota."""
+
+    parceiro = models.ForeignKey(
+        Parceiro, on_delete=models.CASCADE, related_name="pracas_rota"
+    )
+    uf = models.CharField(max_length=2, db_index=True)
+    cidade = models.CharField(max_length=120, db_index=True)
+    bairro = models.CharField(max_length=120, blank=True)
+    ativo = models.BooleanField(default=True, db_index=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["uf", "cidade", "bairro"]
+        verbose_name = "Praça do parceiro (Rota)"
+        verbose_name_plural = "Praças do parceiro (Rota)"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["parceiro", "uf", "cidade", "bairro"],
+                name="uniq_parceiro_praca_rota",
+            )
+        ]
+
+    def __str__(self) -> str:
+        base = f"{self.uf} · {self.cidade}"
+        return f"{base} · {self.bairro}" if self.bairro else base
+
+
+class PlanejamentoSemanalRota(models.Model):
+    class StatusAlerta(models.TextChoices):
+        OK = "ok", "OK"
+        ABAIXO = "abaixo", "Abaixo"
+        CRITICO = "critico", "Crítico"
+
+    parceiro = models.ForeignKey(
+        Parceiro, on_delete=models.CASCADE, related_name="planejamentos_rota"
+    )
+    semana_inicio = models.DateField(
+        help_text="Segunda-feira (ISO) da semana de referência.",
+        db_index=True,
+    )
+    vendas_planejadas = models.PositiveIntegerField()
+    meta_referencia = models.PositiveIntegerField(
+        default=0,
+        help_text="Snapshot da meta semanal corporativa no momento do registro.",
+    )
+    status_alerta = models.CharField(
+        max_length=16,
+        choices=StatusAlerta.choices,
+        default=StatusAlerta.OK,
+    )
+    criado_por = models.ForeignKey(
+        ContatoParceiro,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="planejamentos_rota",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-semana_inicio"]
+        verbose_name = "Planejamento semanal (Rota)"
+        verbose_name_plural = "Planejamentos semanais (Rota)"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["parceiro", "semana_inicio"],
+                name="uniq_planejamento_rota_parceiro_semana",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.parceiro.codigo_pdv} · sem {self.semana_inicio}"
+
+    @property
+    def desvio_pct(self) -> float | None:
+        if not self.meta_referencia:
+            return None
+        return round(
+            100.0 * (self.vendas_planejadas - self.meta_referencia) / self.meta_referencia,
+            1,
+        )
+
+
+class CheckinRotaDiaria(models.Model):
+    class TipoRota(models.TextChoices):
+        PRESENCIAL = "PRESENCIAL", "Presencial"
+        DIGITAL = "DIGITAL", "Digital"
+
+    parceiro = models.ForeignKey(
+        Parceiro, on_delete=models.CASCADE, related_name="checkins_rota"
+    )
+    data = models.DateField(db_index=True)
+    tipo_rota = models.CharField(max_length=16, choices=TipoRota.choices)
+    qtd_vendedores = models.PositiveIntegerField()
+    uf = models.CharField(max_length=2, blank=True)
+    cidade = models.CharField(max_length=120, blank=True)
+    bairro = models.CharField(max_length=120, blank=True)
+    hp_livres = models.PositiveIntegerField(null=True, blank=True)
+    faixa_credito = models.CharField(max_length=80, blank=True)
+    alerta_dfv = models.CharField(max_length=255, blank=True)
+    dfv_payload = models.JSONField(default=dict, blank=True)
+    planejamento = models.ForeignKey(
+        PlanejamentoSemanalRota,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="checkins",
+    )
+    criado_por = models.ForeignKey(
+        ContatoParceiro,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="checkins_rota",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-data", "-atualizado_em"]
+        verbose_name = "Check-in diário (Rota)"
+        verbose_name_plural = "Check-ins diários (Rota)"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["parceiro", "data"],
+                name="uniq_checkin_rota_parceiro_data",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.parceiro.codigo_pdv} · {self.data} · {self.tipo_rota}"
+
+
 from tickets.consultas.vtal_models import (  # noqa: E402, F401
     VtalDadosViabilidade,
     VtalFonteDados,

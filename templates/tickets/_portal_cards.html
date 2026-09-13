@@ -1,5 +1,12 @@
 {% load static %}
 <div class="consultas-grid portal-cards">
+  <a class="consulta-card" href="{% if portal_parceiro and portal_contato %}{% url 'rota_portal' %}{% else %}{% url 'abrir_demanda' %}?next=rota{% endif %}">
+    <span class="consulta-ico">🗺️</span>
+    <h2>Rota</h2>
+    <p>Check-in diário: tipo de rota, equipe, bairro e HPs livres (DFV).</p>
+    <span class="consulta-tag">Operação do dia</span>
+  </a>
+
   <a class="consulta-card" href="{% url 'abrir_demanda' %}">
     <span class="consulta-ico">🎫</span>
     <h2>Abrir demanda</h2>

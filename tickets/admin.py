@@ -2,12 +2,15 @@ from django.contrib import admin
 
 from .models import (
     Anexo,
+    CheckinRotaDiaria,
     ContatoParceiro,
     Encaminhamento,
     Mascara,
     Mensagem,
     Parceiro,
+    ParceiroPraca,
     PerfilStaff,
+    PlanejamentoSemanalRota,
     ProcessoAnexo,
     ProcessoLink,
     ProcessoRepositorio,
@@ -24,12 +27,17 @@ class ContatoParceiroInline(admin.TabularInline):
     extra = 1
 
 
+class ParceiroPracaInline(admin.TabularInline):
+    model = ParceiroPraca
+    extra = 1
+
+
 @admin.register(Parceiro)
 class ParceiroAdmin(admin.ModelAdmin):
     list_display = ("codigo_pdv", "nome", "razao_social", "especialista", "ativo")
     list_filter = ("ativo",)
     search_fields = ("codigo_pdv", "nome", "razao_social")
-    inlines = [ContatoParceiroInline]
+    inlines = [ContatoParceiroInline, ParceiroPracaInline]
 
 
 @admin.register(ContatoParceiro)
@@ -130,4 +138,41 @@ class ProcessoRepositorioAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("titulo",)}
     inlines = [ProcessoAnexoInline, ProcessoLinkInline]
 
+
+@admin.register(ParceiroPraca)
+class ParceiroPracaAdmin(admin.ModelAdmin):
+    list_display = ("parceiro", "uf", "cidade", "bairro", "ativo")
+    list_filter = ("uf", "ativo")
+    search_fields = ("parceiro__codigo_pdv", "parceiro__nome", "cidade", "bairro")
+
+
+@admin.register(CheckinRotaDiaria)
+class CheckinRotaDiariaAdmin(admin.ModelAdmin):
+    list_display = (
+        "parceiro",
+        "data",
+        "tipo_rota",
+        "qtd_vendedores",
+        "uf",
+        "cidade",
+        "bairro",
+        "hp_livres",
+    )
+    list_filter = ("tipo_rota", "uf", "data")
+    search_fields = ("parceiro__codigo_pdv", "parceiro__nome", "bairro", "cidade")
+    date_hierarchy = "data"
+
+
+@admin.register(PlanejamentoSemanalRota)
+class PlanejamentoSemanalRotaAdmin(admin.ModelAdmin):
+    list_display = (
+        "parceiro",
+        "semana_inicio",
+        "vendas_planejadas",
+        "meta_referencia",
+        "status_alerta",
+    )
+    list_filter = ("status_alerta",)
+    search_fields = ("parceiro__codigo_pdv", "parceiro__nome")
+    date_hierarchy = "semana_inicio"
 

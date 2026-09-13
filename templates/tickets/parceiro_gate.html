@@ -19,6 +19,7 @@
         {% csrf_token %}
         <input type="hidden" name="passo" value="contato">
         <input type="hidden" name="parceiro" value="{{ parceiro.id }}">
+        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
         <div style="margin-bottom:0.85rem">
           <label for="contato">Seu nome / contato</label>
           <select name="contato" id="contato" required>
@@ -39,6 +40,7 @@
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="passo" value="parceiro">
+        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
         <div style="margin-bottom:0.85rem">
           <label for="parceiro">Parceiro / PDV</label>
           <select name="parceiro" id="parceiro" required>

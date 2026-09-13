@@ -1,6 +1,6 @@
 from django.urls import include, path
 
-from . import repositorio_views, views
+from . import repositorio_views, rota_views, views
 
 urlpatterns = [
     path("", views.home, name="home"),
@@ -59,6 +59,30 @@ urlpatterns = [
     path("repositorio/<slug:slug>/", repositorio_views.repositorio_detalhe, name="repositorio_detalhe"),
     path("abrir/formulario/", views.abrir_demanda_form, name="abrir_demanda_form"),
     path("abrir/inicio/", views.portal_parceiro, name="portal_parceiro"),
+    path("abrir/rota/", rota_views.rota_portal, name="rota_portal"),
+    path("abrir/rota/api/hoje/", rota_views.rota_api_hoje, name="rota_api_hoje"),
+    path("abrir/rota/api/localidades/ufs/", rota_views.rota_api_ufs, name="rota_api_ufs"),
+    path(
+        "abrir/rota/api/localidades/cidades/",
+        rota_views.rota_api_cidades,
+        name="rota_api_cidades",
+    ),
+    path(
+        "abrir/rota/api/localidades/bairros/",
+        rota_views.rota_api_bairros,
+        name="rota_api_bairros",
+    ),
+    path(
+        "abrir/rota/api/dfv/resumo/",
+        rota_views.rota_api_dfv_resumo,
+        name="rota_api_dfv_resumo",
+    ),
+    path(
+        "abrir/rota/api/planejamento/validar/",
+        rota_views.rota_api_planejamento_validar,
+        name="rota_api_planejamento_validar",
+    ),
+    path("abrir/rota/api/checkin/", rota_views.rota_api_checkin, name="rota_api_checkin"),
     path("abrir/minhas/", views.minhas_demandas, name="minhas_demandas"),
     path("abrir/sair/", views.portal_sair, name="portal_sair"),
     path("consulta/", views.consulta_busca, name="consulta_busca"),

@@ -268,6 +268,9 @@ def abrir_demanda(request: HttpRequest) -> HttpResponse:
                     "Este PDV ainda não tem contatos cadastrados. Peça ao gestor NIO para cadastrar.",
                 )
                 return redirect("abrir_demanda")
+            next_destino = (request.POST.get("next") or "").strip()
+            if next_destino:
+                return redirect(f"{reverse('abrir_demanda')}?passo=contato&next={next_destino}")
             return redirect(f"{reverse('abrir_demanda')}?passo=contato")
 
         if passo == "contato":
@@ -277,6 +280,9 @@ def abrir_demanda(request: HttpRequest) -> HttpResponse:
                 ContatoParceiro, pk=request.POST.get("contato"), parceiro=parceiro, ativo=True
             )
             request.session["contato_id"] = contato.id
+            next_destino = (request.POST.get("next") or request.GET.get("next") or "").strip()
+            if next_destino == "rota":
+                return redirect("rota_portal")
             return redirect("portal_parceiro")
 
     return render(
@@ -287,6 +293,7 @@ def abrir_demanda(request: HttpRequest) -> HttpResponse:
             "parceiro": parceiro if passo == "contato" else None,
             "contatos": contatos,
             "passo": passo if (passo == "contato" and parceiro) else "parceiro",
+            "next": (request.GET.get("next") or request.POST.get("next") or "").strip(),
         },
     )
 
