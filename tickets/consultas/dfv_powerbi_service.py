@@ -47,27 +47,33 @@ SELECT_COLS: list[str] = [
 ]
 
 # Colunas extras para o card Rota (agregação por bairro).
-# Nomes alinhados ao modelo BASE_HP_F; conjuntos em cascata se o Power BI rejeitar Property.
+# Nomes reais do schema Power BI (entity BASE_HP_F) — NÃO usar HPS/HCS/FAIXA_APROVACAO_TI
+# (esses nomes são de medidas/rótulos do relatório e quebram a query → fallback sem métricas).
 SELECT_COLS_ROTA_FULL: list[str] = SELECT_COLS + [
     "HP_LIVRE",
-    "HPS",
-    "HCS",
+    "HP_TOT",
+    "HC_TOT",
     "CLASSIFICACAO",
     "CELULA",
-    "FAIXA_APROVACAO_TI",
-    "FLAG_GROSS_6M",
-    "FLAG_HP_NOVO",
+    "ds_faixa_aprovacao_credito_total",
+    "ds_faixa_aprovacao_credito_local",
+    "ds_classe_social_dominante",
+    "TIPO_EDIFICACAO",
+    "FLAG_GROSS_6M_CEL",
+    "F_HP_NOVO",
 ]
 SELECT_COLS_ROTA_MIN: list[str] = SELECT_COLS + [
     "HP_LIVRE",
-    "HPS",
-    "HCS",
+    "HP_TOT",
+    "HC_TOT",
+    "CLASSIFICACAO",
+    "ds_faixa_aprovacao_credito_total",
 ]
 SELECT_COLS_BAIRROS: list[str] = ["UF", "MUNICIPIO", "BAIRRO"]
 
 CACHE_KEY_PREFIX = "dfv_pbi:cep:"
 CACHE_KEY_PREFIX_CDO = "dfv_pbi:cdo:"
-CACHE_KEY_PREFIX_BAIRRO = "dfv_pbi:bairro:"
+CACHE_KEY_PREFIX_BAIRRO = "dfv_pbi:bairro:v2:"
 CACHE_KEY_PREFIX_BAIRROS_LIST = "dfv_pbi:bairros:"
 _local_cache_lock = threading.Lock()
 _local_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
@@ -1177,6 +1183,12 @@ def _norm_local(texto: str) -> str:
     return re.sub(r"\s+", " ", _sem_acentos(texto or "").upper().strip())
 
 
+def _cache_slug(texto: str) -> str:
+    """Chave de cache sem espaços/acentos (compatível com memcached)."""
+    base = _norm_local(texto)
+    return re.sub(r"[^A-Z0-9]+", "_", base).strip("_") or "x"
+
+
 def _to_number(valor: Any) -> float:
     if valor is None or valor == "":
         return 0.0
@@ -1304,7 +1316,7 @@ def listar_bairros_dfv(uf: str, cidade: str) -> list[str]:
     if regiao is None:
         raise DfvPowerBiError(f"UF {uf_limpo} sem região DFV configurada.")
 
-    cidade_key = _norm_local(cidade_txt)
+    cidade_key = _cache_slug(cidade_txt)
     cache_base = f"{CACHE_KEY_PREFIX_BAIRROS_LIST}{uf_limpo}:{cidade_key}"
     max_pages = int(_cfg("DFV_POWERBI_ROTA_BAIRROS_MAX_PAGES", 4) or 4)
 
@@ -1363,7 +1375,7 @@ def consultar_agregado_por_bairro(
 
     cache_base = (
         f"{CACHE_KEY_PREFIX_BAIRRO}{uf_limpo}:"
-        f"{_norm_local(cidade_txt)}:{_norm_local(bairro_txt)}"
+        f"{_cache_slug(cidade_txt)}:{_cache_slug(bairro_txt)}"
     )
     filters = [
         ("UF", uf_limpo),
@@ -1395,9 +1407,15 @@ def consultar_agregado_por_bairro(
     if not rows:
         raise DfvPowerBiError("Nenhum registro DFV para este bairro.")
 
-    hp_livre = int(round(sum(_to_number(_pick_field(r, "HP_LIVRE")) for r in rows)))
-    hps = int(round(sum(_to_number(_pick_field(r, "HPS")) for r in rows)))
-    hcs = int(round(sum(_to_number(_pick_field(r, "HCS")) for r in rows)))
+    hp_livre = int(
+        round(sum(_to_number(_pick_field(r, "HP_LIVRE", "HPS_LIVRE")) for r in rows))
+    )
+    hps = int(
+        round(sum(_to_number(_pick_field(r, "HP_TOT", "HPS", "HP_TOTAL")) for r in rows))
+    )
+    hcs = int(
+        round(sum(_to_number(_pick_field(r, "HC_TOT", "HCS", "HC_TOTAL")) for r in rows))
+    )
     pct_hc = round(100.0 * hcs / hps, 2) if hps > 0 else 0.0
 
     fachadas_total = len(rows)
@@ -1409,10 +1427,28 @@ def consultar_agregado_por_bairro(
 
     faixa_pred, faixa_dist = _moda_ponderada(
         rows,
-        ("FAIXA_APROVACAO_TI", "FAIXA APROVAÇÃO TI", "FAIXA_CREDITO", "FAIXA CRÉDITO"),
+        (
+            "ds_faixa_aprovacao_credito_total",
+            "ds_faixa_aprovacao_credito_local",
+            "FAIXA_APROVACAO_TI",
+            "FAIXA APROVAÇÃO TI",
+        ),
+        ("HP_LIVRE", "HP_TOT", "HPS"),
     )
-    class_pred, _ = _moda_ponderada(
-        rows, ("CLASSIFICACAO", "CLASSIFICAÇÃO"), ("HPS", "HP_LIVRE")
+    class_pred, class_dist = _moda_ponderada(
+        rows,
+        ("CLASSIFICACAO", "CLASSIFICAÇÃO"),
+        ("HP_LIVRE", "HP_TOT", "HPS"),
+    )
+    classe_social_pred, _ = _moda_ponderada(
+        rows,
+        ("ds_classe_social_dominante",),
+        ("HP_LIVRE", "HP_TOT"),
+    )
+    tipo_edif_pred, _ = _moda_ponderada(
+        rows,
+        ("TIPO_EDIFICACAO",),
+        ("HP_LIVRE", "HP_TOT"),
     )
 
     celulas: list[str] = []
@@ -1440,13 +1476,14 @@ def consultar_agregado_por_bairro(
             if s in {"1", "S", "SIM", "TRUE", "YES", "X"}:
                 total += 1
             elif s and s not in {"0", "N", "NAO", "FALSE", "NO", "NONE", "NULL"}:
-                # valores textuais não-falsos contam
                 if s not in {"", "-"}:
                     total += 1
         return total
 
-    qtd_hp_novo = _count_flag("FLAG_HP_NOVO", "FLAG HP NOVO")
-    qtd_gross = _count_flag("FLAG_GROSS_6M", "FLAG GROSS 6M", "FLAG_GROSS_6MESES")
+    qtd_hp_novo = _count_flag("F_HP_NOVO", "FLAG_HP_NOVO", "FLAG HP NOVO")
+    qtd_gross = _count_flag(
+        "FLAG_GROSS_6M_CEL", "FLAG_GROSS_6M", "FLAG GROSS 6M", "FLAG_GROSS_6MESES"
+    )
 
     alertas: list[dict[str, Any]] = []
     if qtd_hp_novo:
@@ -1455,7 +1492,7 @@ def consultar_agregado_por_bairro(
                 "codigo": "hp_novo",
                 "severidade": "info",
                 "titulo": "Há HPs novos na área",
-                "detalhe": f"{qtd_hp_novo} fachadas com FLAG HP NOVO",
+                "detalhe": f"{qtd_hp_novo} fachadas com flag HP novo",
             }
         )
     if qtd_gross:
@@ -1464,7 +1501,7 @@ def consultar_agregado_por_bairro(
                 "codigo": "gross_6m",
                 "severidade": "warning",
                 "titulo": "Flag Gross 6 meses presente",
-                "detalhe": f"{qtd_gross} pontos com FLAG GROSS 6M",
+                "detalhe": f"{qtd_gross} pontos com FLAG GROSS 6M (célula)",
             }
         )
     if fachadas_viaveis == 0:
@@ -1498,6 +1535,9 @@ def consultar_agregado_por_bairro(
         },
         "perfil": {
             "classificacao_predominante": class_pred or "—",
+            "classificacao_distribuicao": class_dist,
+            "classe_social_predominante": classe_social_pred or "—",
+            "tipo_edificacao_predominante": tipo_edif_pred or "—",
             "celulas": celulas[:8],
             "cdos_distintos": len(cdos),
         },
@@ -1508,6 +1548,7 @@ def consultar_agregado_por_bairro(
             "ttl_segundos": ttl,
             "fonte": "powerbi_BASE_HP_F",
             "incompleto": incompleto,
+            "colunas": _cols,
         },
     }
 

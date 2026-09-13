@@ -46,6 +46,7 @@
     kpiViaveis: document.getElementById("kpi-viaveis"),
     dfvFaixa: document.getElementById("dfv-faixa"),
     dfvClass: document.getElementById("dfv-class"),
+    dfvClasseSocial: document.getElementById("dfv-classe-social"),
     dfvCdos: document.getElementById("dfv-cdos"),
     dfvAlertas: document.getElementById("dfv-alertas"),
     dfvMeta: document.getElementById("dfv-meta-info"),
@@ -182,6 +183,9 @@
       fmtNum(ind.fachadas_viaveis) + " / " + fmtNum(ind.fachadas_total);
     el.dfvFaixa.textContent = cred.faixa_predominante || "—";
     el.dfvClass.textContent = perfil.classificacao_predominante || "—";
+    if (el.dfvClasseSocial) {
+      el.dfvClasseSocial.textContent = perfil.classe_social_predominante || "—";
+    }
     el.dfvCdos.textContent = fmtNum(perfil.cdos_distintos);
 
     el.dfvAlertas.innerHTML = "";

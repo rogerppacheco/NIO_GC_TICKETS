@@ -186,29 +186,29 @@ class DfvAgregadoBairroTests(TestCase):
                     "MUNICIPIO": "BELO HORIZONTE",
                     "BAIRRO": "MARIA GORETTI",
                     "HP_LIVRE": 1,
-                    "HPS": 2,
-                    "HCS": 0,
+                    "HP_TOT": 2,
+                    "HC_TOT": 0,
                     "VIABILIDADE_ATUAL": "Viável",
-                    "FAIXA_APROVACAO_TI": "Entre 50% e 70%",
+                    "ds_faixa_aprovacao_credito_total": "Entre 50% e 70%",
                     "CLASSIFICACAO": "MEDIO",
                     "CODIGO_CDO": "CDOE-1",
-                    "FLAG_HP_NOVO": "1",
+                    "F_HP_NOVO": "1",
                 },
                 {
                     "UF": "MG",
                     "MUNICIPIO": "BELO HORIZONTE",
                     "BAIRRO": "MARIA GORETTI",
                     "HP_LIVRE": 6,
-                    "HPS": 6,
-                    "HCS": 0,
+                    "HP_TOT": 6,
+                    "HC_TOT": 0,
                     "VIABILIDADE_ATUAL": "Viável",
-                    "FAIXA_APROVACAO_TI": "Entre 50% e 70%",
+                    "ds_faixa_aprovacao_credito_total": "Entre 50% e 70%",
                     "CLASSIFICACAO": "MEDIO",
                     "CODIGO_CDO": "CDOE-1",
-                    "FLAG_HP_NOVO": "0",
+                    "F_HP_NOVO": "0",
                 },
             ],
-            ["HP_LIVRE"],
+            ["HP_LIVRE", "HP_TOT"],
             False,
         )
         with override_settings(DFV_POWERBI_ENABLED=True):
@@ -216,4 +216,5 @@ class DfvAgregadoBairroTests(TestCase):
         self.assertEqual(resumo["indicadores"]["hp_livre"], 7)
         self.assertEqual(resumo["indicadores"]["hps"], 8)
         self.assertEqual(resumo["credito"]["faixa_predominante"], "Entre 50% e 70%")
+        self.assertEqual(resumo["perfil"]["classificacao_predominante"], "MEDIO")
         self.assertTrue(any(a["codigo"] == "hp_novo" for a in resumo["alertas"]))
