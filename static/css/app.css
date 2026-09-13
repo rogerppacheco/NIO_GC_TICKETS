@@ -21,6 +21,8 @@ html, body { margin: 0; padding: 0; }
 body.page-fila {
   height: 100vh;
   overflow: hidden;
+}
+body.page-fila:not(.has-app-sidebar) {
   display: flex;
   flex-direction: column;
 }
@@ -551,19 +553,41 @@ a.tab { text-decoration: none; display: inline-block; }
 .resultados-tabs-panel .tab-panel { padding: 1rem 1.1rem 1.15rem; }
 .page-resultados .wrap-resultados { max-width: none; width: 100%; padding: 1.25rem 1.5rem 2.25rem; }
 .has-app-sidebar { display: flex; min-height: 100vh; background: #f3f4f6; }
-.app-frame { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 100vh; }
+body.page-fila.has-app-sidebar { flex-direction: row; height: 100vh; overflow: hidden; }
+.app-frame { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 100vh; margin-left: 22px; }
 .app-sidebar {
-  width: 248px;
-  flex-shrink: 0;
+  width: 22px;
   height: 100vh;
-  position: sticky;
+  position: fixed;
+  left: 0;
   top: 0;
+  z-index: 40;
   display: flex;
   flex-direction: column;
   background: #fff;
   border-right: 1px solid #eef1f4;
   overflow: hidden;
+  transition: width 0.16s ease, box-shadow 0.16s ease;
 }
+.app-sidebar-body {
+  width: 248px;
+  min-width: 248px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.app-sidebar-rail {
+  display: flex;
+  position: absolute;
+  inset: 0;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 0.85rem;
+  background: #fff;
+  color: var(--brand);
+  z-index: 2;
+}
+.app-sidebar-rail svg { width: 16px; height: 16px; }
 .app-sidebar-brand { padding: 0.95rem 1rem 0.55rem; }
 .app-sidebar-brand .brand { flex-wrap: wrap; font-size: 0.95rem; line-height: 1.15; }
 .app-sidebar-brand .brand small { display: block; width: 100%; margin-top: 0.1rem; font-size: 0.72rem; }
@@ -636,26 +660,43 @@ a.tab { text-decoration: none; display: inline-block; }
   cursor: pointer;
 }
 .has-app-sidebar .sidebar-toggle { display: inline-flex; }
-.has-app-sidebar .topbar .brand { display: none; }
+.has-app-sidebar .topbar .brand { display: flex; }
+body.sidebar-pinned .topbar .brand { display: none; }
 .has-app-sidebar .topbar {
   background: #fff;
   border-bottom: 1px solid #f0f2f5;
   box-shadow: none;
 }
-body.sidebar-collapsed .app-sidebar { width: 0; border: 0; overflow: hidden; }
-body.page-fila.has-app-sidebar:not(.sidebar-ready) .app-sidebar { width: 0; border: 0; }
+.app-sidebar:hover,
+.app-sidebar:focus-within,
+body.sidebar-pinned .app-sidebar {
+  width: 248px;
+}
+.app-sidebar:hover,
+.app-sidebar:focus-within {
+  box-shadow: 16px 0 36px rgba(21, 32, 43, 0.12);
+}
+body.sidebar-pinned .app-frame { margin-left: 248px; }
+.app-sidebar:hover .app-sidebar-rail,
+.app-sidebar:focus-within .app-sidebar-rail,
+body.sidebar-pinned .app-sidebar-rail { display: none; }
 body.page-fila .app-frame > main { flex: 1; min-height: 0; }
 @media (max-width: 900px) {
-  .app-sidebar {
-    position: fixed;
-    z-index: 50;
+  .has-app-sidebar .app-frame,
+  body.sidebar-pinned .app-frame { margin-left: 0; }
+  .app-sidebar,
+  .app-sidebar:hover,
+  .app-sidebar:focus-within {
+    width: 248px;
     transform: translateX(-105%);
-    box-shadow: 16px 0 40px rgba(21, 32, 43, 0.08);
+    box-shadow: none;
   }
-  body.has-app-sidebar:not(.sidebar-collapsed) .app-sidebar { transform: none; width: 248px; }
-  body.sidebar-collapsed .app-sidebar { width: 248px; }
+  body.sidebar-pinned .app-sidebar {
+    transform: none;
+    width: 248px;
+  }
+  .app-sidebar-rail { display: none; }
 }
-body.page-fila.has-app-sidebar { height: 100vh; overflow: hidden; }
 body.page-fila .app-frame { height: 100vh; min-height: 0; overflow: hidden; }
 .page-tabs {
   display: flex;

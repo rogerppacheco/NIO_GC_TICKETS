@@ -1,5 +1,9 @@
 {% with esc=gestao_escopo|default:"meus" name=request.resolver_match.url_name|default:"" %}
 <aside class="app-sidebar" id="app-sidebar" aria-label="Navegação">
+  <span class="app-sidebar-rail" aria-hidden="true" title="Passe o mouse para abrir o menu">
+    <svg viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+  </span>
+  <div class="app-sidebar-body">
   <div class="app-sidebar-brand">
     <a class="brand" href="{% url 'fila' %}">
       <span>NIO</span> ESPECIALISTA
@@ -83,6 +87,7 @@
     <div class="app-sidebar-escopo">
       {% include "gestao/_escopo.html" %}
     </div>
+  </div>
   </div>
 </aside>
 {% endwith %}

@@ -29,21 +29,22 @@
   var sideBtn = document.getElementById("sidebar-toggle");
   if (!sideBtn) return;
   var key = "nio-sidebar";
-  var onFila = document.body.classList.contains("page-fila");
   var saved = null;
   try {
     saved = localStorage.getItem(key);
   } catch (e) {
     saved = null;
   }
-  var open = saved === "1" || (saved !== "0" && !onFila);
-  function apply(isOpen) {
+  var pinned = saved === "1";
+  function apply(isPinned) {
     document.body.classList.add("sidebar-ready");
-    document.body.classList.toggle("sidebar-collapsed", !isOpen);
-    sideBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
-    sideBtn.textContent = isOpen ? "Ocultar menu" : "Menu";
+    document.body.classList.toggle("sidebar-pinned", isPinned);
+    document.body.classList.toggle("sidebar-collapsed", !isPinned);
+    sideBtn.setAttribute("aria-expanded", isPinned ? "true" : "false");
+    sideBtn.textContent = isPinned ? "Recolher" : "Fixar menu";
+    sideBtn.title = isPinned ? "Recolher o menu" : "Manter o menu aberto";
   }
-  apply(open);
+  apply(pinned);
   sideBtn.addEventListener("click", function () {
     var next = document.body.classList.contains("sidebar-collapsed");
     apply(next);
