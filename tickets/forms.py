@@ -526,6 +526,13 @@ class TicketCreateForm(forms.ModelForm):
             "turno_alternativo",
             "descricao",
             "observacoes",
+            "sa",
+            "tipo_pendencia",
+            "recorrencia",
+            "variacao_sem_slot",
+            "cargo_acesso",
+            "rg",
+            "email_solicitante",
         ]
         widgets = {
             "tipo": forms.Select(attrs={"id": "id_tipo", "class": "tipo-demanda"}),
@@ -549,6 +556,12 @@ class TicketCreateForm(forms.ModelForm):
                     "placeholder": "DDD + número do cliente",
                 }
             ),
+            "tipo_pendencia": forms.TextInput(
+                attrs={"placeholder": "Ex.: documentação, endereço, crédito"}
+            ),
+            "cargo_acesso": forms.TextInput(attrs={"placeholder": "Cargo solicitado"}),
+            "rg": forms.TextInput(attrs={"placeholder": "RG"}),
+            "email_solicitante": forms.EmailInput(attrs={"placeholder": "email@empresa.com"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -587,6 +600,8 @@ class TicketCreateForm(forms.ModelForm):
             self.fields["nome_cliente"].widget.attrs.setdefault(
                 "placeholder", "Nome completo do cliente"
             )
+        if "sa" in self.fields:
+            self.fields["sa"].widget.attrs.setdefault("placeholder", "Número da SA")
         # Label padrão de documento: obrigatório só quando o schema exige
         if "documento_cliente" in self.fields:
             self.fields["documento_cliente"].label = "CPF / CNPJ"
@@ -594,12 +609,17 @@ class TicketCreateForm(forms.ModelForm):
             [
                 "parceiro",
                 "tipo",
+                "variacao_sem_slot",
                 "pedido",
+                "sa",
                 "documento_cliente",
                 "nome_cliente",
                 "tt",
                 "tt_vendedor",
                 "tt_backoffice",
+                "cargo_acesso",
+                "rg",
+                "email_solicitante",
                 "cep",
                 "logradouro",
                 "numero_fachada",
@@ -615,6 +635,8 @@ class TicketCreateForm(forms.ModelForm):
                 "solicitante_contato",
                 "data_alternativa",
                 "turno_alternativo",
+                "tipo_pendencia",
+                "recorrencia",
                 "motivo_reparo",
                 "descricao",
                 "observacoes",
@@ -629,7 +651,18 @@ class TicketCreateForm(forms.ModelForm):
             return cleaned
         cfg = schema_tipo(tipo)
         labels = {**LABELS_SIMPLES, **LABELS_POR_TIPO.get(tipo, {})}
+        for trigger, by_val in (cfg.get("labels_se") or {}).items():
+            labels.update((by_val or {}).get(cleaned.get(trigger) or "", {}) or {})
+        visivel_se = cfg.get("visivel_se") or {}
+        ocultos = set()
+        for campo, regra in visivel_se.items():
+            if cleaned.get(regra.get("campo")) != regra.get("valor"):
+                ocultos.add(campo)
+                if campo in cleaned:
+                    cleaned[campo] = None
         for campo in cfg["obrigatorios"]:
+            if campo in ocultos:
+                continue
             if campo == "evidencias":
                 files = cleaned.get("evidencias") or []
                 if not files and self.files:
@@ -639,6 +672,12 @@ class TicketCreateForm(forms.ModelForm):
                 continue
             valor = cleaned.get(campo)
             if valor in (None, ""):
+                label = labels.get(campo, campo)
+                self.add_error(campo, f"{label} é obrigatório para este tipo.")
+        for campo, regra in visivel_se.items():
+            if campo in ocultos:
+                continue
+            if cleaned.get(campo) in (None, ""):
                 label = labels.get(campo, campo)
                 self.add_error(campo, f"{label} é obrigatório para este tipo.")
         if tipo == TipoDemanda.REPARO:

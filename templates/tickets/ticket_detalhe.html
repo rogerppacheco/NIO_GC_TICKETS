@@ -70,6 +70,20 @@
               <div class="full kv"><label>{{ labels_tipo.descricao|default:"Descrição" }}</label><div class="long-text">{{ ticket.descricao|texto_formatado }}</div></div>
             {% elif key == "observacoes" %}
               <div class="full kv"><label>{{ labels_tipo.observacoes|default:"Observações" }}</label><div class="long-text">{{ ticket.observacoes|texto_formatado }}</div></div>
+            {% elif key == "sa" %}
+              <div><label>{{ labels_tipo.sa|default:"SA" }}</label><div>{{ ticket.sa|default:"—" }}</div></div>
+            {% elif key == "tipo_pendencia" %}
+              <div class="kv"><label>{{ labels_tipo.tipo_pendencia|default:"Tipo da pendência" }}</label><div>{{ ticket.tipo_pendencia|default:"—" }}</div></div>
+            {% elif key == "recorrencia" %}
+              <div><label>{{ labels_tipo.recorrencia|default:"Recorrência" }}</label><div>{{ ticket.get_recorrencia_display|default:"—" }}</div></div>
+            {% elif key == "variacao_sem_slot" %}
+              <div class="full kv"><label>{{ labels_tipo.variacao_sem_slot|default:"Situação do pedido" }}</label><div>{{ ticket.get_variacao_sem_slot_display|default:"—" }}</div></div>
+            {% elif key == "cargo_acesso" %}
+              <div><label>{{ labels_tipo.cargo_acesso|default:"Cargo" }}</label><div>{{ ticket.cargo_acesso|default:"—" }}</div></div>
+            {% elif key == "rg" %}
+              <div><label>{{ labels_tipo.rg|default:"RG" }}</label><div>{{ ticket.rg|default:"—" }}</div></div>
+            {% elif key == "email_solicitante" %}
+              <div class="kv"><label>{{ labels_tipo.email_solicitante|default:"E-mail" }}</label><div>{{ ticket.email_solicitante|default:"—" }}</div></div>
             {% endif %}
           {% endfor %}
           <div class="kv"><label>Aberto por</label><div>{{ ticket.contato.nome|default:ticket.solicitante_nome|default:"—" }}</div></div>

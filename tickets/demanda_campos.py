@@ -89,6 +89,7 @@ CAMPOS_POR_TIPO: dict[str, dict] = {
             "tt_vendedor",
             "tt_backoffice",
             "solicitante_nome",
+            "solicitante_contato",
             "observacoes",
             "descricao",
             "evidencias",
@@ -96,14 +97,17 @@ CAMPOS_POR_TIPO: dict[str, dict] = {
         "obrigatorios": [
             "tt_vendedor",
             "tt_backoffice",
+            "documento_cliente",
+            "solicitante_contato",
             "observacoes",
             "descricao",
             "evidencias",
         ],
     },
     TipoDemanda.SEM_SLOT: {
-        "titulo": "Pedido, endereço, data e telefone do cliente",
+        "titulo": "Diga se o pedido não tem agenda ou se já está agendado sem slot D+1",
         "campos": [
+            "variacao_sem_slot",
             "pedido",
             "cep",
             "logradouro",
@@ -114,11 +118,35 @@ CAMPOS_POR_TIPO: dict[str, dict] = {
             "uf",
             "endereco_completo",
             "data_desejada",
+            "data_alternativa",
             "turno",
             "solicitante_contato",
             "evidencias",
         ],
-        "obrigatorios": ["pedido", "data_desejada", "turno", "solicitante_contato"],
+        "obrigatorios": [
+            "variacao_sem_slot",
+            "pedido",
+            "data_desejada",
+            "turno",
+            "solicitante_contato",
+        ],
+        "visivel_se": {
+            "data_alternativa": {
+                "campo": "variacao_sem_slot",
+                "valor": "agendado_d1",
+            },
+        },
+        "labels_se": {
+            "variacao_sem_slot": {
+                "sem_agenda": {
+                    "data_desejada": "Data que o cliente deseja agendar",
+                },
+                "agendado_d1": {
+                    "data_desejada": "Data agendada no sistema",
+                    "data_alternativa": "Data D+1 sem slot",
+                },
+            },
+        },
     },
     TipoDemanda.INSTALACAO_FISICA: {
         "titulo": "OS, endereço e descrição",
@@ -173,6 +201,302 @@ CAMPOS_POR_TIPO: dict[str, dict] = {
         ],
         "descricao_se": {"campo": "motivo_reparo", "valor": "outro"},
     },
+    TipoDemanda.PENDENCIA_INDEVIDA: {
+        "titulo": "OS, SA, cliente, endereço, data e detalhe da pendência",
+        "campos": [
+            "pedido",
+            "sa",
+            "nome_cliente",
+            "solicitante_nome",
+            "solicitante_contato",
+            "cep",
+            "logradouro",
+            "numero_fachada",
+            "complemento",
+            "bairro",
+            "cidade",
+            "uf",
+            "endereco_completo",
+            "data_desejada",
+            "tipo_pendencia",
+            "recorrencia",
+            "descricao",
+            "evidencias",
+        ],
+        "obrigatorios": [
+            "pedido",
+            "sa",
+            "nome_cliente",
+            "solicitante_nome",
+            "solicitante_contato",
+            "cep",
+            "numero_fachada",
+            "cidade",
+            "data_desejada",
+            "tipo_pendencia",
+            "recorrencia",
+            "descricao",
+        ],
+    },
+    TipoDemanda.AGENDA_NAO_CUMPRIDA: {
+        "titulo": "OS, SA, cliente, endereço, data e detalhe da agenda não cumprida",
+        "campos": [
+            "pedido",
+            "sa",
+            "nome_cliente",
+            "solicitante_nome",
+            "solicitante_contato",
+            "cep",
+            "logradouro",
+            "numero_fachada",
+            "complemento",
+            "bairro",
+            "cidade",
+            "uf",
+            "endereco_completo",
+            "data_desejada",
+            "tipo_pendencia",
+            "recorrencia",
+            "descricao",
+            "evidencias",
+        ],
+        "obrigatorios": [
+            "pedido",
+            "sa",
+            "nome_cliente",
+            "solicitante_nome",
+            "solicitante_contato",
+            "cep",
+            "numero_fachada",
+            "cidade",
+            "data_desejada",
+            "tipo_pendencia",
+            "recorrencia",
+            "descricao",
+        ],
+    },
+    TipoDemanda.SLOT_ALONGADO: {
+        "titulo": "OS, SA, cliente, endereço, data e detalhe do slot alongado",
+        "campos": [
+            "pedido",
+            "sa",
+            "nome_cliente",
+            "solicitante_nome",
+            "solicitante_contato",
+            "cep",
+            "logradouro",
+            "numero_fachada",
+            "complemento",
+            "bairro",
+            "cidade",
+            "uf",
+            "endereco_completo",
+            "data_desejada",
+            "tipo_pendencia",
+            "recorrencia",
+            "descricao",
+            "evidencias",
+        ],
+        "obrigatorios": [
+            "pedido",
+            "sa",
+            "nome_cliente",
+            "solicitante_nome",
+            "solicitante_contato",
+            "cep",
+            "numero_fachada",
+            "cidade",
+            "data_desejada",
+            "tipo_pendencia",
+            "recorrencia",
+            "descricao",
+        ],
+    },
+    TipoDemanda.REAGENDAMENTO_NAO_SOLICITADO: {
+        "titulo": "OS, SA, cliente, endereço, data e detalhe do reagendamento não solicitado",
+        "campos": [
+            "pedido",
+            "sa",
+            "nome_cliente",
+            "solicitante_nome",
+            "solicitante_contato",
+            "cep",
+            "logradouro",
+            "numero_fachada",
+            "complemento",
+            "bairro",
+            "cidade",
+            "uf",
+            "endereco_completo",
+            "data_desejada",
+            "tipo_pendencia",
+            "recorrencia",
+            "descricao",
+            "evidencias",
+        ],
+        "obrigatorios": [
+            "pedido",
+            "sa",
+            "nome_cliente",
+            "solicitante_nome",
+            "solicitante_contato",
+            "cep",
+            "numero_fachada",
+            "cidade",
+            "data_desejada",
+            "tipo_pendencia",
+            "recorrencia",
+            "descricao",
+        ],
+    },
+    TipoDemanda.AGENDAMENTO_CANCELADO: {
+        "titulo": "OS, SA, cliente, endereço, data e detalhe do agendamento cancelado",
+        "campos": [
+            "pedido",
+            "sa",
+            "nome_cliente",
+            "solicitante_nome",
+            "solicitante_contato",
+            "cep",
+            "logradouro",
+            "numero_fachada",
+            "complemento",
+            "bairro",
+            "cidade",
+            "uf",
+            "endereco_completo",
+            "data_desejada",
+            "tipo_pendencia",
+            "recorrencia",
+            "descricao",
+            "evidencias",
+        ],
+        "obrigatorios": [
+            "pedido",
+            "sa",
+            "nome_cliente",
+            "solicitante_nome",
+            "solicitante_contato",
+            "cep",
+            "numero_fachada",
+            "cidade",
+            "data_desejada",
+            "tipo_pendencia",
+            "recorrencia",
+            "descricao",
+        ],
+    },
+    TipoDemanda.CANCELAMENTO_REEMISSAO: {
+        "titulo": "OS, SA, cliente, endereço, data e detalhe do cancelamento/reemissão",
+        "campos": [
+            "pedido",
+            "sa",
+            "nome_cliente",
+            "solicitante_nome",
+            "solicitante_contato",
+            "cep",
+            "logradouro",
+            "numero_fachada",
+            "complemento",
+            "bairro",
+            "cidade",
+            "uf",
+            "endereco_completo",
+            "data_desejada",
+            "tipo_pendencia",
+            "recorrencia",
+            "descricao",
+            "evidencias",
+        ],
+        "obrigatorios": [
+            "pedido",
+            "sa",
+            "nome_cliente",
+            "solicitante_nome",
+            "solicitante_contato",
+            "cep",
+            "numero_fachada",
+            "cidade",
+            "data_desejada",
+            "tipo_pendencia",
+            "recorrencia",
+            "descricao",
+        ],
+    },
+    TipoDemanda.OS_NAO_ATRIBUIDA: {
+        "titulo": "OS, SA, cliente, endereço, data e detalhe da OS não atribuída",
+        "campos": [
+            "pedido",
+            "sa",
+            "nome_cliente",
+            "solicitante_nome",
+            "solicitante_contato",
+            "cep",
+            "logradouro",
+            "numero_fachada",
+            "complemento",
+            "bairro",
+            "cidade",
+            "uf",
+            "endereco_completo",
+            "data_desejada",
+            "tipo_pendencia",
+            "recorrencia",
+            "descricao",
+            "evidencias",
+        ],
+        "obrigatorios": [
+            "pedido",
+            "sa",
+            "nome_cliente",
+            "solicitante_nome",
+            "solicitante_contato",
+            "cep",
+            "numero_fachada",
+            "cidade",
+            "data_desejada",
+            "tipo_pendencia",
+            "recorrencia",
+            "descricao",
+        ],
+    },
+    TipoDemanda.VAZAMENTO_DADOS: {
+        "titulo": "CPF, data da ocorrência, situação e evidências",
+        "campos": [
+            "documento_cliente",
+            "pedido",
+            "data_desejada",
+            "descricao",
+            "evidencias",
+        ],
+        "obrigatorios": [
+            "documento_cliente",
+            "data_desejada",
+            "descricao",
+            "evidencias",
+        ],
+    },
+    TipoDemanda.GESTAO_ACESSOS: {
+        "titulo": "TT, cargo, identidade e detalhe do acesso",
+        "campos": [
+            "tt",
+            "cargo_acesso",
+            "solicitante_nome",
+            "documento_cliente",
+            "rg",
+            "email_solicitante",
+            "descricao",
+        ],
+        "obrigatorios": [
+            "tt",
+            "cargo_acesso",
+            "solicitante_nome",
+            "documento_cliente",
+            "rg",
+            "email_solicitante",
+            "descricao",
+        ],
+    },
     TipoDemanda.OUTROS: {
         "titulo": "Descreva a demanda",
         "campos": ["pedido", "descricao", "evidencias"],
@@ -208,6 +532,13 @@ LABELS_SIMPLES = {
     "turno_alternativo": "Opção 2 — Turno",
     "motivo_reparo": "Solicitação",
     "evidencias": "Evidências (anexo)",
+    "sa": "SA",
+    "tipo_pendencia": "Tipo da pendência",
+    "recorrencia": "Recorrência",
+    "variacao_sem_slot": "Situação do pedido",
+    "cargo_acesso": "Cargo",
+    "rg": "RG",
+    "email_solicitante": "E-mail",
 }
 
 # Labels específicas por tipo (sobrescreve LABELS_SIMPLES no form)
@@ -217,6 +548,7 @@ LABELS_POR_TIPO: dict[str, dict[str, str]] = {
         "tt_backoffice": "TT do backoffice de cadastro do pedido com problema",
         "observacoes": "Etapa do erro",
         "solicitante_nome": "Login / nome",
+        "solicitante_contato": "Telefone de contato com o cliente",
         "documento_cliente": "CNPJ/CPF do cliente",
         "descricao": "Cenário reportado",
     },
@@ -239,6 +571,20 @@ LABELS_POR_TIPO: dict[str, dict[str, str]] = {
     },
     TipoDemanda.SEM_SLOT: {
         "solicitante_contato": "Telefone do cliente",
+        "variacao_sem_slot": "Situação do pedido",
+        "data_desejada": "Data que o cliente deseja agendar",
+        "data_alternativa": "Data D+1 sem slot",
+    },
+    TipoDemanda.VAZAMENTO_DADOS: {
+        "documento_cliente": "CPF / CNPJ",
+        "pedido": "OS (se houver)",
+        "data_desejada": "Data da ocorrência",
+        "descricao": "Descrever situação",
+    },
+    TipoDemanda.GESTAO_ACESSOS: {
+        "solicitante_nome": "Nome completo",
+        "documento_cliente": "CPF / CNPJ",
+        "descricao": "Detalhamento da ocorrência",
     },
     TipoDemanda.REPARO: {
         "solicitante_contato": "Contato do cliente",
@@ -252,6 +598,28 @@ LABELS_POR_TIPO: dict[str, dict[str, str]] = {
         "descricao": "Descreva a solicitação",
     },
 }
+
+TIPOS_KIT_OPERACAO = (
+    TipoDemanda.PENDENCIA_INDEVIDA,
+    TipoDemanda.AGENDA_NAO_CUMPRIDA,
+    TipoDemanda.SLOT_ALONGADO,
+    TipoDemanda.REAGENDAMENTO_NAO_SOLICITADO,
+    TipoDemanda.AGENDAMENTO_CANCELADO,
+    TipoDemanda.CANCELAMENTO_REEMISSAO,
+    TipoDemanda.OS_NAO_ATRIBUIDA,
+)
+_LABELS_KIT_OPERACAO = {
+    "pedido": "OS",
+    "data_desejada": "Data de agendamento",
+    "descricao": "Detalhamento da ocorrência",
+    "solicitante_nome": "Nome de contato",
+    "solicitante_contato": "Telefone de contato com o cliente",
+}
+for _tipo_kit in TIPOS_KIT_OPERACAO:
+    LABELS_POR_TIPO[_tipo_kit] = {
+        **_LABELS_KIT_OPERACAO,
+        **LABELS_POR_TIPO.get(_tipo_kit, {}),
+    }
 
 
 # Campos da demanda mostrados no topo da 1ª aba (o que precisa consultar para responder)
@@ -275,10 +643,18 @@ CAMPOS_CONTEXTO_RESPOSTA: dict[str, list[str]] = {
         "tt_backoffice",
         "documento_cliente",
         "pedido",
+        "solicitante_contato",
         "observacoes",
         "descricao",
     ],
-    TipoDemanda.SEM_SLOT: ["pedido", "data_desejada", "turno", "solicitante_contato"],
+    TipoDemanda.SEM_SLOT: [
+        "variacao_sem_slot",
+        "pedido",
+        "data_desejada",
+        "data_alternativa",
+        "turno",
+        "solicitante_contato",
+    ],
     TipoDemanda.INSTALACAO_FISICA: ["pedido", "endereco_completo", "descricao"],
     TipoDemanda.REPARO: [
         "pedido",
@@ -290,11 +666,43 @@ CAMPOS_CONTEXTO_RESPOSTA: dict[str, list[str]] = {
         "turno_alternativo",
     ],
     TipoDemanda.OUTROS: ["pedido", "descricao"],
+    TipoDemanda.VAZAMENTO_DADOS: [
+        "documento_cliente",
+        "pedido",
+        "data_desejada",
+        "descricao",
+    ],
+    TipoDemanda.GESTAO_ACESSOS: [
+        "tt",
+        "solicitante_nome",
+        "documento_cliente",
+        "descricao",
+    ],
 }
+for _tipo_kit in TIPOS_KIT_OPERACAO:
+    CAMPOS_CONTEXTO_RESPOSTA[_tipo_kit] = [
+        "pedido",
+        "sa",
+        "nome_cliente",
+        "endereco_completo",
+        "data_desejada",
+        "tipo_pendencia",
+        "recorrencia",
+    ]
 
 
 def schema_tipo(tipo: str) -> dict:
     return CAMPOS_POR_TIPO.get(tipo) or CAMPOS_POR_TIPO[TipoDemanda.OUTROS]
+
+
+def labels_para_ticket(ticket) -> dict[str, str]:
+    tipo = getattr(ticket, "tipo", "") or ""
+    labels = {**LABELS_SIMPLES, **LABELS_POR_TIPO.get(tipo, {})}
+    cfg = schema_tipo(tipo)
+    for trigger, by_val in (cfg.get("labels_se") or {}).items():
+        valor = getattr(ticket, trigger, None) or ""
+        labels.update((by_val or {}).get(valor) or {})
+    return labels
 
 
 def campos_contexto_resposta(tipo: str) -> list[str]:
@@ -303,10 +711,14 @@ def campos_contexto_resposta(tipo: str) -> list[str]:
 
 def valor_campo_ticket(ticket, name: str) -> str:
     """Valor legível de um campo da demanda para exibir no modal."""
-    if name == "turno":
-        return ticket.get_turno_display() or "—"
-    if name == "turno_alternativo":
-        return ticket.get_turno_alternativo_display() or "—"
+    display = getattr(ticket, f"get_{name}_display", None)
+    if callable(display) and name in {
+        "turno",
+        "turno_alternativo",
+        "variacao_sem_slot",
+        "recorrencia",
+    }:
+        return display() or "—"
     if name in {"data_desejada", "data_instalacao", "data_alternativa"}:
         valor = getattr(ticket, name, None)
         return valor.strftime("%d/%m/%Y") if valor else "—"
@@ -317,7 +729,7 @@ def valor_campo_ticket(ticket, name: str) -> str:
 
 
 def contexto_demanda_para_resposta(ticket) -> list[dict]:
-    labels = {**LABELS_SIMPLES, **LABELS_POR_TIPO.get(ticket.tipo, {})}
+    labels = labels_para_ticket(ticket)
     itens = []
     for name in campos_contexto_resposta(ticket.tipo):
         itens.append(
@@ -383,6 +795,8 @@ def schema_para_js() -> dict:
             "obrigatorios": cfg["obrigatorios"],
             "labels": LABELS_POR_TIPO.get(tipo, {}),
             "descricao_se": cfg.get("descricao_se"),
+            "visivel_se": cfg.get("visivel_se") or {},
+            "labels_se": cfg.get("labels_se") or {},
         }
         for tipo, cfg in CAMPOS_POR_TIPO.items()
     }
@@ -499,7 +913,36 @@ CAMPOS_RESPOSTA_POR_TIPO: dict[str, list[dict]] = {
             "required": False,
         },
     ],
+    TipoDemanda.VAZAMENTO_DADOS: [
+        {
+            "name": "retorno_vazamento",
+            "label": "Retorno do vazamento",
+            "widget": "textarea",
+            "required": False,
+            "placeholder": "Ex.: incidente registrado / orientação ao PDV",
+        },
+    ],
+    TipoDemanda.GESTAO_ACESSOS: [
+        {
+            "name": "retorno_acesso",
+            "label": "Retorno da gestão de acessos",
+            "widget": "textarea",
+            "required": False,
+            "placeholder": "Ex.: acesso criado / perfil ajustado",
+        },
+    ],
 }
+_RETORNO_OPERACAO = [
+    {
+        "name": "retorno_operacao",
+        "label": "Retorno da operação",
+        "widget": "textarea",
+        "required": False,
+        "placeholder": "O que foi feito na esteira / no sistema",
+    },
+]
+for _tipo_kit in TIPOS_KIT_OPERACAO:
+    CAMPOS_RESPOSTA_POR_TIPO[_tipo_kit] = list(_RETORNO_OPERACAO)
 
 
 def campos_resposta(tipo: str) -> list[dict]:

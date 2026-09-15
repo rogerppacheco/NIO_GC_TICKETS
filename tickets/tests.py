@@ -11,13 +11,26 @@ from django.utils.datastructures import MultiValueDict
 from .acesso import eh_gestor, qs_equipe, qs_especialistas, tickets_visiveis
 from .demanda_campos import (
     LABELS_POR_TIPO,
+    TIPOS_KIT_OPERACAO,
     contexto_demanda_para_resposta,
     montar_abas_tratamento,
     schema_para_js,
     schema_tipo,
 )
 from .forms import LoginForm, MultipleFileField, ParceiroForm, TicketCreateForm, TicketTreatForm
-from .models import Anexo, Mascara, Mensagem, Parceiro, PerfilStaff, StatusTicket, Ticket, TipoDemanda, formatar_duracao
+from .models import (
+    Anexo,
+    Mascara,
+    Mensagem,
+    Parceiro,
+    PerfilStaff,
+    Recorrencia,
+    StatusTicket,
+    Ticket,
+    TipoDemanda,
+    VariacaoSemSlot,
+    formatar_duracao,
+)
 
 
 class MultipleFileFieldTests(SimpleTestCase):
@@ -44,6 +57,7 @@ class TicketCreateEvidenciasTests(SimpleTestCase):
                 "pedido": "10843955",
                 "documento_cliente": "37161261600",
                 "solicitante_nome": "WALTER",
+                "solicitante_contato": "11999999999",
                 "tt_vendedor": "TT832209",
                 "tt_backoffice": "TT832207",
                 "observacoes": "AGENDAMENTO REALIZADO NAO ATRIBUI",
@@ -166,6 +180,212 @@ class PrioridadeEliteDemandaTests(TestCase):
         self.assertIn("Data agendada no sistema", corpo)
         self.assertIn("Nome de contato da instala", corpo)
         self.assertIn("Telefone de contato com o cliente", corpo)
+
+
+class MatrizOperacaoDemandaTests(TestCase):
+    def setUp(self):
+        self.pdv = Parceiro.objects.create(codigo_pdv="1069400", nome="MATRIZ PDV")
+
+    def _kit(self, tipo=TipoDemanda.PENDENCIA_INDEVIDA, **extra):
+        data = {
+            "parceiro": str(self.pdv.pk),
+            "tipo": tipo,
+            "pedido": "11260001",
+            "sa": "SA-9001",
+            "nome_cliente": "Cliente Teste",
+            "solicitante_nome": "Ana Contato",
+            "solicitante_contato": "61988887777",
+            "cep": "72885095",
+            "numero_fachada": "10",
+            "cidade": "Brasília",
+            "data_desejada": "2026-09-20",
+            "tipo_pendencia": "Documentação",
+            "recorrencia": Recorrencia.NAO,
+            "descricao": "Pendência lançada sem lastro no pedido.",
+        }
+        data.update(extra)
+        return data
+
+    def test_agendar_passa_a_orientacoes_de_pendencias(self):
+        self.assertEqual(
+            TipoDemanda.AGENDAR_REAGENDAR.label, "Orientações de pendências"
+        )
+        cfg = schema_tipo(TipoDemanda.AGENDAR_REAGENDAR)
+        self.assertEqual(
+            cfg["obrigatorios"],
+            ["pedido", "documento_cliente", "data_desejada", "turno"],
+        )
+
+    def test_abrir_chamado_ti_exige_contato_e_documento(self):
+        cfg = schema_tipo(TipoDemanda.ABRIR_CHAMADO_TI)
+        self.assertIn("solicitante_contato", cfg["obrigatorios"])
+        self.assertIn("documento_cliente", cfg["obrigatorios"])
+        self.assertNotIn("pedido", cfg["obrigatorios"])
+        form = TicketCreateForm(
+            data={
+                "parceiro": str(self.pdv.pk),
+                "tipo": TipoDemanda.ABRIR_CHAMADO_TI,
+                "tt_vendedor": "TT1",
+                "tt_backoffice": "TT2",
+                "observacoes": "Etapa 3",
+                "descricao": "Erro no cadastro",
+            },
+            files=MultiValueDict(
+                {
+                    "evidencias": [
+                        SimpleUploadedFile("e.jpeg", b"x", content_type="image/jpeg")
+                    ]
+                }
+            ),
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("solicitante_contato", form.errors)
+        self.assertIn("documento_cliente", form.errors)
+
+    def test_schema_js_sem_slot_tem_variacao_e_labels(self):
+        js = schema_para_js()[TipoDemanda.SEM_SLOT]
+        self.assertEqual(
+            js["visivel_se"]["data_alternativa"]["valor"],
+            VariacaoSemSlot.AGENDADO_D1,
+        )
+        self.assertIn("data_desejada", js["labels_se"]["variacao_sem_slot"]["sem_agenda"])
+        self.assertIn("data_alternativa", js["labels_se"]["variacao_sem_slot"]["agendado_d1"])
+
+    def test_sem_slot_sem_agenda_nao_exige_data_d1(self):
+        form = TicketCreateForm(
+            data={
+                "parceiro": str(self.pdv.pk),
+                "tipo": TipoDemanda.SEM_SLOT,
+                "variacao_sem_slot": VariacaoSemSlot.SEM_AGENDA,
+                "pedido": "11260002",
+                "data_desejada": "2026-09-21",
+                "turno": "tarde",
+                "solicitante_contato": "61977776666",
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertIsNone(form.cleaned_data.get("data_alternativa"))
+
+    def test_sem_slot_d1_exige_segunda_data(self):
+        base = {
+            "parceiro": str(self.pdv.pk),
+            "tipo": TipoDemanda.SEM_SLOT,
+            "variacao_sem_slot": VariacaoSemSlot.AGENDADO_D1,
+            "pedido": "11260003",
+            "data_desejada": "2026-09-21",
+            "turno": "manha",
+            "solicitante_contato": "61977776666",
+        }
+        vazio = TicketCreateForm(data=base)
+        self.assertFalse(vazio.is_valid())
+        self.assertIn("data_alternativa", vazio.errors)
+        ok = TicketCreateForm(data={**base, "data_alternativa": "2026-09-22"})
+        self.assertTrue(ok.is_valid(), ok.errors)
+
+    def test_kit_operacao_compartilha_campos(self):
+        for tipo in TIPOS_KIT_OPERACAO:
+            cfg = schema_tipo(tipo)
+            for campo in (
+                "pedido",
+                "sa",
+                "nome_cliente",
+                "solicitante_contato",
+                "tipo_pendencia",
+                "recorrencia",
+                "descricao",
+            ):
+                self.assertIn(campo, cfg["campos"], tipo)
+                self.assertIn(campo, cfg["obrigatorios"], tipo)
+            self.assertNotIn("evidencias", cfg["obrigatorios"], tipo)
+
+    def test_pendencia_indevida_valida(self):
+        form = TicketCreateForm(data=self._kit())
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_pendencia_indevida_exige_sa(self):
+        form = TicketCreateForm(data=self._kit(sa=""))
+        self.assertFalse(form.is_valid())
+        self.assertIn("sa", form.errors)
+
+    def test_vazamento_exige_evidencia_e_data(self):
+        form = TicketCreateForm(
+            data={
+                "parceiro": str(self.pdv.pk),
+                "tipo": TipoDemanda.VAZAMENTO_DADOS,
+                "documento_cliente": "12345678901",
+                "descricao": "Cliente relatou exposição de dados.",
+            }
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("data_desejada", form.errors)
+        self.assertIn("evidencias", form.errors)
+
+    def test_gestao_acessos_valida(self):
+        form = TicketCreateForm(
+            data={
+                "parceiro": str(self.pdv.pk),
+                "tipo": TipoDemanda.GESTAO_ACESSOS,
+                "tt": "TT9001",
+                "cargo_acesso": "Vendedor",
+                "solicitante_nome": "João Silva",
+                "documento_cliente": "12345678901",
+                "rg": "1234567",
+                "email_solicitante": "joao@pdv.com",
+                "descricao": "Liberar perfil de vendas.",
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_mascara_kit_inclui_sa_e_recorrencia(self):
+        from tickets.management.commands.seed_nio import MASCARAS
+        from tickets.services import render_mascara
+
+        template = next(
+            m["template"]
+            for m in MASCARAS
+            if m["nome"].startswith("Kit operação")
+        )
+        ticket = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.AGENDA_NAO_CUMPRIDA,
+            pedido="11260001",
+            sa="SA-9001",
+            nome_cliente="Cliente Teste",
+            solicitante_nome="Ana Contato",
+            solicitante_contato="61988887777",
+            cidade="Brasília",
+            data_desejada="2026-09-20",
+            tipo_pendencia="Documentação",
+            recorrencia=Recorrencia.SIM,
+            descricao="Técnico não compareceu.",
+        )
+        texto = render_mascara(Mascara(template=template), ticket)
+        self.assertIn("SA-9001", texto)
+        self.assertIn("Agenda não cumprida", texto)
+        self.assertIn("Sim", texto)
+
+    @override_settings(
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    )
+    def test_pagina_nova_demanda_traz_tipos_novos(self):
+        User = get_user_model()
+        user = User.objects.create_superuser("matriz_admin", "m@x.com", "x")
+        PerfilStaff.objects.create(user=user, papel=PerfilStaff.Papel.GESTOR)
+        self.client.force_login(user)
+        resp = self.client.get(reverse("ticket_criar"))
+        self.assertEqual(resp.status_code, 200)
+        corpo = resp.content.decode("utf-8")
+        self.assertIn("Orientações de pendências", corpo)
+        self.assertIn("Pendência indevida", corpo)
+        self.assertIn("Vazamento de dados", corpo)
+        self.assertIn("Apoio gestão de acessos", corpo)
+        self.assertIn("Situação do pedido", corpo)
+        self.assertIn("agendado_d1", corpo)
 
 
 class FormatacaoDuracaoTests(SimpleTestCase):

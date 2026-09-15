@@ -127,7 +127,7 @@ class ContatoParceiro(models.Model):
 
 
 class TipoDemanda(models.TextChoices):
-    AGENDAR_REAGENDAR = "agendar_reagendar", "Agendar/Reagendar pedido (7095, 7029, 7037)"
+    AGENDAR_REAGENDAR = "agendar_reagendar", "Orientações de pendências"
     ENDERECO_DOC = "endereco_doc", "Endereço do Pedido"
     STATUS_PEDIDO = "status_pedido", "Status do pedido - agendamento atual"
     PRIORIDADE_ELITE = "prioridade_elite", "Prioridade na instalação (Grupo Elite)"
@@ -138,7 +138,26 @@ class TipoDemanda(models.TextChoices):
     SEM_SLOT = "sem_slot", "Sinalização — sem slot / liberação de agenda"
     INSTALACAO_FISICA = "instalacao_fisica", "Sinalização — instalação física / pendência"
     REPARO = "reparo", "Reparo — internet pós-instalação (até 14 dias)"
+    PENDENCIA_INDEVIDA = "pendencia_indevida", "Pendência indevida"
+    AGENDA_NAO_CUMPRIDA = "agenda_nao_cumprida", "Agenda não cumprida"
+    SLOT_ALONGADO = "slot_alongado", "Slot alongado"
+    REAGENDAMENTO_NAO_SOLICITADO = "reagendamento_nao_solicitado", "Reagendamento não solicitado"
+    AGENDAMENTO_CANCELADO = "agendamento_cancelado", "Agendamento cancelado"
+    CANCELAMENTO_REEMISSAO = "cancelamento_reemissao_indevida", "Cancelamento/reemissão indevida"
+    OS_NAO_ATRIBUIDA = "os_nao_atribuida", "OS não atribuída"
+    VAZAMENTO_DADOS = "vazamento_dados", "Vazamento de dados"
+    GESTAO_ACESSOS = "gestao_acessos", "Apoio gestão de acessos"
     OUTROS = "outros", "Outros / suporte geral"
+
+
+class VariacaoSemSlot(models.TextChoices):
+    SEM_AGENDA = "sem_agenda", "Pedido sem slot para agendar"
+    AGENDADO_D1 = "agendado_d1", "Já agendado — sem slot D+1"
+
+
+class Recorrencia(models.TextChoices):
+    NAO = "nao", "Não"
+    SIM = "sim", "Sim"
 
 
 class StatusTicket(models.TextChoices):
@@ -232,6 +251,23 @@ class Ticket(models.Model):
         choices=Turno.choices,
         blank=True,
     )
+    sa = models.CharField("SA", max_length=80, blank=True)
+    tipo_pendencia = models.CharField("Tipo da pendência", max_length=80, blank=True)
+    recorrencia = models.CharField(
+        "Recorrência",
+        max_length=10,
+        choices=Recorrencia.choices,
+        blank=True,
+    )
+    variacao_sem_slot = models.CharField(
+        "Situação do pedido",
+        max_length=20,
+        choices=VariacaoSemSlot.choices,
+        blank=True,
+    )
+    cargo_acesso = models.CharField("Cargo", max_length=80, blank=True)
+    rg = models.CharField("RG", max_length=30, blank=True)
+    email_solicitante = models.EmailField("E-mail", blank=True)
     descricao = models.TextField("Descrição detalhada", blank=True)
     observacoes = models.TextField(blank=True)
 
@@ -451,7 +487,8 @@ class Mascara(models.Model):
             "{{documento}} {{endereco}} {{cep}} {{fachada}} {{data}} {{turno}} "
             "{{data_2}} {{turno_2}} {{nome_cliente}} {{data_instalacao}} {{nome_gc}} "
             "{{descricao}} {{observacoes}} {{solicitante}} {{contato}} {{tt}} "
-            "{{tt_vendedor}} {{tt_backoffice}} {{os}}"
+            "{{tt_vendedor}} {{tt_backoffice}} {{os}} {{sa}} {{tipo_pendencia}} "
+            "{{recorrencia}} {{variacao_sem_slot}} {{cargo}} {{rg}} {{email}}"
         )
     )
     ativo = models.BooleanField(default=True)

@@ -21,7 +21,18 @@
       const cfg = schema[tipo];
       const allowed = new Set(cfg ? cfg.campos : []);
       const required = new Set(cfg ? cfg.obrigatorios : []);
-      const labels = (cfg && cfg.labels) || {};
+      const labels = Object.assign({}, (cfg && cfg.labels) || {});
+      const visivelSe = (cfg && cfg.visivel_se) || {};
+      const labelsSe = (cfg && cfg.labels_se) || {};
+
+      Object.keys(labelsSe).forEach(function (triggerName) {
+        const trigger = form.querySelector('[name="' + triggerName + '"]');
+        const valor = trigger ? trigger.value : "";
+        const overlay = (labelsSe[triggerName] || {})[valor] || {};
+        Object.keys(overlay).forEach(function (campo) {
+          labels[campo] = overlay[campo];
+        });
+      });
 
       if (hint) {
         hint.textContent = cfg
@@ -40,6 +51,11 @@
           const trigger = form.querySelector('[name="' + cfg.descricao_se.campo + '"]');
           show = !!(trigger && trigger.value === cfg.descricao_se.valor);
         }
+        if (show && visivelSe[name]) {
+          const regra = visivelSe[name];
+          const trigger = form.querySelector('[name="' + regra.campo + '"]');
+          show = !!(trigger && trigger.value === regra.valor);
+        }
         row.hidden = !show;
         const label = row.querySelector("label");
         if (label && show) {
@@ -47,19 +63,17 @@
             label.setAttribute("data-base-label", label.textContent.replace(/\s*\*$/, "").trim());
           }
           const base = labels[name] || label.getAttribute("data-base-label");
-          const req = required.has(name) || (name === "descricao" && cfg && cfg.descricao_se && show);
+          const extraReq = !!(visivelSe[name] && show);
+          const req =
+            required.has(name) ||
+            extraReq ||
+            (name === "descricao" && cfg && cfg.descricao_se && show);
           label.textContent = req ? base + " *" : base;
         }
       });
     }
 
-    if (tipoSelect) {
-      tipoSelect.addEventListener("change", apply);
-    }
-    const motivoReparo = form.querySelector('[name="motivo_reparo"]');
-    if (motivoReparo) {
-      motivoReparo.addEventListener("change", apply);
-    }
+    form.addEventListener("change", apply);
     apply();
   }
 

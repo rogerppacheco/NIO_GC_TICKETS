@@ -26,11 +26,10 @@ from .acesso import (
     tickets_visiveis,
 )
 from .demanda_campos import (
-    LABELS_POR_TIPO,
-    LABELS_SIMPLES,
     catalogo_campos_resposta,
     contexto_demanda_para_resposta,
     garantir_config_resposta_padrao,
+    labels_para_ticket,
     montar_abas_tratamento,
     schema_para_js,
     schema_tipo,
@@ -817,7 +816,7 @@ def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
             "destinos_wpp": destinos_wpp,
             "syncwa_ok": syncwa_configurado(),
             "schema": schema_tipo(ticket.tipo),
-            "labels_tipo": {**LABELS_SIMPLES, **LABELS_POR_TIPO.get(ticket.tipo, {})},
+            "labels_tipo": labels_para_ticket(ticket),
             "campos_resposta": treat_form.campos_resposta_defs,
             "resposta_field_names": [c["name"] for c in treat_form.campos_resposta_defs],
             "abrir_modal_resposta": request.GET.get("responder") == "1",

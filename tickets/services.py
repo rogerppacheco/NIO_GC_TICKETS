@@ -52,6 +52,17 @@ def ticket_context(ticket: Ticket) -> dict[str, Any]:
         "tt_vendedor": ticket.tt_vendedor,
         "tt_backoffice": ticket.tt_backoffice,
         "os": ticket.pedido,
+        "sa": ticket.sa,
+        "tipo_pendencia": ticket.tipo_pendencia,
+        "recorrencia": (
+            ticket.get_recorrencia_display() if ticket.recorrencia else ""
+        ),
+        "variacao_sem_slot": (
+            ticket.get_variacao_sem_slot_display() if ticket.variacao_sem_slot else ""
+        ),
+        "cargo": ticket.cargo_acesso,
+        "rg": ticket.rg,
+        "email": ticket.email_solicitante,
         "status": ticket.get_status_display(),
         "resposta": ticket.resposta_publica,
         "resultado": ticket.resultado_status,

@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 
+from tickets.demanda_campos import TIPOS_KIT_OPERACAO
 from tickets.models import ContatoParceiro, Mascara, Parceiro, TipoDemanda
 
 
@@ -57,9 +58,11 @@ MASCARAS = [
         "enviar_whatsapp": True,
         "template": (
             "Sem SLOT em {{uf}}\n\n"
+            "Situação: {{variacao_sem_slot}}\n"
             "Pedido: {{pedido}}\n"
             "Endereço: {{endereco}}\n"
-            "Data e turno que o cliente deseja: {{data}} - {{turno}}\n"
+            "Data e turno: {{data}} - {{turno}}\n"
+            "Data D+1 sem slot: {{data_2}}\n"
             "Tel. de contato: {{contato}}\n"
         ),
     },
@@ -101,7 +104,7 @@ MASCARAS = [
         "destino": "BO Agendamento (7095/7029/7037)",
         "tipos": TipoDemanda.AGENDAR_REAGENDAR,
         "template": (
-            "*BO AGENDAR/REAGENDAR*\n"
+            "*ORIENTAÇÕES DE PENDÊNCIAS*\n"
             "Protocolo: {{protocolo}}\n"
             "PDV: {{pdv}} — {{parceiro}}\n"
             "Pedido(s):\n{{pedidos}}\n"
@@ -151,6 +154,57 @@ MASCARAS = [
             "CPF: {{documento}}\n"
             "Descrição: {{descricao}}\n"
             "Contato: {{solicitante}} / {{contato}}\n"
+        ),
+    },
+    {
+        "nome": "Kit operação — OS / pendência / agenda",
+        "destino": "Esteira / Operação",
+        "tipos": ",".join(TIPOS_KIT_OPERACAO),
+        "template": (
+            "*{{tipo}}*\n\n"
+            "- *OS:* {{os}}\n"
+            "- *SA:* {{sa}}\n"
+            "- *CLIENTE:* {{nome_cliente}}\n"
+            "- *CONTATO:* {{solicitante}}\n"
+            "- *TELEFONE:* {{contato}}\n"
+            "- *CIDADE:* {{cidade}}\n"
+            "- *ENDEREÇO:* {{endereco}}\n"
+            "- *DATA:* {{data}}\n"
+            "- *TIPO DA PENDÊNCIA:* {{tipo_pendencia}}\n"
+            "- *RECORRÊNCIA:* {{recorrencia}}\n"
+            "- *DETALHAMENTO:* {{descricao}}\n"
+            "- *PDV:* {{pdv}} - {{parceiro}}\n"
+        ),
+    },
+    {
+        "nome": "Vazamento de dados",
+        "destino": "Segurança / LGPD",
+        "tipos": TipoDemanda.VAZAMENTO_DADOS,
+        "template": (
+            "*VAZAMENTO DE DADOS*\n"
+            "Protocolo: {{protocolo}}\n"
+            "PDV: {{pdv}} — {{parceiro}}\n"
+            "CPF/CNPJ: {{documento}}\n"
+            "OS: {{os}}\n"
+            "Data da ocorrência: {{data}}\n"
+            "Situação: {{descricao}}\n"
+        ),
+    },
+    {
+        "nome": "Apoio gestão de acessos",
+        "destino": "Gestão de acessos",
+        "tipos": TipoDemanda.GESTAO_ACESSOS,
+        "template": (
+            "*APOIO GESTÃO DE ACESSOS*\n"
+            "Protocolo: {{protocolo}}\n"
+            "PDV: {{pdv}} — {{parceiro}}\n"
+            "TT: {{tt}}\n"
+            "Cargo: {{cargo}}\n"
+            "Nome: {{solicitante}}\n"
+            "CPF/CNPJ: {{documento}}\n"
+            "RG: {{rg}}\n"
+            "E-mail: {{email}}\n"
+            "Detalhe: {{descricao}}\n"
         ),
     },
 ]
