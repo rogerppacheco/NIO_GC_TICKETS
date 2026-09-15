@@ -9,7 +9,13 @@ from django.utils import timezone
 from django.utils.datastructures import MultiValueDict
 
 from .acesso import eh_gestor, qs_equipe, qs_especialistas, tickets_visiveis
-from .demanda_campos import contexto_demanda_para_resposta, montar_abas_tratamento
+from .demanda_campos import (
+    LABELS_POR_TIPO,
+    contexto_demanda_para_resposta,
+    montar_abas_tratamento,
+    schema_para_js,
+    schema_tipo,
+)
 from .forms import LoginForm, MultipleFileField, ParceiroForm, TicketCreateForm, TicketTreatForm
 from .models import Anexo, Mascara, Mensagem, Parceiro, PerfilStaff, StatusTicket, Ticket, TipoDemanda, formatar_duracao
 
@@ -50,6 +56,116 @@ class TicketCreateEvidenciasTests(SimpleTestCase):
         erros = " ".join(str(e) for e in form.errors.get("evidencias", []))
         self.assertNotIn("codificação", erros)
         self.assertEqual(len(form.cleaned_data.get("evidencias") or []), 1)
+
+
+class PrioridadeEliteDemandaTests(TestCase):
+    def setUp(self):
+        self.pdv = Parceiro.objects.create(codigo_pdv="1069399", nome="CONNECTX")
+
+    def _dados(self, **extra):
+        data = {
+            "parceiro": str(self.pdv.pk),
+            "tipo": TipoDemanda.PRIORIDADE_ELITE,
+            "pedido": "11250952",
+            "cep": "72885095",
+            "numero_fachada": "16",
+            "data_desejada": "2026-09-14",
+            "turno": "integral",
+            "solicitante_nome": "Maria Silva",
+            "solicitante_contato": "61999999999",
+            "descricao": (
+                "cliente contratou mas só deseja a instalação se for na segunda feira"
+            ),
+        }
+        data.update(extra)
+        return data
+
+    def test_schema_pede_data_agendada_e_contato(self):
+        cfg = schema_tipo(TipoDemanda.PRIORIDADE_ELITE)
+        self.assertIn("solicitante_nome", cfg["campos"])
+        self.assertIn("solicitante_contato", cfg["campos"])
+        self.assertIn("solicitante_nome", cfg["obrigatorios"])
+        self.assertIn("solicitante_contato", cfg["obrigatorios"])
+        labels = schema_para_js()[TipoDemanda.PRIORIDADE_ELITE]["labels"]
+        self.assertEqual(labels["data_desejada"], "Data agendada no sistema")
+        self.assertEqual(labels["solicitante_nome"], "Nome de contato da instalação")
+        self.assertEqual(
+            labels["solicitante_contato"], "Telefone de contato com o cliente"
+        )
+        self.assertEqual(
+            LABELS_POR_TIPO[TipoDemanda.AGENDAR_REAGENDAR].get("data_desejada"),
+            None,
+        )
+
+    def test_formulario_exige_nome_e_telefone(self):
+        form = TicketCreateForm(
+            data=self._dados(solicitante_nome="", solicitante_contato="")
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("solicitante_nome", form.errors)
+        self.assertIn("solicitante_contato", form.errors)
+        self.assertIn(
+            "Nome de contato da instalação", str(form.errors["solicitante_nome"])
+        )
+        self.assertIn(
+            "Telefone de contato com o cliente",
+            str(form.errors["solicitante_contato"]),
+        )
+
+    def test_formulario_valido_com_contato(self):
+        form = TicketCreateForm(data=self._dados())
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_mascara_inclui_data_agendada_e_contato(self):
+        from tickets.management.commands.seed_nio import MASCARAS
+        from tickets.services import render_mascara
+
+        template = next(
+            m["template"]
+            for m in MASCARAS
+            if m["tipos"] == TipoDemanda.PRIORIDADE_ELITE
+        )
+        ticket = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.PRIORIDADE_ELITE,
+            pedido="11250952",
+            endereco_completo=(
+                "Quadra 26, 16, apartamento 203, Parque Nápolis A, "
+                "Cidade Ocidental - GO, 72885-095"
+            ),
+            data_desejada="2026-09-14",
+            turno="integral",
+            solicitante_nome="Maria Silva",
+            solicitante_contato="61999999999",
+            descricao="cliente contratou mas só deseja a instalação se for na segunda feira",
+        )
+        texto = render_mascara(Mascara(template=template), ticket)
+        self.assertIn("DATA AGENDADA NO SISTEMA", texto)
+        self.assertIn("NOME DE CONTATO DA INSTALAÇÃO", texto)
+        self.assertIn("TELEFONE DE CONTATO", texto)
+        self.assertIn("Maria Silva", texto)
+        self.assertIn("61999999999", texto)
+        self.assertIn("11250952", texto)
+
+    @override_settings(
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    )
+    def test_pagina_nova_demanda_traz_labels_elite(self):
+        User = get_user_model()
+        user = User.objects.create_superuser("elite_admin", "e@x.com", "x")
+        PerfilStaff.objects.create(user=user, papel=PerfilStaff.Papel.GESTOR)
+        self.client.force_login(user)
+        resp = self.client.get(reverse("ticket_criar"))
+        self.assertEqual(resp.status_code, 200)
+        corpo = resp.content.decode("utf-8")
+        self.assertIn("Data agendada no sistema", corpo)
+        self.assertIn("Nome de contato da instala", corpo)
+        self.assertIn("Telefone de contato com o cliente", corpo)
 
 
 class FormatacaoDuracaoTests(SimpleTestCase):

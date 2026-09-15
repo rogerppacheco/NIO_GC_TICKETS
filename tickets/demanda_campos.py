@@ -5,7 +5,7 @@ from __future__ import annotations
 from .models import TipoDemanda
 
 # Contato WhatsApp do solicitante NÃO entra aqui — só o gestor preenche no tratamento,
-# exceto quando o tipo pede explicitamente telefone do cliente (ex.: sem_slot).
+# exceto quando o tipo pede explicitamente telefone do cliente (ex.: sem_slot, prioridade_elite).
 
 CAMPOS_POR_TIPO: dict[str, dict] = {
     TipoDemanda.AGENDAR_REAGENDAR: {
@@ -30,7 +30,7 @@ CAMPOS_POR_TIPO: dict[str, dict] = {
         "obrigatorios": ["pedido"],
     },
     TipoDemanda.PRIORIDADE_ELITE: {
-        "titulo": "OS, endereço, data e descrição",
+        "titulo": "OS, endereço, data agendada no sistema, contato e descrição",
         "campos": [
             "pedido",
             "cep",
@@ -43,6 +43,8 @@ CAMPOS_POR_TIPO: dict[str, dict] = {
             "endereco_completo",
             "data_desejada",
             "turno",
+            "solicitante_nome",
+            "solicitante_contato",
             "descricao",
         ],
         "obrigatorios": [
@@ -51,6 +53,8 @@ CAMPOS_POR_TIPO: dict[str, dict] = {
             "numero_fachada",
             "data_desejada",
             "turno",
+            "solicitante_nome",
+            "solicitante_contato",
             "descricao",
         ],
     },
@@ -226,6 +230,13 @@ LABELS_POR_TIPO: dict[str, dict[str, str]] = {
     TipoDemanda.ACESSO_APP: {
         "documento_cliente": "CPF",
     },
+    TipoDemanda.PRIORIDADE_ELITE: {
+        "pedido": "Nº do pedido/OS",
+        "data_desejada": "Data agendada no sistema",
+        "solicitante_nome": "Nome de contato da instalação",
+        "solicitante_contato": "Telefone de contato com o cliente",
+        "descricao": "Descrição detalhada da solicitação",
+    },
     TipoDemanda.SEM_SLOT: {
         "solicitante_contato": "Telefone do cliente",
     },
@@ -250,7 +261,14 @@ CAMPOS_CONTEXTO_RESPOSTA: dict[str, list[str]] = {
     TipoDemanda.STATUS_PEDIDO: ["pedido"],
     TipoDemanda.VIABILIDADE: ["cep", "numero_fachada", "endereco_completo"],
     TipoDemanda.AGENDAR_REAGENDAR: ["pedido", "documento_cliente", "data_desejada", "turno"],
-    TipoDemanda.PRIORIDADE_ELITE: ["pedido", "endereco_completo", "data_desejada", "turno"],
+    TipoDemanda.PRIORIDADE_ELITE: [
+        "pedido",
+        "endereco_completo",
+        "data_desejada",
+        "turno",
+        "solicitante_nome",
+        "solicitante_contato",
+    ],
     TipoDemanda.ACESSO_APP: ["documento_cliente", "descricao"],
     TipoDemanda.ABRIR_CHAMADO_TI: [
         "tt_vendedor",

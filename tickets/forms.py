@@ -538,6 +538,17 @@ class TicketCreateForm(forms.ModelForm):
             "endereco_completo": forms.TextInput(
                 attrs={"readonly": True, "placeholder": "Preenchido pelo CEP"}
             ),
+            "solicitante_nome": forms.TextInput(
+                attrs={"placeholder": "Quem recebe o técnico na instalação"}
+            ),
+            "solicitante_contato": forms.TextInput(
+                attrs={
+                    "type": "tel",
+                    "inputmode": "tel",
+                    "autocomplete": "tel",
+                    "placeholder": "DDD + número do cliente",
+                }
+            ),
         }
 
     def __init__(self, *args, **kwargs):
@@ -586,8 +597,6 @@ class TicketCreateForm(forms.ModelForm):
                 "pedido",
                 "documento_cliente",
                 "nome_cliente",
-                "solicitante_nome",
-                "solicitante_contato",
                 "tt",
                 "tt_vendedor",
                 "tt_backoffice",
@@ -602,6 +611,8 @@ class TicketCreateForm(forms.ModelForm):
                 "data_instalacao",
                 "data_desejada",
                 "turno",
+                "solicitante_nome",
+                "solicitante_contato",
                 "data_alternativa",
                 "turno_alternativo",
                 "motivo_reparo",

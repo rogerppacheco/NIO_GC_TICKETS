@@ -23,7 +23,9 @@ MASCARAS = [
             "- *OS:* {{os}}\n"
             "- *ENDEREÇO COMPLETO:* {{endereco}}\n"
             "- *NOME DO PDV:* {{pdv}} - {{parceiro}}\n"
-            "- *DATA AGENDADA:* {{data}} - {{turno}}\n"
+            "- *DATA AGENDADA NO SISTEMA:* {{data}} - {{turno}}\n"
+            "- *NOME DE CONTATO DA INSTALAÇÃO:* {{solicitante}}\n"
+            "- *TELEFONE DE CONTATO:* {{contato}}\n"
             "- *DESCRIÇÃO DETALHADA DA SOLICITAÇÃO:* {{descricao}}\n"
         ),
     },
