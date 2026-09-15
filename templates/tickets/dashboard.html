@@ -4,18 +4,56 @@
 <div class="hero">
   <div>
     <h1>Dashboard</h1>
-    <p>Visão rápida da fila de demandas dos parceiros.</p>
+    <p>
+      Análise da fila de demandas
+      {% if periodo == "tudo" %}
+        · todo o período
+      {% elif periodo_de and periodo_ate %}
+        · {{ periodo_de|date:"d/m/Y" }} a {{ periodo_ate|date:"d/m/Y" }}
+      {% endif %}
+    </p>
   </div>
   <a class="btn btn-primary" href="{% url 'ticket_criar' %}">Nova demanda</a>
 </div>
+
+<form method="get" class="dash-filtros" id="dash-filtros">
+  <input type="hidden" name="periodo" value="{{ periodo }}">
+  <div class="dash-atalhos" role="group" aria-label="Período">
+    <a href="{{ url_mes }}" class="{% if periodo == 'mes' %}is-on{% endif %}">Este mês</a>
+    <a href="{{ url_7d }}" class="{% if periodo == '7d' %}is-on{% endif %}">7 dias</a>
+    <a href="{{ url_30d }}" class="{% if periodo == '30d' %}is-on{% endif %}">30 dias</a>
+    <a href="{{ url_tudo }}" class="{% if periodo == 'tudo' %}is-on{% endif %}">Tudo</a>
+  </div>
+  <div class="dash-field">
+    <label for="{{ form.de.id_for_label }}">De</label>
+    {{ form.de }}
+  </div>
+  <div class="dash-field">
+    <label for="{{ form.ate.id_for_label }}">Até</label>
+    {{ form.ate }}
+  </div>
+  <div class="dash-field">
+    <label for="{{ form.parceiro.id_for_label }}">Parceiro</label>
+    {{ form.parceiro }}
+  </div>
+  {% if mostrar_filtro_especialista %}
+  <div class="dash-field">
+    <label for="{{ form.especialista.id_for_label }}">Especialista</label>
+    {{ form.especialista }}
+  </div>
+  {% endif %}
+  {% if filtros_ativos %}
+    <a class="btn btn-ghost" href="{% url 'dashboard' %}">Limpar</a>
+  {% endif %}
+</form>
 
 <div class="cards">
   <div class="card"><div class="label">Total</div><div class="value">{{ total }}</div></div>
   <div class="card"><div class="label">Abertos</div><div class="value">{{ abertos }}</div></div>
   <div class="card"><div class="label">Novos</div><div class="value">{{ novos }}</div></div>
   <div class="card"><div class="label">Resolvidos</div><div class="value">{{ por_status.resolvido|default:0 }}</div></div>
-  <div class="card"><div class="label">FTE da equipe</div><div class="value">{{ fte_total|floatformat:2 }}</div></div>
-  <div class="card"><div class="label">Tickets / FTE (mês)</div><div class="value">{{ tickets_por_fte|floatformat:1 }}</div></div>
+  <div class="card"><div class="label">{{ fte_label }}</div><div class="value">{{ fte_total|floatformat:2 }}</div></div>
+  <div class="card"><div class="label">{{ prod_label }}</div><div class="value">{{ tickets_por_fte|floatformat:1 }}</div></div>
 </div>
 
 <div class="grid-2">
@@ -32,7 +70,7 @@
           <td>{{ t.criado_em|date:"d/m H:i" }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="4">Nenhum ticket ainda.</td></tr>
+        <tr><td colspan="4">Nenhum ticket no recorte.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -67,9 +105,26 @@
         </tfoot>
       </table>
       {% else %}
-        <p class="help">Sem dados.</p>
+        <p class="help">Sem dados neste recorte.</p>
       {% endif %}
     </div>
   </div>
 </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  var form = document.getElementById("dash-filtros");
+  if (!form) return;
+  form.querySelectorAll("select, input[type=date]").forEach(function (el) {
+    el.addEventListener("change", function () {
+      if (el.getAttribute("type") === "date") {
+        var hidden = form.querySelector("input[name=periodo]");
+        if (hidden) hidden.value = "custom";
+      }
+      form.submit();
+    });
+  });
+})();
+</script>
 {% endblock %}

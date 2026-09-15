@@ -9,6 +9,8 @@ def nav_counts(request):
         visiveis = tickets_visiveis(user)
         ctx["eh_gestor"] = eh_gestor(user)
         ctx["tem_acesso_interno"] = tem_acesso_interno(user)
+        nome = (user.first_name or "").strip() or (user.get_full_name() or "").strip()
+        ctx["nav_primeiro_nome"] = nome.split()[0] if nome else user.get_username()
         ctx["nav_novos"] = visiveis.filter(status=StatusTicket.NOVO).count()
         ctx["nav_abertos"] = visiveis.exclude(
             status__in=[

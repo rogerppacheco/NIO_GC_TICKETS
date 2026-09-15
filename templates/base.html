@@ -52,11 +52,16 @@
             </button>
           </form>
           {% endif %}
-          <a class="nav-user" href="{% url 'meu_perfil' %}">{{ user.get_full_name|default:user.username }}</a>
-          <form method="post" action="{% url 'logout' %}" class="logout-form">
-            {% csrf_token %}
-            <button type="submit" class="nav-btn">Sair</button>
-          </form>
+          <div class="nav-account">
+            <a class="nav-user" href="{% url 'meu_perfil' %}" title="{{ user.get_full_name|default:user.username }} — Meu perfil">{{ nav_primeiro_nome|default:user.username }}</a>
+            <div class="nav-account-menu">
+              <a href="{% url 'meu_perfil' %}">Meu perfil</a>
+              <form method="post" action="{% url 'logout' %}">
+                {% csrf_token %}
+                <button type="submit">Sair</button>
+              </form>
+            </div>
+          </div>
         {% else %}
           {% if portal_contato %}
             <a href="{% url 'portal_parceiro' %}">Portal</a>

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib import messages
@@ -37,6 +38,7 @@ from .demanda_campos import (
 from .forms import (
     AnexoForm,
     ContatoParceiroForm,
+    DashboardFiltroForm,
     EspecialistaForm,
     FilaFiltroForm,
     LoginForm,
@@ -1194,9 +1196,81 @@ def especialista_excluir(request: HttpRequest, pk: int) -> HttpResponse:
     return redirect("especialistas")
 
 
+def _periodo_dashboard(request: HttpRequest, hoje: date) -> tuple[str, date | None, date | None]:
+    inicio_mes = hoje.replace(day=1)
+    presets = {
+        "7d": (hoje - timedelta(days=6), hoje),
+        "30d": (hoje - timedelta(days=29), hoje),
+        "mes": (inicio_mes, hoje),
+        "tudo": (None, None),
+    }
+    periodo = (request.GET.get("periodo") or "mes").strip()
+    if periodo not in presets and periodo != "custom":
+        periodo = "mes"
+
+    def _parse(val: str | None) -> date | None:
+        texto = (val or "").strip()
+        if not texto:
+            return None
+        try:
+            return date.fromisoformat(texto)
+        except ValueError:
+            return None
+
+    de = _parse(request.GET.get("de"))
+    ate = _parse(request.GET.get("ate"))
+    if de and ate and de > ate:
+        de, ate = ate, de
+    if de or ate:
+        esperado = presets.get(periodo)
+        if not esperado or (de, ate) != esperado:
+            periodo = "custom"
+    else:
+        if periodo == "custom":
+            periodo = "mes"
+        de, ate = presets[periodo]
+    return periodo, de, ate
+
+
 @login_required
 def dashboard(request: HttpRequest) -> HttpResponse:
+    hoje = timezone.localdate()
+    periodo, de, ate = _periodo_dashboard(request, hoje)
+    parceiros_qs = parceiros_visiveis(request.user).filter(ativo=True)
+    especialistas_qs = qs_equipe()
+    data = request.GET.copy()
+    data["periodo"] = periodo
+    if de:
+        data["de"] = de.isoformat()
+    else:
+        data.pop("de", None)
+    if ate:
+        data["ate"] = ate.isoformat()
+    else:
+        data.pop("ate", None)
+
+    form = DashboardFiltroForm(
+        data,
+        parceiros_qs=parceiros_qs,
+        especialistas_qs=especialistas_qs,
+    )
+    gestor = eh_gestor(request.user)
+    if not gestor:
+        form.fields.pop("especialista", None)
+    cleaned = form.cleaned_data if form.is_valid() else {}
+    parceiro_sel = cleaned.get("parceiro")
+    spec_sel = cleaned.get("especialista") if gestor else None
+
     base = tickets_visiveis(request.user)
+    if parceiro_sel:
+        base = base.filter(parceiro=parceiro_sel)
+    if spec_sel:
+        base = base.filter(parceiro__especialista=spec_sel)
+    if de:
+        base = base.filter(criado_em__date__gte=de)
+    if ate:
+        base = base.filter(criado_em__date__lte=ate)
+
     por_status = dict(
         base.values_list("status").annotate(c=Count("id")).values_list("status", "c")
     )
@@ -1207,7 +1281,6 @@ def dashboard(request: HttpRequest) -> HttpResponse:
     for row in por_tipo_raw:
         qtd = int(row["c"] or 0)
         full = labels.get(row["tipo"], row["tipo"])
-        # rótulo completo no painel — o nome curto escondia “Sinalização — …”
         por_tipo.append(
             {
                 "tipo": row["tipo"],
@@ -1217,17 +1290,47 @@ def dashboard(request: HttpRequest) -> HttpResponse:
                 "pct": round((100.0 * qtd / total), 1) if total else 0.0,
             }
         )
-    agora = timezone.localtime()
-    inicio_mes = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    fte_total = qs_equipe().aggregate(total=Sum("perfil_staff__fte"))["total"] or Decimal("0")
-    tickets_mes = base.filter(criado_em__gte=inicio_mes).count()
-    tickets_por_fte = (
-        round(float(tickets_mes) / float(fte_total), 1) if fte_total else 0.0
-    )
+
+    if spec_sel and getattr(spec_sel, "perfil_staff", None):
+        fte_total = spec_sel.perfil_staff.fte or Decimal("0")
+    else:
+        fte_total = qs_equipe().aggregate(total=Sum("perfil_staff__fte"))["total"] or Decimal("0")
+    tickets_por_fte = round(float(total) / float(fte_total), 1) if fte_total else 0.0
+
+    qs_params = request.GET.copy()
+
+    def _url_periodo(nome: str) -> str:
+        q = qs_params.copy()
+        q.pop("de", None)
+        q.pop("ate", None)
+        if nome == "mes":
+            q.pop("periodo", None)
+        else:
+            q["periodo"] = nome
+        encoded = q.urlencode()
+        return f"{reverse('dashboard')}?{encoded}" if encoded else reverse("dashboard")
+
+    prod_label = {
+        "mes": "Tickets / FTE (mês)",
+        "7d": "Tickets / FTE (7 dias)",
+        "30d": "Tickets / FTE (30 dias)",
+        "tudo": "Tickets / FTE",
+        "custom": "Tickets / FTE",
+    }.get(periodo, "Tickets / FTE")
+
     return render(
         request,
         "tickets/dashboard.html",
         {
+            "form": form,
+            "periodo": periodo,
+            "periodo_de": de,
+            "periodo_ate": ate,
+            "url_mes": _url_periodo("mes"),
+            "url_7d": _url_periodo("7d"),
+            "url_30d": _url_periodo("30d"),
+            "url_tudo": _url_periodo("tudo"),
+            "filtros_ativos": bool(parceiro_sel or spec_sel or periodo != "mes"),
             "total": total,
             "abertos": base.exclude(
                 status__in=[
@@ -1242,8 +1345,11 @@ def dashboard(request: HttpRequest) -> HttpResponse:
             "por_tipo_total": sum(r["c"] for r in por_tipo),
             "recentes": base.select_related("parceiro")[:15],
             "fte_total": fte_total,
-            "tickets_mes": tickets_mes,
+            "fte_label": "FTE do especialista" if spec_sel else "FTE da equipe",
+            "prod_label": prod_label,
+            "tickets_mes": total,
             "tickets_por_fte": tickets_por_fte,
+            "mostrar_filtro_especialista": gestor,
         },
     )
 

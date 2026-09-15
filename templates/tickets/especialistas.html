@@ -1,25 +1,32 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Especialistas · NIO ESPECIALISTA Tickets{% endblock %}
+{% block body_class %}page-especialistas{% endblock %}
 {% block main_class %}wrap wrap-wide{% endblock %}
 {% block content %}
 <div class="hero">
   <div>
     <h1>Especialistas</h1>
-    <p>Equipe deste sistema. Marque <strong>Admin</strong> no cadastro para a pessoa ver todos os tickets. Sem isso, ela vê só os PDVs em que é especialista. A <strong>Gerência</strong> (OSAB) restringe Gestão às bases da mesma gerência. O campo <strong>WhatsApp</strong> é o celular que recebe as máscaras quando ela clica em Enviar (não vão para os grupos dos PDVs). Para nome, e-mail ou senha do seu login, use <a href="{% url 'meu_perfil' %}">Meu perfil</a>.</p>
+    <p class="hero-lead">Equipe deste sistema. Admin vê todos os tickets; os demais só os PDVs em que são especialistas. Gerência restringe a Gestão. WhatsApp recebe as máscaras no Enviar.</p>
   </div>
   <a class="btn btn-primary" href="{% url 'especialista_novo' %}">Novo especialista</a>
 </div>
-<div class="panel">
-  <div class="table-scroll table-scroll-wide">
-    <table class="table">
+<div class="toolbar-busca" data-busca-box data-rows=".spec-row">
+  <input type="search" class="fila-search busca-inteligente" data-tabela-busca
+         placeholder="Buscar nome, login, e-mail, gerência…"
+         autocomplete="off" aria-label="Buscar especialistas">
+  <span class="help" data-busca-count></span>
+</div>
+<div class="panel spec-table">
+  <div class="table-scroll">
+    <table class="table table-specs">
       <thead>
         <tr>
           <th>Nome</th>
           <th>Login</th>
           <th>Papel</th>
           <th>FTE</th>
-          <th>E-mail</th>
-          <th>WhatsApp</th>
+          <th>Contato</th>
           <th>Gerência</th>
           <th>PDVs</th>
           <th>Situação</th>
@@ -28,7 +35,9 @@
       </thead>
       <tbody>
         {% for u in especialistas %}
-        <tr {% if not u.is_active %}style="opacity:0.65"{% endif %}>
+        <tr class="spec-row{% if not u.is_active %} is-inactive{% endif %}"
+            data-id="{{ u.pk }}"
+            data-busca="{{ u.get_full_name }} {{ u.username }} {{ u.email }} {{ u.perfil_staff.whatsapp }} {{ u.perfil_staff.gerencia }} {% if u.perfil_staff.papel == 'gestor' %}admin gestor{% else %}especialista{% endif %}">
           <td>{{ u.get_full_name|default:"—" }}</td>
           <td class="mono">{{ u.username }}</td>
           <td>
@@ -39,8 +48,10 @@
             {% endif %}
           </td>
           <td class="mono">{{ u.perfil_staff.fte|floatformat:2 }}</td>
-          <td>{{ u.email|default:"—" }}</td>
-          <td class="mono">{{ u.perfil_staff.whatsapp|default:"—" }}</td>
+          <td class="cell-clip" title="{{ u.email }} {{ u.perfil_staff.whatsapp }}">
+            <div>{{ u.email|default:"—" }}</div>
+            <div class="help">{{ u.perfil_staff.whatsapp|default:"" }}</div>
+          </td>
           <td>{{ u.perfil_staff.gerencia|default:"—" }}</td>
           <td>{{ u.qtd_parceiros }}</td>
           <td>
@@ -51,25 +62,74 @@
             {% endif %}
           </td>
           <td>
-            <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
+            <div class="parceiro-acoes">
               {% if u.pk == user.pk %}
-                <a class="btn btn-secondary" href="{% url 'meu_perfil' %}">Meu perfil</a>
+                <a class="btn btn-secondary btn-sm" href="{% url 'meu_perfil' %}">Meu perfil</a>
               {% else %}
-                <a class="btn btn-secondary" href="{% url 'especialista_editar' u.pk %}">Editar</a>
+                <a class="btn btn-secondary btn-sm" href="{% url 'especialista_editar' u.pk %}">Editar</a>
                 <form method="post" action="{% url 'especialista_excluir' u.pk %}"
                       onsubmit="return confirm('Excluir {{ u.get_full_name|default:u.username|escapejs }}? O acesso será removido.');">
                   {% csrf_token %}
-                  <button type="submit" class="btn" style="background:var(--danger);color:#fff">Excluir</button>
+                  <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
                 </form>
               {% endif %}
             </div>
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="10">Ninguém na equipe ainda. Crie um especialista e vincule no cadastro do parceiro.</td></tr>
+        <tr><td colspan="9">Ninguém na equipe ainda. Crie um especialista e vincule no cadastro do parceiro.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
+<div class="spec-cards">
+  {% for u in especialistas %}
+  <article class="spec-card spec-row{% if not u.is_active %} is-inactive{% endif %}"
+           data-id="{{ u.pk }}"
+           data-busca="{{ u.get_full_name }} {{ u.username }} {{ u.email }} {{ u.perfil_staff.whatsapp }} {{ u.perfil_staff.gerencia }} {% if u.perfil_staff.papel == 'gestor' %}admin gestor{% else %}especialista{% endif %}">
+    <header class="spec-card-h">
+      <div>
+        <strong>{{ u.get_full_name|default:u.username }}</strong>
+        <div class="help mono">{{ u.username }}</div>
+      </div>
+      <div class="parceiro-acoes">
+        {% if u.perfil_staff.papel == "gestor" %}
+          <span class="pill resolvido">Admin</span>
+        {% endif %}
+        {% if u.is_active %}
+          <span class="pill resolvido">Ativo</span>
+        {% else %}
+          <span class="pill cancelado">Inativo</span>
+        {% endif %}
+      </div>
+    </header>
+    <dl class="spec-dl">
+      <div><dt>FTE</dt><dd>{{ u.perfil_staff.fte|floatformat:2 }}</dd></div>
+      <div><dt>PDVs</dt><dd>{{ u.qtd_parceiros }}</dd></div>
+      <div class="full"><dt>E-mail</dt><dd>{{ u.email|default:"—" }}</dd></div>
+      <div class="full"><dt>WhatsApp</dt><dd>{{ u.perfil_staff.whatsapp|default:"—" }}</dd></div>
+      <div class="full"><dt>Gerência</dt><dd>{{ u.perfil_staff.gerencia|default:"—" }}</dd></div>
+    </dl>
+    <footer class="parceiro-acoes">
+      {% if u.pk == user.pk %}
+        <a class="btn btn-secondary btn-sm" href="{% url 'meu_perfil' %}">Meu perfil</a>
+      {% else %}
+        <a class="btn btn-secondary btn-sm" href="{% url 'especialista_editar' u.pk %}">Editar</a>
+        <form method="post" action="{% url 'especialista_excluir' u.pk %}"
+              onsubmit="return confirm('Excluir {{ u.get_full_name|default:u.username|escapejs }}? O acesso será removido.');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
+        </form>
+      {% endif %}
+    </footer>
+  </article>
+  {% empty %}
+  <p class="help">Ninguém na equipe ainda.</p>
+  {% endfor %}
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{% static 'js/tabela_busca.js' %}"></script>
 {% endblock %}

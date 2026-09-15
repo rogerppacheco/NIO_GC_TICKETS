@@ -536,12 +536,72 @@ class EspecialistaAcessoTests(TestCase):
         self.assertEqual(r.context["tickets_por_fte"], 1.0)
         self.assertContains(r, "FTE da equipe")
         self.assertContains(r, "Tickets / FTE")
+        self.assertContains(r, "Este mês")
+        self.assertContains(r, "Todos parceiros")
         self.ticket_ana.tipo = TipoDemanda.SEM_SLOT
         self.ticket_ana.save(update_fields=["tipo"])
         r = self.client.get(reverse("dashboard"))
         labels = [row["label"] for row in r.context["por_tipo"]]
         self.assertIn(TipoDemanda.SEM_SLOT.label, labels)
         self.assertNotIn("Sinalização", labels)
+
+    @override_settings(
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    )
+    def test_dashboard_filtra_periodo_parceiro_e_especialista(self):
+        antigo = Ticket.objects.create(
+            parceiro=self.pdv_ana, tipo=TipoDemanda.RESET_SENHA, tt="TT-OLD"
+        )
+        Ticket.objects.filter(pk=antigo.pk).update(
+            criado_em=timezone.now() - timedelta(days=40)
+        )
+        self.client.force_login(self.gestor)
+        mes = self.client.get(reverse("dashboard"))
+        self.assertEqual(mes.context["periodo"], "mes")
+        self.assertEqual(mes.context["total"], 2)
+
+        tudo = self.client.get(reverse("dashboard"), {"periodo": "tudo"})
+        self.assertEqual(tudo.context["periodo"], "tudo")
+        self.assertEqual(tudo.context["total"], 3)
+
+        pdv = self.client.get(
+            reverse("dashboard"),
+            {"periodo": "tudo", "parceiro": self.pdv_ana.pk},
+        )
+        self.assertEqual(pdv.context["total"], 2)
+        self.assertContains(pdv, "PDV Ana")
+
+        spec = self.client.get(
+            reverse("dashboard"),
+            {"periodo": "tudo", "especialista": self.spec.pk},
+        )
+        self.assertEqual(spec.context["total"], 2)
+        self.assertEqual(spec.context["fte_total"], Decimal("1.00"))
+        self.assertContains(spec, "FTE do especialista")
+
+    @override_settings(
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    )
+    def test_cabecalho_mostra_primeiro_nome_e_menu_sair(self):
+        self.gestor.first_name = "Rogério Pereira"
+        self.gestor.save(update_fields=["first_name"])
+        self.client.force_login(self.gestor)
+        r = self.client.get(reverse("dashboard"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "nav-account")
+        self.assertContains(r, ">Rogério</a>")
+        self.assertContains(r, "Meu perfil")
+        self.assertContains(r, "Sair")
 
     def test_nao_permite_renomear_especialista_para_login_do_gestor(self):
         from .forms import EspecialistaForm
@@ -594,6 +654,8 @@ class EspecialistaAcessoTests(TestCase):
         self.assertContains(r, "Editar")
         self.assertContains(r, "Excluir")
         self.assertContains(r, "wrap wrap-wide")
+        self.assertContains(r, "data-tabela-busca")
+        self.assertContains(r, "spec-card")
         self.assertNotContains(r, "DANIEL")
 
     @override_settings(
@@ -611,6 +673,8 @@ class EspecialistaAcessoTests(TestCase):
         self.assertContains(r, "Meus parceiros")
         self.assertContains(r, "Outros especialistas")
         self.assertContains(r, "Empresários")
+        self.assertContains(r, "data-tabela-busca")
+        self.assertContains(r, "Buscar código")
         meus = self.client.get(reverse("parceiros"), {"escopo": "meus"})
         self.assertNotContains(meus, "PDV Ana")
         outros = self.client.get(reverse("parceiros"), {"escopo": "outros"})
@@ -1072,8 +1136,10 @@ class FilaOsabTests(TestCase):
         with override_settings(**self.storages):
             r = self.client.get(reverse("fila"))
         self.assertEqual(r.status_code, 200)
-        self.assertContains(r, "SITUAÇÃO OSAB")
-        self.assertContains(r, "Atualiz. OSAB")
+        self.assertContains(r, "Situação OSAB")
+        self.assertNotContains(r, "Atualiz. OSAB")
+        self.assertContains(r, "fila-action-group")
+        self.assertContains(r, "Responder")
         self.assertContains(r, "Concluído")
         self.assertContains(r, "21/08/26")
         ticket = r.context["tickets"][0]
@@ -1611,12 +1677,22 @@ class EspecialistaDestinoMascaraTests(TestCase):
             self.assertTrue(data["ok"])
             self.assertIn("sucesso", data["mensagem"])
 
+    @override_settings(
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    )
     def test_fila_renderiza_botao_enviar_mascara(self):
         self.client.force_login(self.spec_user)
         url = reverse("fila")
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, f'data-send-maska="{self.ticket.protocolo}"')
+        self.assertContains(resp, "fila-action-group")
+        self.assertContains(resp, "Responder")
         self.assertContains(resp, 'id="modal-enviar-mascara"')
 
     def test_especialista_form_renderiza_com_destinatario_sem_parceiro(self):

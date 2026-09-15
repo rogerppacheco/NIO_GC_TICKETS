@@ -36,6 +36,25 @@ def texto_formatado(value) -> str:
 
 
 @register.filter
+def primeiro_nome(user) -> str:
+    if not user:
+        return ""
+    nome = (getattr(user, "first_name", None) or "").strip()
+    if nome:
+        return nome.split()[0]
+    full = ""
+    getter = getattr(user, "get_full_name", None)
+    if callable(getter):
+        full = (getter() or "").strip()
+    if full:
+        return full.split()[0]
+    getter = getattr(user, "get_username", None)
+    if callable(getter):
+        return getter()
+    return str(user)
+
+
+@register.filter
 def form_field(form, name):
     try:
         return form[name]

@@ -941,3 +941,51 @@ class FilaFiltroForm(forms.Form):
             ("__sem__", "Sem OSAB"),
             *[(s, s) for s in situacoes_osab],
         ]
+
+
+class DashboardFiltroForm(forms.Form):
+    de = forms.DateField(
+        required=False,
+        label="De",
+        input_formats=["%Y-%m-%d"],
+        widget=forms.DateInput(
+            format="%Y-%m-%d",
+            attrs={"type": "date", "class": "fila-pick"},
+        ),
+    )
+    ate = forms.DateField(
+        required=False,
+        label="Até",
+        input_formats=["%Y-%m-%d"],
+        widget=forms.DateInput(
+            format="%Y-%m-%d",
+            attrs={"type": "date", "class": "fila-pick"},
+        ),
+    )
+    parceiro = forms.ModelChoiceField(
+        required=False,
+        queryset=Parceiro.objects.filter(ativo=True),
+        empty_label="Todos parceiros",
+        widget=forms.Select(attrs={"class": "fila-pick", "aria-label": "Parceiro"}),
+    )
+    especialista = forms.ModelChoiceField(
+        required=False,
+        queryset=get_user_model().objects.none(),
+        empty_label="Todos especialistas",
+        widget=forms.Select(attrs={"class": "fila-pick", "aria-label": "Especialista"}),
+    )
+
+    def __init__(self, *args, parceiros_qs=None, especialistas_qs=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if parceiros_qs is not None:
+            self.fields["parceiro"].queryset = parceiros_qs
+        if especialistas_qs is not None:
+            self.fields["especialista"].queryset = especialistas_qs
+        else:
+            from .acesso import qs_equipe
+
+            self.fields["especialista"].queryset = qs_equipe()
+        campo = self.fields["especialista"]
+        campo.label_from_instance = lambda u: (
+            (u.first_name or u.get_full_name() or u.username).split()[0]
+        )
