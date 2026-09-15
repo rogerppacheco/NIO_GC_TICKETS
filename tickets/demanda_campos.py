@@ -15,6 +15,7 @@ CAMPOS_POR_TIPO: dict[str, dict] = {
             "documento_cliente",
             "data_desejada",
             "turno",
+            "observacoes",
             "evidencias",
         ],
         "obrigatorios": ["pedido", "documento_cliente", "data_desejada", "turno"],
@@ -558,6 +559,7 @@ LABELS_POR_TIPO: dict[str, dict[str, str]] = {
     },
     TipoDemanda.AGENDAR_REAGENDAR: {
         "documento_cliente": "CPF do cliente",
+        "observacoes": "Observações",
     },
     TipoDemanda.ACESSO_APP: {
         "documento_cliente": "CPF",
@@ -628,7 +630,13 @@ CAMPOS_CONTEXTO_RESPOSTA: dict[str, list[str]] = {
     TipoDemanda.ENDERECO_DOC: ["pedido", "documento_cliente"],
     TipoDemanda.STATUS_PEDIDO: ["pedido"],
     TipoDemanda.VIABILIDADE: ["cep", "numero_fachada", "endereco_completo"],
-    TipoDemanda.AGENDAR_REAGENDAR: ["pedido", "documento_cliente", "data_desejada", "turno"],
+    TipoDemanda.AGENDAR_REAGENDAR: [
+        "pedido",
+        "documento_cliente",
+        "data_desejada",
+        "turno",
+        "observacoes",
+    ],
     TipoDemanda.PRIORIDADE_ELITE: [
         "pedido",
         "endereco_completo",

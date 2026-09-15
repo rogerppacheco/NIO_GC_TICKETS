@@ -7,7 +7,7 @@
       {% csrf_token %}
       {% for field in form %}
         <div
-          class="{% if field.name == 'descricao' or field.name == 'evidencias' or field.name == 'endereco_completo' or field.name == 'motivo_reparo' or field.name == 'tipo_pendencia' or field.name == 'variacao_sem_slot' %}full{% endif %}"
+          class="{% if field.name == 'descricao' or field.name == 'observacoes' or field.name == 'evidencias' or field.name == 'endereco_completo' or field.name == 'motivo_reparo' or field.name == 'tipo_pendencia' or field.name == 'variacao_sem_slot' %}full{% endif %}"
           data-field="{{ field.name }}"
         >
           <label for="{{ field.id_for_label }}">{{ field.label }}</label>

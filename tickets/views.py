@@ -1207,12 +1207,11 @@ def dashboard(request: HttpRequest) -> HttpResponse:
     for row in por_tipo_raw:
         qtd = int(row["c"] or 0)
         full = labels.get(row["tipo"], row["tipo"])
-        # rótulo curto para o painel (corta código/parênteses longos)
-        curto = full.split(" — ")[0].split(" (")[0].strip()
+        # rótulo completo no painel — o nome curto escondia “Sinalização — …”
         por_tipo.append(
             {
                 "tipo": row["tipo"],
-                "label": curto,
+                "label": full,
                 "label_full": full,
                 "c": qtd,
                 "pct": round((100.0 * qtd / total), 1) if total else 0.0,

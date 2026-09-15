@@ -540,7 +540,9 @@ class TicketCreateForm(forms.ModelForm):
             "data_instalacao": forms.DateInput(attrs={"type": "date"}),
             "data_alternativa": forms.DateInput(attrs={"type": "date"}),
             "descricao": forms.Textarea(attrs={"rows": 3, "placeholder": "Descreva em poucas linhas"}),
-            "observacoes": forms.TextInput(attrs={"placeholder": "Ex.: Etapa 3 — consulta CPF"}),
+            "observacoes": forms.Textarea(
+                attrs={"rows": 3, "placeholder": "Complemente se precisar"}
+            ),
             "uf": forms.TextInput(attrs={"maxlength": "2", "placeholder": "UF"}),
             "endereco_completo": forms.TextInput(
                 attrs={"readonly": True, "placeholder": "Preenchido pelo CEP"}

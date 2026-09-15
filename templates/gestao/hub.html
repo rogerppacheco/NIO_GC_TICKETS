@@ -56,16 +56,21 @@
   </div>
   <div class="panel">
     <div class="panel-h"><h2>Última importação por base</h2></div>
-    <table class="table">
+    <div class="panel-b table-clip">
+    <table class="table table-importacoes">
       <thead><tr><th>Base</th><th>Arquivo</th><th>Quando</th><th>Por</th></tr></thead>
       <tbody>
         {% for item in ultimos_por_tipo %}
         <tr>
           <td>{{ item.rotulo }}</td>
           {% if item.lote %}
-          <td>{{ item.lote.arquivo_nome|truncatechars:28 }}</td>
-          <td>{{ item.lote.criado_em|date:"d/m/Y H:i" }}</td>
-          <td>{{ item.lote.criado_por.get_full_name|default:item.lote.criado_por.username|default:"—" }}</td>
+          <td title="{{ item.lote.arquivo_nome }}">{{ item.lote.arquivo_nome }}</td>
+          <td class="col-quando">{{ item.lote.criado_em|date:"d/m/Y" }}<br>{{ item.lote.criado_em|date:"H:i" }}</td>
+          <td>
+            {% if item.lote.criado_por %}
+              {{ item.lote.criado_por.get_full_name|default:item.lote.criado_por.username }}
+            {% else %}—{% endif %}
+          </td>
           {% else %}
           <td colspan="3" class="help">Sem importação ok</td>
           {% endif %}
@@ -75,6 +80,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
 </div>
 

@@ -987,6 +987,7 @@ class GestaoViewsTests(TestCase):
         r = self.client.get(reverse("gestao_hub"))
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "Gestão de bases")
+        self.assertContains(r, "table-importacoes")
 
     def test_salvar_periodo(self):
         self.client.force_login(self.gestor)

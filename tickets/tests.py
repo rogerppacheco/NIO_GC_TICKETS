@@ -215,6 +215,7 @@ class MatrizOperacaoDemandaTests(TestCase):
             cfg["obrigatorios"],
             ["pedido", "documento_cliente", "data_desejada", "turno"],
         )
+        self.assertIn("observacoes", cfg["campos"])
 
     def test_abrir_chamado_ti_exige_contato_e_documento(self):
         cfg = schema_tipo(TipoDemanda.ABRIR_CHAMADO_TI)
@@ -535,6 +536,12 @@ class EspecialistaAcessoTests(TestCase):
         self.assertEqual(r.context["tickets_por_fte"], 1.0)
         self.assertContains(r, "FTE da equipe")
         self.assertContains(r, "Tickets / FTE")
+        self.ticket_ana.tipo = TipoDemanda.SEM_SLOT
+        self.ticket_ana.save(update_fields=["tipo"])
+        r = self.client.get(reverse("dashboard"))
+        labels = [row["label"] for row in r.context["por_tipo"]]
+        self.assertIn(TipoDemanda.SEM_SLOT.label, labels)
+        self.assertNotIn("Sinalização", labels)
 
     def test_nao_permite_renomear_especialista_para_login_do_gestor(self):
         from .forms import EspecialistaForm
