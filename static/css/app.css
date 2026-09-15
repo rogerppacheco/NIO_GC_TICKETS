@@ -1661,3 +1661,52 @@ body.page-portal .consulta-forms-access { padding: 0.55rem 0.7rem; }
   .rota-card-h { flex-direction: column; }
   .rota-hero-kpi strong { font-size: 2.15rem; }
 }
+
+/* Trade Hub */
+.thub-aviso { max-width: 52rem; margin: -0.4rem 0 1.25rem; }
+.thub-h {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+.thub-faq-wrap { margin-top: 2rem; }
+.thub-faq-wrap h2 { margin: 0 0 0.35rem; font-size: 1.25rem; }
+.thub-faq { display: flex; flex-direction: column; gap: 0.55rem; margin-top: 0.85rem; }
+.thub-faq details {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.thub-faq summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0.9rem 1.1rem;
+  list-style: none;
+}
+.thub-faq summary::-webkit-details-marker { display: none; }
+.thub-faq-a {
+  padding: 0 1.1rem 1rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.thub-crumb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  margin: 0 0 1rem;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.thub-crumb a { color: var(--muted); }
+.thub-crumb a:hover { color: var(--ink); }
+.thub-ext {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+.thub-files td:last-child { white-space: nowrap; }

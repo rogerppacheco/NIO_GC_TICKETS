@@ -1,0 +1,153 @@
+{
+  "fonte": "https://tradehub.nioprojetos.com.br/",
+  "capturado_em": "2026-09-14",
+  "login": {
+    "colaborador_nio": "NIO + n.º ID (ex. NIO123456)",
+    "parceiro": "n.º do PDV (SAP)",
+    "primeiro_acesso": "POST /pesquisar com sap → cadastra celular",
+    "auth": "POST /auth",
+    "suporte": "Procurar o gerente de contas"
+  },
+  "home": {
+    "titulo": "Explore os materiais do trade hub",
+    "intro": "Tudo o que você precisa para impulsionar suas estratégias de merchandising está aqui — com materiais sempre atualizados e alinhados às diretrizes da Nio. Acesse manuais, artes finalizadas e ferramentas digitais que vão facilitar seu dia a dia no PDV e ajudar você a vender cada vez mais.",
+    "aviso": "Tenha acesso a todos os materiais e manuais com a identidade da marca para garantir que seu ponto de venda esteja completo e alinhado com nossas diretrizes. Explore todos os conteúdos disponíveis para melhorar suas operações e aumentar suas vendas."
+  },
+  "faq": [
+    {
+      "pergunta": "O que são esses materiais e como eles podem me ajudar no meu ponto de venda?",
+      "resposta": "O Trade Hub inclui uma série de materiais que te ajudam na divulgação da marca em seu ponto de venda, além de garantir que todas as comunicações estejam dentro do padrão da marca e com as informações e ofertas atualizadas."
+    },
+    {
+      "pergunta": "Os materiais e manuais são atualizados com que frequência?",
+      "resposta": "Os materiais e manuais são revisados e atualizados regularmente para refletir as mais recentes diretrizes da marca e as atualizações do portfólio de ofertas. Recomendamos que você acesse o portal com frequência para se manter informado e garantir que seu ponto de venda esteja sempre atualizado."
+    },
+    {
+      "pergunta": "Posso personalizar os materiais disponíveis no portal?",
+      "resposta": "Os materiais seguem as diretrizes da marca e, portanto, não podem ser personalizados. Isso garante consistência e coerência na comunicação da marca. Eles já estão prontos para utilização."
+    },
+    {
+      "pergunta": "Há custos associados ao uso do portal de parceiros?",
+      "resposta": "Não, o acesso ao portal e o download dos materiais são gratuitos para todos os parceiros."
+    },
+    {
+      "pergunta": "Com o Trade Hub, o fluxo de produção dos materiais muda e o parceiro se responsabiliza?",
+      "resposta": "Não, o fluxo de produção dos materiais se mantém o mesmo entre o Trade Regional e os Parceiros. O Trade Hub é apenas uma ferramenta para consolidar os materiais disponíveis de forma mais pratica para o dia a dia das vendas."
+    }
+  ],
+  "categorias": [
+    {
+      "slug": "manuais",
+      "titulo": "Manuais",
+      "rota": "/manuais",
+      "intro": "Confira os manuais com orientações referentes ao uso de nossos materiais. Faça abaixo o download.",
+      "itens": [
+        {"titulo": "Manual de Boas Vindas", "arquivo": "materiais/manuais/manual_ferramentas_digitais_boas_vindas_parceiros.pdf"},
+        {"titulo": "Manual Uniformes Empresarial", "arquivo": "materiais/manuais/manual_uniformes_empresarial.pdf"},
+        {"titulo": "Manual Ambientação Escritório", "arquivo": "materiais/manuais/manual_ambientacao_escritorio.pdf"},
+        {"titulo": "Manual Uniformes PAP", "arquivo": "materiais/manuais/manual_uniformes_pap.pdf"},
+        {"titulo": "Manual Enxoval Merchan", "arquivo": "materiais/manuais/manual_enxoval_merchan.pdf"},
+        {"titulo": "Manual Uniformes Alto Valor", "arquivo": "materiais/manuais/manual_uniformes_pap_alto_valor.pdf"},
+        {"titulo": "Manual Toolkit", "pasta": "materiais/manuais/manuais_toolkit/"},
+        {"titulo": "Manual Jornada do Cliente", "pasta": "materiais/manuais/manual_jornada_do_cliente_padronizacao_mensagens/"}
+      ]
+    },
+    {
+      "slug": "enxoval_merchan",
+      "titulo": "Enxoval Merchan",
+      "rota": "/enxoval_merchan",
+      "intro": "Encontre aqui as referências de materiais para ações de vendas no dia-a-dia.",
+      "manual": "materiais/enxoval_merchan/manual_kit_merchan_para_acoes.pdf",
+      "itens": [
+        {"titulo": "Cavalete", "pasta": "materiais/enxoval_merchan/cavalete/"},
+        {"titulo": "Plotagem de veículo", "pasta": "materiais/enxoval_merchan/plotagem_veiculo/"},
+        {"titulo": "Banner", "pasta": "materiais/enxoval_merchan/banner/"},
+        {"titulo": "Banner empresarial", "pasta": "materiais/enxoval_merchan/banner_empresarial/"},
+        {"titulo": "Balcão", "pasta": "materiais/enxoval_merchan/balcao/"},
+        {"titulo": "Wind banner", "pasta": "materiais/enxoval_merchan/wind_banner/"},
+        {"titulo": "Tenda Gazebo", "pasta": "materiais/enxoval_merchan/tenda/"},
+        {"titulo": "Guarda-sol", "pasta": "materiais/enxoval_merchan/guarda_sol/"},
+        {"titulo": "Kit mesa/cadeira", "pasta": "materiais/enxoval_merchan/kit_mesa_cadeira/"}
+      ]
+    },
+    {
+      "slug": "folheteria",
+      "titulo": "Folheteria",
+      "rota": "/folheteria",
+      "intro": "Tenha acesso aos materiais de folheteria atualizados, prontos para impressão. O material está disponível no formato 10x21.",
+      "itens": [
+        {"titulo": "Folheto Varejo", "pasta": "materiais/folheteria/folheto_varejo/"},
+        {"titulo": "Folheto Varejo 50% off (148 cidades)", "pasta": "materiais/folheteria/folheto_varejo_cidades/", "cidades": "materiais/folheteria/folheto_varejo_cidades/cidades.pdf"},
+        {"titulo": "Folheto Varejo Móvel 5G (13 cidades)", "pasta": "materiais/folheteria/folheto_varejo_cidades_oferta/", "cidades": "materiais/folheteria/folheto_varejo_cidades_oferta/cidades.pdf"},
+        {"titulo": "Folheto Empresarial", "pasta": "materiais/folheteria/folheto_empresarial/"},
+        {"titulo": "Folheto Empresarial 50% off (148 cidades)", "pasta": "materiais/folheteria/folheto_empresarial_cidades/", "cidades": "materiais/folheteria/folheto_empresarial_cidades/cidades.pdf"},
+        {"titulo": "Folheto Empresarial Móvel 5G (13 cidades)", "pasta": "materiais/folheteria/folheto_empresarial_cidades_oferta/", "cidades": "materiais/folheteria/folheto_empresarial_cidades_oferta/cidades.pdf"}
+      ]
+    },
+    {
+      "slug": "uniformes",
+      "titulo": "Uniformes",
+      "rota": "/uniformes",
+      "intro": "Encontre aqui as referências para produção de uniformes para o seu time de vendas.",
+      "manuais_pasta": "materiais/uniformes/manuais/",
+      "itens": [
+        {"titulo": "Crachá", "pasta": "materiais/uniformes/cracha/", "orientacao": "materiais/uniformes/orientacao/cracha.pdf"},
+        {"titulo": "Camiseta vendedores PAP", "pasta": "materiais/uniformes/camiseta_vendedores_pap/", "orientacao": "materiais/uniformes/orientacao/camiseta_vendedores_pap.pdf"},
+        {"titulo": "Camisa polo Alto Valor", "pasta": "materiais/uniformes/camisa_polo_alto_valor/", "orientacao": "materiais/uniformes/orientacao/camisa_polo_alto_valor.pdf"},
+        {"titulo": "Camisa polo empresarial", "pasta": "materiais/uniformes/camisa_polo_empresarial/", "orientacao": "materiais/uniformes/orientacao/camisa_polo_empresarial.pdf"},
+        {"titulo": "Camiseta empresarial", "pasta": "materiais/uniformes/camiseta_empresarial/", "orientacao": "materiais/uniformes/orientacao/camiseta_empresarial.pdf"},
+        {"titulo": "Jaqueta puffer", "pasta": "materiais/uniformes/jaqueta_puffer/", "orientacao": "materiais/uniformes/orientacao/jaqueta_puffer.pdf"},
+        {"titulo": "Casaco moletom", "pasta": "materiais/uniformes/casaco_moletom/", "orientacao": "materiais/uniformes/orientacao/casaco_moletom.pdf"},
+        {"titulo": "Blusão de moletom", "pasta": "materiais/uniformes/blusao_moletom/", "orientacao": "materiais/uniformes/orientacao/blusao_moletom.pdf"}
+      ]
+    },
+    {
+      "slug": "ambientacao_escritorio",
+      "titulo": "Ambientação de escritório",
+      "rota": "/ambientacao_escritorio",
+      "intro": "Acesse o enxoval de ambientação para o seu PDV e encontre materiais projetados para garantir uma comunicação interna eficaz e alinhada às diretrizes da Nio. Este enxoval inclui materiais e elementos que transformam o escritório em um ambiente inspirador e motivador para a equipe e ajuda na criação de um espaço que não apenas atende aos padrões da Nio, mas também fomenta um clima de trabalho positivo e produtivo.",
+      "itens": [
+        {"titulo": "Ambientação PAP", "arquivo": "materiais/ambientacao_escritorio/manual_ambientacao_escritorio_pap.pdf"},
+        {"titulo": "Ambientação Empresarial", "arquivo": "materiais/ambientacao_escritorio/manual_ambientacao_escritorio_empresarial.pdf"}
+      ],
+      "pecas": [
+        "materiais/ambientacao_escritorio/mobile_de_teto/",
+        "materiais/ambientacao_escritorio/painel_gestao_a_vista/",
+        "materiais/ambientacao_escritorio/placas_para_portas/",
+        "materiais/ambientacao_escritorio/placas_parede/",
+        "materiais/ambientacao_escritorio/testeiras_de_computador/"
+      ]
+    },
+    {
+      "slug": "brindes",
+      "titulo": "Brindes",
+      "rota": "/brindes",
+      "intro": "Confira abaixo o catálogo com sugestões de brindes, para disponibilizar aos clientes em suas ações de vendas. Faça abaixo o download contendo: layout, simulação e especificação técnica com fornecedor.",
+      "itens": [
+        {"titulo": "Caneta", "pasta": "materiais/brindes/caneta/"},
+        {"titulo": "Copo térmico café", "pasta": "materiais/brindes/copo_termico_cafe/"},
+        {"titulo": "Garrafa", "pasta": "materiais/brindes/garrafa/"},
+        {"titulo": "Lancheira", "pasta": "materiais/brindes/lancheira/"},
+        {"titulo": "Mochila", "pasta": "materiais/brindes/mochila/"},
+        {"titulo": "Mousepad", "pasta": "materiais/brindes/mousepad/"},
+        {"titulo": "Sacola Ecobag", "pasta": "materiais/brindes/sacola_ecobag/"}
+      ]
+    },
+    {
+      "slug": "trade_digital",
+      "titulo": "Trade Digital",
+      "rota": "/trade_digital",
+      "intro": "Nessa plataforma, você encontra cards digitais personalizáveis para facilitar as vendas. Assim, é possível escolher a oferta ideal para cada cliente, personalizar o card com o nome dele e do vendedor, e enviar diretamente pelo WhatsApp. Além disso, também estão disponíveis materiais de apoio, como folhetos digitais. Você acessa os folhetos da Nio em suas versões digitais, prontos para compartilhamento.",
+      "app": {
+        "texto": "Disponível exclusivamente como app para celular. É preciso baixá-lo para acessar a ferramenta. Caso tenha dificuldades para acessar, procure o seu Gerente de Contas.",
+        "download": "https://tradedigital.nioprojetos.com.br/download/"
+      }
+    },
+    {
+      "slug": "vende_comunica",
+      "titulo": "VendeComunica",
+      "rota": "/vende_comunica",
+      "intro": "Este é o canal oficial da Nio com os parceiros. Por aqui, você encontra comunicados estratégicos, campanhas, novidades e informações essenciais que vão te ajudar a impulsionar suas vendas. As atualizações, inclusive, chegam pela sua caixa de e-mails, com o remetente VendeComunica. Então, fique atento para conferir as novidades!"
+    }
+  ]
+}

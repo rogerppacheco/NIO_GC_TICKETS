@@ -7,3 +7,6 @@ staticfiles/
 .env
 *.log
 .DS_Store
+
+# Binários espelhados do Trade Hub (ficam locais / R2; não vão para o git)
+tradehub/materiais/

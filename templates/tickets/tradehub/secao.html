@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }} · Trade Hub{% endblock %}
+{% block content %}
+<nav class="thub-crumb" aria-label="Navegação">
+  {% for crumb in crumbs %}
+    {% if not forloop.first %}<span aria-hidden="true">/</span>{% endif %}
+    {% if crumb.url == "tradehub" %}
+      <a href="{% url 'tradehub' %}">{{ crumb.titulo }}</a>
+    {% elif crumb.url == "secao" %}
+      <a href="{% url 'tradehub_secao' crumb.slug %}">{{ crumb.titulo }}</a>
+    {% elif crumb.url == "pasta" %}
+      <a href="{% url 'tradehub_pasta' crumb.slug crumb.pasta %}">{{ crumb.titulo }}</a>
+    {% else %}
+      <span>{{ crumb.titulo }}</span>
+    {% endif %}
+  {% endfor %}
+</nav>
+
+<div class="hero">
+  <div>
+    <h1>{{ titulo }}</h1>
+    {% if intro %}<p>{{ intro }}</p>{% endif %}
+  </div>
+</div>
+
+{% if app %}
+  <div class="panel" style="margin-bottom:1rem">
+    <div class="panel-b">
+      <p>{{ app.texto }}</p>
+      {% if app.download %}
+        <p style="margin-top:0.85rem">
+          <a class="btn btn-primary" href="{{ app.download }}" target="_blank" rel="noopener noreferrer">Baixar o Trade Digital</a>
+        </p>
+      {% endif %}
+    </div>
+  </div>
+{% endif %}
+
+<form method="get" class="panel" style="margin-bottom:1rem">
+  <div class="panel-b" style="display:flex;gap:0.65rem;flex-wrap:wrap;align-items:flex-end">
+    <div style="flex:1;min-width:180px">
+      <label for="q">Buscar nesta seção</label>
+      <input type="search" name="q" id="q" value="{{ q }}" placeholder="Nome do arquivo ou pasta…">
+    </div>
+    <button class="btn btn-primary" type="submit">Filtrar</button>
+    {% if q %}
+      <a class="btn btn-secondary" href="{% if pasta %}{% url 'tradehub_pasta' categoria.slug pasta %}{% else %}{% url 'tradehub_secao' categoria.slug %}{% endif %}">Limpar</a>
+    {% endif %}
+  </div>
+</form>
+
+{% if destaques %}
+  <h2 class="thub-h">Destaques</h2>
+  <div class="consultas-grid" style="margin-bottom:1.25rem">
+    {% for item in destaques %}
+      <a class="consulta-card" href="{{ item.url }}" {% if item.tipo == "arquivo" %}target="_blank" rel="noopener"{% endif %}>
+        <span class="consulta-ico">{% if item.tipo == "pasta" %}📁{% else %}⬇️{% endif %}</span>
+        <h2>{{ item.titulo }}</h2>
+        {% if item.ext %}<p>{{ item.ext|upper }}</p>{% endif %}
+        {% if item.extras %}
+          {% for extra in item.extras %}
+            <span class="consulta-tag">{{ extra.titulo }}</span>
+          {% endfor %}
+        {% endif %}
+      </a>
+    {% endfor %}
+  </div>
+  {% for item in destaques %}
+    {% if item.extras %}
+      <p class="help">
+        {{ item.titulo }}:
+        {% for extra in item.extras %}
+          <a href="{{ extra.url }}" target="_blank" rel="noopener">{{ extra.titulo }}</a>{% if not forloop.last %} · {% endif %}
+        {% endfor %}
+      </p>
+    {% endif %}
+  {% endfor %}
+{% endif %}
+
+{% if pastas %}
+  <h2 class="thub-h">Pastas</h2>
+  <div class="consultas-grid" style="margin-bottom:1.25rem">
+    {% for pasta_item in pastas %}
+      <a class="consulta-card" href="{{ pasta_item.url }}">
+        <span class="consulta-ico">📁</span>
+        <h2>{{ pasta_item.titulo }}</h2>
+        <p>{{ pasta_item.n_arquivos }} arquivo{{ pasta_item.n_arquivos|pluralize }}</p>
+      </a>
+    {% endfor %}
+  </div>
+{% endif %}
+
+{% if arquivos %}
+  <div class="panel">
+    <div class="panel-h"><h2>Arquivos</h2></div>
+    <div class="panel-b" style="padding:0">
+      <div class="table-scroll">
+        <table class="table thub-files">
+          <thead>
+            <tr>
+              <th>Arquivo</th>
+              <th>Tipo</th>
+              <th>Tamanho</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for arq in arquivos %}
+              <tr>
+                <td>{{ arq.nome }}</td>
+                <td><span class="thub-ext">{{ arq.ext }}</span></td>
+                <td>{{ arq.tamanho }}</td>
+                <td><a class="btn btn-secondary btn-sm" href="{{ arq.url }}">Baixar</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% elif not pastas and not destaques and not app %}
+  <div class="panel">
+    <div class="panel-b">
+      <p class="help">Nenhum material nesta pasta.</p>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

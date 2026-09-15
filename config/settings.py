@@ -98,6 +98,11 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "/media/"
 MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT", BASE_DIR / "media"))
 
+TRADEHUB_DIR = Path(os.environ.get("TRADEHUB_DIR", BASE_DIR / "tradehub"))
+TRADEHUB_R2_PREFIX = os.environ.get("TRADEHUB_R2_PREFIX", "tradehub/").strip() or "tradehub/"
+if not TRADEHUB_R2_PREFIX.endswith("/"):
+    TRADEHUB_R2_PREFIX += "/"
+
 R2_ACCOUNT_ID = os.environ.get("R2_ACCOUNT_ID", "").strip()
 R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "").strip()
 R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "").strip()

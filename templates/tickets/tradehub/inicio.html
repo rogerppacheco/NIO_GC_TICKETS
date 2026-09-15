@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Trade Hub · NIO GC Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Trade Hub</h1>
+    <p>{{ home.intro }}</p>
+  </div>
+</div>
+
+<p class="help thub-aviso">{{ home.aviso }}</p>
+
+<div class="consultas-grid">
+  {% for cat in categorias %}
+    <a class="consulta-card" href="{% url 'tradehub_secao' cat.slug %}">
+      <span class="consulta-ico">{{ cat.icone }}</span>
+      <h2>{{ cat.titulo }}</h2>
+      <p>{{ cat.intro|truncatechars:140 }}</p>
+      {% if cat.n_arquivos %}
+        <span class="consulta-tag">{{ cat.n_arquivos }} arquivo{{ cat.n_arquivos|pluralize }}</span>
+      {% else %}
+        <span class="consulta-tag">Informações</span>
+      {% endif %}
+    </a>
+  {% endfor %}
+</div>
+
+<section class="thub-faq-wrap" id="duvidas">
+  <h2>Tire as suas dúvidas</h2>
+  <p class="help">Respostas práticas sobre o uso dos materiais no PDV.</p>
+  <div class="thub-faq">
+    {% for item in faq %}
+      <details>
+        <summary>{{ item.pergunta }}</summary>
+        <div class="thub-faq-a">{{ item.resposta }}</div>
+      </details>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

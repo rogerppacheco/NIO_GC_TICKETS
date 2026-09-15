@@ -1,6 +1,6 @@
 from django.urls import include, path
 
-from . import repositorio_views, rota_views, views
+from . import repositorio_views, rota_views, tradehub_views, views
 
 urlpatterns = [
     path("", views.home, name="home"),
@@ -18,6 +18,10 @@ urlpatterns = [
     path("campos-resposta/<str:tipo>/", views.config_resposta_editar, name="config_resposta_editar"),
     path("abrir/", views.portal_inicio, name="portal_inicio"),
     path("abrir/demanda/", views.abrir_demanda, name="abrir_demanda"),
+    path("tradehub/", tradehub_views.tradehub_inicio, name="tradehub"),
+    path("tradehub/arquivo/<path:rel>", tradehub_views.tradehub_arquivo, name="tradehub_arquivo"),
+    path("tradehub/<slug:slug>/", tradehub_views.tradehub_secao, name="tradehub_secao"),
+    path("tradehub/<slug:slug>/<path:pasta>/", tradehub_views.tradehub_secao, name="tradehub_pasta"),
     path("repositorio/", repositorio_views.repositorio_lista, name="repositorio_lista"),
     path("repositorio/gerir/", repositorio_views.repositorio_gerir_lista, name="repositorio_gerir_lista"),
     path("repositorio/gerir/novo/", repositorio_views.repositorio_gerir_form, name="repositorio_gerir_novo"),
