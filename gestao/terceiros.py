@@ -199,14 +199,22 @@ def _extrair_data_referencia(nome_arquivo: str) -> date | None:
 
 
 def _parse_data(valor) -> date | None:
-    if valor is None or (isinstance(valor, float) and pd.isna(valor)):
+    if valor is None:
         return None
+    try:
+        if pd.isna(valor):
+            return None
+    except (TypeError, ValueError):
+        pass
     if isinstance(valor, datetime):
-        return valor.date()
+        try:
+            return valor.date()
+        except (ValueError, OSError, OverflowError):
+            return None
     if isinstance(valor, date):
         return valor
     texto = str(valor).strip()
-    if not texto or texto in {"NaT", "nan", "00/01/1900"}:
+    if not texto or texto.casefold() in {"nat", "nan", "n/a", "na", "none", "00/01/1900"}:
         return None
     for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
         try:

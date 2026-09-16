@@ -193,6 +193,44 @@ class SysmapImportTests(TestCase):
         self.assertEqual(t.cargo_funcao, "VENDEDOR")
         self.assertEqual(resumo["data_referencia"], "2026-09-15")
 
+    def test_parse_data_ignora_nat_e_na(self):
+        import pandas as pd
+
+        from gestao.terceiros import _parse_data
+
+        self.assertIsNone(_parse_data(pd.NaT))
+        self.assertIsNone(_parse_data(pd.Timestamp("NaT")))
+        self.assertIsNone(_parse_data(float("nan")))
+        self.assertIsNone(_parse_data("N/A"))
+        self.assertEqual(_parse_data("01/01/2025"), date(2025, 1, 1))
+
+    def test_importa_quando_desalocacao_esta_vazia(self):
+        arquivo = _xlsx_sysmap_agrupado(
+            [
+                [
+                    "LUISA SERVICOS DE TELEFONIA MOVEL",
+                    "ANA",
+                    "123",
+                    "a@x.com",
+                    "TT1",
+                    "CLT",
+                    "VENDEDOR",
+                    "Ativo",
+                    "Ativo",
+                    "Alocado",
+                    "01/01/2025",
+                    "N/A",
+                    "",
+                ]
+            ]
+        )
+        resumo = importar_sysmap(arquivo, "terceiros.xlsx")
+        self.assertEqual(resumo["inseridos"], 1)
+        t = CadastroTerceiro.objects.get(chave_acesso="TT1")
+        self.assertEqual(t.data_alocacao, date(2025, 1, 1))
+        self.assertIsNone(t.data_desalocacao)
+        self.assertIsNone(t.data_inativacao)
+
     def test_desativado_nao_elegivel_capilaridade(self):
         from gestao.terceiros import terceiro_elegivel_capilaridade
 
