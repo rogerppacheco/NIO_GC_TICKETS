@@ -194,6 +194,7 @@ class SolicitacaoVerticalAdmin(admin.ModelAdmin):
         "status",
         "total_hps",
         "criado_por",
+        "contato",
         "data_criacao",
     )
     list_filter = ("status", "uf")

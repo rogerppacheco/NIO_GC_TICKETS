@@ -30,7 +30,7 @@ def pode_gestao_vertical(user) -> bool:
 
 def qs_solicitacoes(user) -> QuerySet[SolicitacaoVertical]:
     qs = SolicitacaoVertical.objects.select_related(
-        "criado_por", "parceiro"
+        "criado_por", "parceiro", "contato"
     ).prefetch_related("blocos")
     if pode_gestao_vertical(user):
         return qs
@@ -75,6 +75,12 @@ def nome_usuario(user) -> str:
     return nome or user.get_username()
 
 
+def nome_acionado(item: SolicitacaoVertical) -> str:
+    if item.contato_id and item.contato:
+        return item.contato.nome
+    return nome_usuario(item.criado_por)
+
+
 def serializar_bloco(bloco: BlocoVertical) -> dict[str, Any]:
     return {
         "nome": bloco.nome_bloco,
@@ -116,7 +122,7 @@ def serializar_solicitacao(
         "link_carta_sindico": carta,
         "can_edit": can_edit,
         "criado_por_id": item.criado_por_id,
-        "criado_por_nome": nome_usuario(item.criado_por),
+        "criado_por_nome": nome_acionado(item),
         "parceiro_id": item.parceiro_id,
     }
     if detalhe:

@@ -21,9 +21,9 @@
   data-viacep-url="{% url 'vertical_api_viacep' 'CEP' %}"
   data-nominatim-url="{% url 'vertical_api_nominatim' %}"
   data-config-url="{% url 'vertical_api_config' %}"
-  data-usuarios-url="{% url 'vertical_api_usuarios' %}"
   data-can-config="{% if can_config %}1{% else %}0{% endif %}"
   data-visao-equipe="{% if visao_equipe %}1{% else %}0{% endif %}"
+  data-acionado-por="{{ acionado_por_nome }}"
 >
   <nav class="tabs" role="tablist" aria-label="Projeto Vertical">
     <button type="button" class="tab is-active" data-tab="dashboard">Dashboard</button>
@@ -86,11 +86,9 @@
         <input type="hidden" name="prevenda_final" id="input_prevenda" value="0">
         <input type="hidden" name="dados_blocos_json" id="input_blocos_json" value="[]">
 
-        <div id="div-criado-por" class="vertical-grid" hidden>
+        <div class="vertical-grid">
           <label>Acionado por
-            <select name="criado_por_id" id="inp_criado_por" class="inp">
-              <option value="">Carregando…</option>
-            </select>
+            <input type="text" id="inp_acionado_por" class="inp" value="{{ acionado_por_nome }}" readonly>
           </label>
         </div>
 

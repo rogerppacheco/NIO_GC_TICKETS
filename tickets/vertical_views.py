@@ -73,6 +73,7 @@ def vertical_portal(request: HttpRequest) -> HttpResponse:
                 "can_config": pode_gestao_vertical(request.user),
                 "parceiro": None,
                 "contato": None,
+                "acionado_por_nome": nome_usuario(request.user),
             },
         )
     parceiro, contato = _portal_sessao(request)
@@ -86,6 +87,7 @@ def vertical_portal(request: HttpRequest) -> HttpResponse:
             "can_config": False,
             "parceiro": parceiro,
             "contato": contato,
+            "acionado_por_nome": contato.nome,
         },
     )
 
@@ -141,12 +143,9 @@ def vertical_api_solicitacoes(request: HttpRequest) -> JsonResponse:
         )
 
     cfg = ler_config_resumo()
-    criado_por = request.user
-    if pode_gestao_vertical(request.user):
-        raw_id = _int(dados.get("criado_por_id"), 0)
-        if raw_id:
-            User = get_user_model()
-            criado_por = User.objects.filter(pk=raw_id).first() or request.user
+    contato = None
+    if not tem_acesso_interno(request.user):
+        _parceiro, contato = _portal_sessao(request)
 
     blocos = payload.pop("_blocos")
     item = SolicitacaoVertical.objects.create(
@@ -154,7 +153,8 @@ def vertical_api_solicitacoes(request: HttpRequest) -> JsonResponse:
         arquivo_carta=request.FILES["arquivo_carta"],
         arquivo_fachada=request.FILES["arquivo_fachada"],
         destinatarios_resumo=cfg["destinatarios"] if cfg["ativo"] else "",
-        criado_por=criado_por,
+        criado_por=request.user,
+        contato=contato,
         parceiro=parceiro_do_pedido(request),
         status=SolicitacaoVertical.Status.SEM_TRATAMENTO,
     )
@@ -219,11 +219,6 @@ def vertical_api_solicitacao(request: HttpRequest, pk: int) -> JsonResponse:
             item.status = status
     if "observacao" in dados:
         item.observacao = _texto(dados.get("observacao"), 4000)
-    if gestao and dados.get("criado_por_id"):
-        User = get_user_model()
-        novo = User.objects.filter(pk=_int(dados.get("criado_por_id"), 0)).first()
-        if novo:
-            item.criado_por = novo
     item.save()
     blocos = payload.get("_blocos") or []
     if dados.get("dados_blocos_json") or dados.get("input_blocos_json"):

@@ -11,7 +11,6 @@
     viacep: root.dataset.viacepUrl,
     nominatim: root.dataset.nominatimUrl,
     config: root.dataset.configUrl,
-    usuarios: root.dataset.usuariosUrl,
   };
   var canConfig = root.dataset.canConfig === "1";
   var blocos = [];
@@ -231,19 +230,8 @@
     });
   }
 
-  function carregarUsuarios(selectedId) {
-    if (!canConfig) return;
-    fetchJson(urls.usuarios).then(function (body) {
-      var sel = document.getElementById("inp_criado_por");
-      var lista = body.data || [];
-      sel.innerHTML = '<option value="">Selecione</option>';
-      lista.forEach(function (u) {
-        sel.innerHTML +=
-          '<option value="' + u.id + '"' + (String(u.id) === String(selectedId || "") ? " selected" : "") + ">" +
-          esc(u.nome) +
-          "</option>";
-      });
-    });
+  function nomeAcionadoSessao() {
+    return root.dataset.acionadoPor || "";
   }
 
   function carregarConfig() {
@@ -343,7 +331,7 @@
     document.getElementById("tab-nova-label").textContent = "Nova solicitação";
     document.getElementById("btn-submit").textContent = "Enviar solicitação";
     document.getElementById("btn-cancelar-edicao").hidden = true;
-    document.getElementById("div-criado-por").hidden = true;
+    document.getElementById("inp_acionado_por").value = nomeAcionadoSessao();
     document.getElementById("input-arquivo-carta").required = true;
     document.getElementById("input-arquivo-fachada").required = true;
     setPreview("preview-carta", "");
@@ -361,6 +349,7 @@
       }
       var d = body.data || {};
       document.getElementById("edit_mode_id").value = d.id;
+      document.getElementById("inp_acionado_por").value = d.criado_por_nome || nomeAcionadoSessao();
       document.getElementById("inp_nome").value = d.nome_condominio || "";
       document.getElementById("inp_sindico").value = d.nome_sindico || "";
       document.getElementById("inp_contato").value = d.contato || "";
@@ -384,10 +373,6 @@
       document.getElementById("tab-nova-label").textContent = "Editar solicitação";
       document.getElementById("btn-submit").textContent = "Salvar alterações";
       document.getElementById("btn-cancelar-edicao").hidden = false;
-      if (canConfig) {
-        document.getElementById("div-criado-por").hidden = false;
-        carregarUsuarios(d.criado_por_id);
-      }
       showPanel("nova");
     });
   }

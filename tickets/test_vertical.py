@@ -65,6 +65,9 @@ class VerticalPortalTests(TestCase):
         self.assertContains(r, "Projeto Vertical")
         self.assertContains(r, "Nova solicitação")
         self.assertContains(r, "CNPJ por cidade")
+        self.assertContains(r, 'data-acionado-por="Spec"')
+        self.assertContains(r, 'id="inp_acionado_por"')
+        self.assertNotContains(r, 'name="criado_por_id"')
         self.assertNotContains(r, "Configuração de resumo")
 
     def test_pagina_gestor_tem_config(self):
@@ -78,6 +81,14 @@ class VerticalPortalTests(TestCase):
         r = self.client.get(reverse("vertical_portal"))
         self.assertEqual(r.status_code, 302)
         self.assertIn("next=vertical", r["Location"])
+
+    def test_pagina_pdv_acionado_pelo_contato(self):
+        self._login_pdv()
+        r = self.client.get(reverse("vertical_portal"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'data-acionado-por="Contato Vertical"')
+        self.assertContains(r, 'value="Contato Vertical"')
+        self.assertNotContains(r, 'name="criado_por_id"')
 
     def test_criar_e_dashboard(self):
         self.client.force_login(self.spec)
@@ -107,7 +118,11 @@ class VerticalPortalTests(TestCase):
         self.assertEqual(item.total_hps, 40)
         self.assertEqual(item.pre_venda_minima, 4)
         self.assertEqual(item.blocos.count(), 1)
+        self.assertIsNone(item.contato_id)
+        self.assertEqual(item.criado_por_id, self.spec.id)
         self.assertIn("Projeto Vertical", body["data"]["resumo"])
+        lista = self.client.get(reverse("vertical_api_solicitacoes")).json()
+        self.assertEqual(lista["data"][0]["criado_por_nome"], "Spec")
 
         dash = self.client.get(reverse("vertical_api_dashboard")).json()
         self.assertEqual(dash["data"]["total_acionamentos"], 1)
@@ -199,6 +214,29 @@ class VerticalPortalTests(TestCase):
         )
         self.assertEqual(r.status_code, 422)
 
+    def test_pdv_cria_grava_contato_logado(self):
+        self._login_pdv()
+        r = self.client.post(
+            reverse("vertical_api_solicitacoes"),
+            {
+                "nome_condominio": "Ed. PDV",
+                "nome_sindico": "Maria",
+                "contato": "31999998888",
+                "cep": "30130100",
+                "logradouro": "Rua A",
+                "numero": "100",
+                "arquivo_carta": _arquivo("carta.pdf"),
+                "arquivo_fachada": _arquivo("fachada.jpg"),
+            },
+        )
+        self.assertEqual(r.status_code, 201, r.content)
+        item = SolicitacaoVertical.objects.get()
+        self.assertEqual(item.contato_id, self.contato.id)
+        self.assertEqual(item.criado_por_id, self.pdv_user.id)
+        self.assertEqual(item.parceiro_id, self.pdv.id)
+        lista = self.client.get(reverse("vertical_api_solicitacoes")).json()
+        self.assertEqual(lista["data"][0]["criado_por_nome"], "Contato Vertical")
+
     @patch("tickets.vertical_services.urllib.request.urlopen")
     def test_viacep(self, urlopen):
         class Fake:
@@ -226,3 +264,23 @@ class VerticalServicesTests(TestCase):
         blocos = parse_blocos('[{"nome":"Torre","andares":5,"aptos":2}]')
         self.assertEqual(blocos[0]["total"], 10)
         self.assertEqual(len(parse_blocos("")), 0)
+
+    def test_nome_acionado_prefere_contato(self):
+        from tickets.vertical_services import nome_acionado
+
+        User = get_user_model()
+        user = User.objects.create_user("vert-nome", password="senha-ok-1234", first_name="Usuario")
+        pdv = Parceiro.objects.create(codigo_pdv="VERTN", nome="PDV Nome")
+        contato = ContatoParceiro.objects.create(parceiro=pdv, nome="Contato da Sessao")
+        item = SolicitacaoVertical.objects.create(
+            nome_condominio="Cond",
+            nome_sindico="Ana",
+            contato_sindico="31977776666",
+            cep="30140071",
+            numero="50",
+            criado_por=user,
+            contato=contato,
+        )
+        self.assertEqual(nome_acionado(item), "Contato da Sessao")
+        item.contato = None
+        self.assertEqual(nome_acionado(item), "Usuario")

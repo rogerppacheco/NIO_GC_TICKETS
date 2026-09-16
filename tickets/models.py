@@ -1144,6 +1144,14 @@ class SolicitacaoVertical(models.Model):
         on_delete=models.CASCADE,
         related_name="solicitacoes_vertical",
     )
+    contato = models.ForeignKey(
+        ContatoParceiro,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="solicitacoes_vertical",
+        help_text="Contato do PDV que estava logado no portal.",
+    )
     data_criacao = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 

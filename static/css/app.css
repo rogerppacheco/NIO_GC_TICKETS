@@ -2189,6 +2189,7 @@ button.rota-ag-dot.is-empty { background: #eef1f4; }
   .dash-filtros .fila-pick { min-width: 0; width: 100%; }
 }
 
+.page-vertical [hidden] { display: none !important; }
 .vertical-app { margin-top: 0.4rem; }
 .vertical-app .tabs { margin: 0 0 1rem; padding: 0; }
 .vertical-grid {
