@@ -171,6 +171,22 @@ def _parece_cabecalho(linha) -> bool:
     return "terceiro" in texto and ("cpf" in texto or "chave" in texto)
 
 
+def _promover_cabecalho(df: pd.DataFrame) -> pd.DataFrame:
+    """Sysmap exporta grupo na 1ª linha e o cabeçalho real na 2ª; pandas lê o grupo como coluna."""
+    if df.empty or not _parece_cabecalho(df.iloc[0]):
+        return df
+    usados: dict[str, int] = {}
+    nomes: list[str] = []
+    for i, valor in enumerate(df.iloc[0].tolist()):
+        nome = _limpar_texto(valor) or f"col_{i}"
+        n = usados.get(nome, 0)
+        usados[nome] = n + 1
+        nomes.append(nome if n == 0 else f"{nome}_{n}")
+    out = df.iloc[1:].copy()
+    out.columns = nomes
+    return out.reset_index(drop=True)
+
+
 def _extrair_data_referencia(nome_arquivo: str) -> date | None:
     match = re.search(r"(\d{4})-(\d{2})-(\d{2})", nome_arquivo or "")
     if not match:
@@ -245,8 +261,7 @@ def importar_sysmap(arquivo, nome_arquivo: str = "") -> dict:
     nome = nome_arquivo or getattr(arquivo, "name", "arquivo")
     df = ler_planilha(arquivo, nome)
     df = _flatten_columns(df)
-    if len(df) > 0 and _parece_cabecalho(df.iloc[0]):
-        df = df.iloc[1:].reset_index(drop=True)
+    df = _promover_cabecalho(df)
     mapa = _mapear_colunas(df)
     linhas_planilha = len(df)
     df, duplicados = _consolidar(df, mapa)

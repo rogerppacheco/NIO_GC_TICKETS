@@ -41,6 +41,44 @@ def _xlsx(linhas, colunas):
     return buf
 
 
+def _xlsx_sysmap_agrupado(linhas):
+    """Relatório Executivo do Sysmap: linha de grupo + cabeçalho real."""
+    wb = Workbook()
+    ws = wb.active
+    ws.append(
+        [
+            "Informações da Empresa",
+            None,
+            "Informações dos Terceiros",
+        ]
+        + [None] * 10
+    )
+    ws.append(
+        [
+            "Razão Social",
+            "Terceiro",
+            "CPF",
+            "Email",
+            "Chave de Acesso",
+            "Vínculo",
+            "Cargo/Função (CTPS)",
+            "Situação do Terceiro na Empresa",
+            "Situação Funcional",
+            "Situação do Terceiro no Contrato",
+            "Data Alocação",
+            "Data Desalocação",
+            "Data Inativação",
+        ]
+    )
+    for linha in linhas:
+        ws.append(linha)
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    buf.name = "Relatório Executivo - Terceiros 2026-09-15 .xlsx"
+    return buf
+
+
 def _gdp_xlsx(linhas, aba="PAP (Local)", nome="gdp.xlsx"):
     wb = Workbook()
     ws = wb.active
@@ -125,6 +163,35 @@ class SysmapImportTests(TestCase):
         self.assertTrue(t.ativo)
         self.assertEqual(t.parceiro_id, self.pdv.id)
         self.assertEqual(t.cargo_funcao, "VENDEDOR")
+
+    def test_relatorio_executivo_com_linha_de_agrupamento(self):
+        arquivo = _xlsx_sysmap_agrupado(
+            [
+                [
+                    "LUISA SERVICOS DE TELEFONIA MOVEL",
+                    "ANA",
+                    "123",
+                    "a@x.com",
+                    "TT1",
+                    "CLT",
+                    "VENDEDOR",
+                    "Ativo",
+                    "Ativo",
+                    "Alocado",
+                    "01/01/2025",
+                    "",
+                    "",
+                ]
+            ]
+        )
+        resumo = importar_sysmap(
+            arquivo, "Relatório Executivo - Terceiros 2026-09-15 .xlsx"
+        )
+        self.assertEqual(resumo["inseridos"], 1)
+        t = CadastroTerceiro.objects.get(chave_acesso="TT1")
+        self.assertEqual(t.nome_terceiro, "ANA")
+        self.assertEqual(t.cargo_funcao, "VENDEDOR")
+        self.assertEqual(resumo["data_referencia"], "2026-09-15")
 
     def test_desativado_nao_elegivel_capilaridade(self):
         from gestao.terceiros import terceiro_elegivel_capilaridade
