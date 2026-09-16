@@ -726,7 +726,9 @@ def _destinos_whatsapp_para_ticket(ticket: Ticket) -> list[dict]:
 
     # 1. Grupos de WhatsApp cadastrados em Destinatario
     grupos = (
-        Destinatario.objects.filter(ativo=True, tipo=Destinatario.TipoDestino.GRUPO)
+        Destinatario.objects.filter(
+            ativo=True, owner__isnull=True, tipo=Destinatario.TipoDestino.GRUPO
+        )
         .order_by("nome")
     )
     itens_grupos = []
@@ -775,7 +777,9 @@ def _destinos_whatsapp_para_ticket(ticket: Ticket) -> list[dict]:
 
     # 4. Outros contatos individuais cadastrados em Destinatario
     individuais = (
-        Destinatario.objects.filter(ativo=True, tipo=Destinatario.TipoDestino.INDIVIDUAL)
+        Destinatario.objects.filter(
+            ativo=True, owner__isnull=True, tipo=Destinatario.TipoDestino.INDIVIDUAL
+        )
         .order_by("nome")
     )
     itens_indiv = []

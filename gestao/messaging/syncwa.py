@@ -35,7 +35,10 @@ def _evo_key() -> str:
     return (getattr(settings, "EVOLUTION_API_KEY", "") or "").strip()
 
 
-def _evo_instance() -> str:
+def _evo_instance(instance: str | None = None) -> str:
+    escolhida = (instance or "").strip()
+    if escolhida:
+        return escolhida
     name = (getattr(settings, "EVOLUTION_INSTANCE_NAME", "") or "").strip()
     return name or "nio_gc_tickets"
 
@@ -194,12 +197,12 @@ def _chunk_texto(texto: str, limite: int = 4000) -> list[str]:
     return partes
 
 
-def healthcheck(timeout: float = 5.0) -> dict:
+def healthcheck(timeout: float = 5.0, *, instance: str | None = None) -> dict:
     if not syncwa_configurado():
         return {"ok": False, "error": "EVOLUTION_API_URL / EVOLUTION_API_KEY não configurados."}
     try:
         r = requests.get(
-            f"{_evo_url()}/instance/connectionState/{_evo_instance()}",
+            f"{_evo_url()}/instance/connectionState/{_evo_instance(instance)}",
             headers=_evo_headers(),
             timeout=timeout,
         )
@@ -218,14 +221,14 @@ def healthcheck(timeout: float = 5.0) -> dict:
         return {"ok": False, "error": str(exc)}
 
 
-def listar_grupos(timeout: float | None = None) -> dict:
+def listar_grupos(timeout: float | None = None, *, instance: str | None = None) -> dict:
     """GET /group/fetchAllGroups — grupos da instância Evolution pareada."""
     if not syncwa_configurado():
         return {"ok": False, "error": "Evolution não configurada.", "groups": []}
     timeout = timeout if timeout is not None else _timeout()
     try:
         r = requests.get(
-            f"{_evo_url()}/group/fetchAllGroups/{_evo_instance()}?getParticipants=true",
+            f"{_evo_url()}/group/fetchAllGroups/{_evo_instance(instance)}?getParticipants=true",
             headers=_evo_headers(),
             timeout=timeout,
         )
@@ -284,9 +287,18 @@ def _post_json(url: str, payload: dict, headers: dict[str, str], timeout: float)
     return r.status_code, body
 
 
-def _enviar_texto_n8n(number: str, text: str, destino: str, timeout: float) -> SyncWAResult | None:
+def _enviar_texto_n8n(
+    number: str,
+    text: str,
+    destino: str,
+    timeout: float,
+    *,
+    instance: str,
+) -> SyncWAResult | None:
     webhook = _n8n_url()
     if not webhook:
+        return None
+    if instance != _evo_instance():
         return None
     try:
         status, body = _post_json(
@@ -295,6 +307,7 @@ def _enviar_texto_n8n(number: str, text: str, destino: str, timeout: float) -> S
                 "phone_number": number,
                 "message_body": text,
                 "source": "nio-gc-tickets",
+                "evolution_instance": instance,
             },
             {"Content-Type": "application/json", "Accept": "application/json"},
             timeout,
@@ -307,10 +320,17 @@ def _enviar_texto_n8n(number: str, text: str, destino: str, timeout: float) -> S
     return SyncWAResult(ok=True, message_log_id=mid, status="SENT", destino=destino)
 
 
-def _enviar_texto_evolution(number: str, text: str, destino: str, timeout: float) -> SyncWAResult:
+def _enviar_texto_evolution(
+    number: str,
+    text: str,
+    destino: str,
+    timeout: float,
+    *,
+    instance: str,
+) -> SyncWAResult:
     try:
         status, body = _post_json(
-            f"{_evo_url()}/message/sendText/{_evo_instance()}",
+            f"{_evo_url()}/message/sendText/{instance}",
             {"number": number, "text": text},
             _evo_headers(),
             timeout,
@@ -329,7 +349,13 @@ def _enviar_texto_evolution(number: str, text: str, destino: str, timeout: float
     )
 
 
-def enviar_texto(to: str, text: str, timeout: float | None = None) -> SyncWAResult:
+def enviar_texto(
+    to: str,
+    text: str,
+    timeout: float | None = None,
+    *,
+    instance: str | None = None,
+) -> SyncWAResult:
     if not syncwa_configurado():
         return SyncWAResult(ok=False, error="Evolution não configurada (EVOLUTION_API_URL / EVOLUTION_API_KEY).")
     try:
@@ -342,12 +368,17 @@ def enviar_texto(to: str, text: str, timeout: float | None = None) -> SyncWAResu
     if not chunks:
         return SyncWAResult(ok=False, error="Mensagem vazia.", destino=destino)
 
+    inst = _evo_instance(instance)
     number = numero_para_evolution(destino)
     last = SyncWAResult(ok=False, destino=destino)
     for idx, chunk in enumerate(chunks):
         corpo = chunk if len(chunks) == 1 else f"({idx + 1}/{len(chunks)})\n{chunk}"
-        via_n8n = _enviar_texto_n8n(number, corpo, destino, timeout)
-        last = via_n8n if via_n8n and via_n8n.ok else _enviar_texto_evolution(number, corpo, destino, timeout)
+        via_n8n = _enviar_texto_n8n(number, corpo, destino, timeout, instance=inst)
+        last = (
+            via_n8n
+            if via_n8n and via_n8n.ok
+            else _enviar_texto_evolution(number, corpo, destino, timeout, instance=inst)
+        )
         if not last.ok:
             return last
     return last
@@ -395,6 +426,7 @@ def enviar_documento(
     caption: str = "",
     mime_type: str | None = None,
     timeout: float | None = None,
+    instance: str | None = None,
 ) -> SyncWAResult:
     if not syncwa_configurado():
         return SyncWAResult(ok=False, error="Evolution não configurada (EVOLUTION_API_URL / EVOLUTION_API_KEY).")
@@ -412,7 +444,7 @@ def enviar_documento(
     # Evolution 2.2+ valida IsUrl/IsBase64 e rejeita o prefixo data:...;base64,
     number = numero_para_evolution(destino)
     mediatype = "image" if mime.startswith("image/") else "document"
-    url = f"{_evo_url()}/message/sendMedia/{_evo_instance()}"
+    url = f"{_evo_url()}/message/sendMedia/{_evo_instance(instance)}"
     ultimo = SyncWAResult(ok=False, destino=destino)
     for media in (b64, f"data:{mime};base64,{b64}"):
         payload = {

@@ -47,7 +47,9 @@ def mapa_pdv_razoes() -> dict[int, dict]:
             "especialista_nome": nome_esp,
         }
     qs = (
-        Destinatario.objects.filter(ativo=True, envio_comissionamento=True)
+        Destinatario.objects.filter(
+            ativo=True, owner__isnull=True, envio_comissionamento=True
+        )
         .exclude(razoes_sociais_comissionamento="")
         .select_related("parceiro__especialista")
     )

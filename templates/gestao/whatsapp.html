@@ -5,7 +5,13 @@
 <div class="hero">
   <div>
     <h1>WhatsApp</h1>
-    <p>Status, QR e desconexão da instância Evolution. Escaneie no celular: WhatsApp → Aparelhos conectados.</p>
+    {% if instancia_central %}
+    <p>Instância central da gestão (<code>{{ instance_global }}</code>). Escaneie no celular: WhatsApp → Aparelhos conectados.</p>
+    {% elif modo_envio == "pessoal" %}
+    <p>Conecte <strong>o seu</strong> WhatsApp. Os envios da sua carteira (Capilaridade, OSAB, FPD…) saem deste número — não do chip da gestão. Escaneie: WhatsApp → Aparelhos conectados.</p>
+    {% else %}
+    <p>Você pode parear o seu WhatsApp. <strong>Hoje os envios saem do chip da gestão</strong> (<code>{{ instance_global }}</code>). O admin muda isso nesta tela.</p>
+    {% endif %}
   </div>
   <button class="btn btn-secondary" type="button" id="btn-atualizar">Atualizar status</button>
 </div>
@@ -29,11 +35,33 @@
   </div>
 </div>
 
+{% if instancia_central %}
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-h"><h2>Chip de envio</h2></div>
+  <div class="panel-b">
+    <p class="help" style="margin-bottom:0.8rem">Define de qual WhatsApp saem Capilaridade, OSAB, FPD e o restante da carteira. Destinatários de cada perfil continuam valendo nos dois modos.</p>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="modo_envio">
+      <label style="display:flex;gap:0.6rem;align-items:flex-start;margin-bottom:0.7rem">
+        <input type="radio" name="modo_envio" value="central" {% if modo_envio != "pessoal" %}checked{% endif %}>
+        <span><strong>Instância da gestão</strong> (<code>{{ instance_global }}</code>) — principal. Todos os envios saem deste chip.</span>
+      </label>
+      <label style="display:flex;gap:0.6rem;align-items:flex-start;margin-bottom:0.9rem">
+        <input type="radio" name="modo_envio" value="pessoal" {% if modo_envio == "pessoal" %}checked{% endif %}>
+        <span><strong>Chip de cada especialista/gerência.</strong> Só envia se a pessoa estiver pareada. Sem fallback no chip da gestão.</span>
+      </label>
+      <button class="btn btn-primary" type="submit">Salvar chip de envio</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
 <div class="panel" style="margin-bottom:1rem">
   <div class="panel-h"><h2>Conexão</h2></div>
   <div class="panel-b">
     <p class="help" id="wa-status-text">Consultando a Evolution…</p>
-    <p class="help" id="wa-connected-msg" hidden>Aparelho conectado. Pode enviar Capilaridade e os demais relatórios.</p>
+    <p class="help" id="wa-connected-msg" hidden>{% if instancia_central %}Aparelho conectado. Este é o chip principal da gestão.{% elif modo_envio == "pessoal" %}Aparelho conectado. Os envios da sua carteira saem deste WhatsApp.{% else %}Aparelho conectado. Os envios ainda saem do chip da gestão até o admin mudar o modo.{% endif %}</p>
     <p class="help" id="wa-connecting-msg" hidden style="color:var(--warn)">Aguardando pareamento — gere o QR e escaneie no celular (Aparelhos conectados).</p>
     <p class="help" id="wa-error" hidden style="color:var(--danger)"></p>
     <div class="fila-toolbar" style="gap:0.5rem;margin-top:0.8rem">

@@ -59,10 +59,8 @@
         Comunicação e setup
       </summary>
       <div class="app-acc-panel">
-        {% if eh_gestor %}
         <a href="{% url 'gestao_whatsapp' %}" {% if name == "gestao_whatsapp" %}class="is-on"{% endif %}>WhatsApp</a>
         <a href="{% url 'gestao_destinatarios' %}" {% if "destinatario" in name %}class="is-on"{% endif %}>Destinatários</a>
-        {% endif %}
         <a href="{% url 'gestao_envios' %}?escopo={{ esc }}" {% if name == "gestao_envios" %}class="is-on"{% endif %}>Envios</a>
       </div>
     </details>

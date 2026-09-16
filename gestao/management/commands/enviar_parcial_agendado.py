@@ -90,6 +90,7 @@ class Command(BaseCommand):
                 dest = (
                     Destinatario.objects.filter(
                         ativo=True,
+                        owner__isnull=True,
                         ranking_consolidado=True,
                         envio_resultados=True,
                         tipo=Destinatario.TipoDestino.GRUPO,

@@ -4,14 +4,20 @@
 <div class="hero">
   <div>
     <h1>Destinatários WhatsApp</h1>
-    <p>Cadastre o JID (número com DDI ou grupo @g.us). Sem JID a Evolution não envia. O admin vê <strong>todas as gerências</strong>. O botão abaixo cria o número do especialista em cada PDV (não apaga grupos e não cria número nos PDVs do admin). A OSAB não usa esta lista: vai para o Empresário e para o especialista do PDV.</p>
+    {% if eh_gestor %}
+    <p>Cadastre o JID (número com DDI ou grupo @g.us). Sem JID a Evolution não envia. O admin vê <strong>todas as gerências</strong> na lista da gestão. O botão abaixo cria o número do especialista em cada PDV (não apaga grupos e não cria número nos PDVs do admin). A OSAB, se não houver destinatário nesta lista, vai para o Empresário e para o especialista do PDV.</p>
+    {% else %}
+    <p>Cadastre os grupos e números da <strong>sua</strong> carteira. Os envios (Capilaridade, OSAB, FPD…) saem do WhatsApp que você pareou — não do chip da gestão. Sem cadastro aqui, o envio cai no número do seu perfil.</p>
+    {% endif %}
   </div>
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    {% if eh_gestor %}
     <form method="post">
       {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       <input type="hidden" name="action" value="sincronizar_especialistas">
       <button class="btn btn-primary" type="submit">Criar números dos especialistas</button>
     </form>
+    {% endif %}
     {% if syncwa_ok %}
     <a class="btn btn-primary" href="{% url 'gestao_destinatarios' %}?grupos=1">Listar grupos WhatsApp</a>
     {% endif %}
@@ -45,7 +51,7 @@
     <a class="btn btn-ghost" href="{% url 'gestao_destinatarios' %}">Fechar</a>
   </div>
   <div class="panel-b">
-    <p class="help" style="margin-bottom:0.8rem">Para o ranking da gerência, clique em <strong>Ranking consolidado</strong> (ex.: <code>Parceiros_PP_Nio</code>). Para mensagens de um PDV, escolha o PDV e <strong>Vincular PDV</strong>.</p>
+    <p class="help" style="margin-bottom:0.8rem">{% if eh_gestor %}Para o ranking da gerência, clique em <strong>Ranking consolidado</strong> (ex.: <code>Parceiros_PP_Nio</code>). Para mensagens de um PDV, escolha o PDV e <strong>Vincular PDV</strong>.{% else %}Escolha o PDV da sua carteira e <strong>Vincular PDV</strong> — o grupo entra na sua lista.{% endif %}</p>
     <input type="search" id="filtro-grupos" class="fila-pick" placeholder="Filtrar por nome do grupo…" style="width:100%;max-width:28rem;margin-bottom:0.8rem">
     <div class="table-scroll">
       <table class="table" id="tabela-grupos">
@@ -76,7 +82,9 @@
                   {% endfor %}
                 </select>
                 <button class="btn btn-primary" type="submit">Vincular PDV</button>
+                {% if eh_gestor %}
                 <button class="btn btn-secondary" type="submit" name="ranking_consolidado" value="1">Ranking consolidado</button>
+                {% endif %}
                 <button class="btn btn-ghost" type="button" data-fill-jid="{{ g.jid }}" data-fill-nome="{{ g.name }}">Usar no formulário</button>
               </form>
             </td>
@@ -152,7 +160,9 @@
         <p class="help" style="color:var(--danger)">Evolution não configurada — não dá para listar grupos ainda.</p>
       {% endif %}
       <p class="help">4. Número individual: DDI + DDD + número, ex. <code>5531999999999</code>.</p>
+      {% if eh_gestor %}
       <p class="help">5. <strong>Criar números dos especialistas</strong> gera um destinatário individual por PDV com o WhatsApp do especialista responsável. Os grupos já cadastrados permanecem.</p>
+      {% endif %}
       <p style="margin-top:0.8rem"><a class="btn btn-secondary" href="{% url 'gestao_envios' %}">Ir para Envios</a></p>
     </div>
   </div>

@@ -539,6 +539,15 @@ class Destinatario(models.Model):
         null=True,
         blank=True,
     )
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="destinatarios_whatsapp",
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Lista pessoal do especialista/gerência. Vazio = lista da gestão.",
+    )
     nome = models.CharField("Nome do destino", max_length=150)
     jid = models.CharField(
         "JID WhatsApp",
@@ -669,3 +678,28 @@ class EnvioWhatsApp(models.Model):
 
     def __str__(self) -> str:
         return f"{self.get_tipo_display()} → {self.destino_nome or self.destino_jid}"
+
+
+class InstanciaWhatsApp(models.Model):
+    """Sessão Evolution do especialista/gerência (QR no próprio celular)."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="instancia_whatsapp",
+    )
+    nome = models.CharField(max_length=80, unique=True)
+    estado = models.CharField(max_length=40, blank=True)
+    numero = models.CharField(max_length=40, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Instância WhatsApp"
+        verbose_name_plural = "Instâncias WhatsApp"
+
+    def __str__(self) -> str:
+        return f"{self.nome} ({self.user})"
+
+    def conectada(self) -> bool:
+        return (self.estado or "").lower() in {"open", "connected", "online"}

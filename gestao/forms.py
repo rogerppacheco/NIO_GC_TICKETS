@@ -4,6 +4,7 @@ import re
 
 from django import forms
 
+from tickets.acesso import eh_gestor
 from tickets.models import Parceiro
 
 from .models import Destinatario
@@ -58,9 +59,12 @@ class DestinatarioForm(forms.ModelForm):
             ),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.user = user
         self.fields["parceiro"].label_from_instance = self._rotulo_parceiro
+        if user is not None and not eh_gestor(user):
+            self.fields.pop("ranking_consolidado", None)
 
     @staticmethod
     def _rotulo_parceiro(obj: Parceiro) -> str:
@@ -98,6 +102,16 @@ class DestinatarioForm(forms.ModelForm):
                 "ou o JID do grupo (…@g.us) — não o nome do contato."
             )
         return jid
+
+    def save(self, commit=True):
+        obj = super().save(commit=False)
+        if self.user is not None and not eh_gestor(self.user):
+            if not obj.pk:
+                obj.owner = self.user
+            obj.ranking_consolidado = False
+        if commit:
+            obj.save()
+        return obj
 
 
 class UploadBaseForm(forms.Form):

@@ -5,12 +5,12 @@
 <div class="hero">
   <div>
     <h1>Envios WhatsApp</h1>
-    <p>Dispara capilaridade, OSAB, FPD, Churn e Comissionamento via Evolution.{% if eh_gestor %} {{ qtd_destinatarios }} destinatário(s) ativo(s).{% else %} Especialista: o envio vai para o WhatsApp do seu perfil.{% endif %}</p>
+    <p>Dispara capilaridade, OSAB, FPD, Churn e Comissionamento via Evolution. {{ qtd_destinatarios }} destinatário(s) na {% if eh_gestor %}lista da gestão{% else %}sua lista{% endif %}.
+      {% if modo_envio == "pessoal" %}Os envios saem do WhatsApp pareado de cada um.{% else %}Os envios saem do chip da gestão (<code>nio_gc_tickets</code>).{% endif %}
+      {% if not eh_gestor %} Sem cadastro na lista, o destino é o WhatsApp do seu perfil.{% endif %}</p>
   </div>
-  {% if eh_gestor %}
   <a class="btn btn-primary" href="{% url 'gestao_whatsapp' %}">Parear WhatsApp</a>
   <a class="btn btn-secondary" href="{% url 'gestao_destinatarios' %}">Destinatários</a>
-  {% endif %}
 </div>
 
 <div class="cards">

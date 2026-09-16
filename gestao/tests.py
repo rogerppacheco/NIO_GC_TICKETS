@@ -1113,8 +1113,8 @@ class GestaoViewsTests(TestCase):
             self.assertEqual(r.status_code, 200, nome)
             self.assertContains(r, "Capilaridade")
             self.assertContains(r, "Meus parceiros")
-        self.assertEqual(self.client.get(reverse("gestao_whatsapp")).status_code, 404)
-        self.assertEqual(self.client.get(reverse("gestao_destinatarios")).status_code, 404)
+        self.assertEqual(self.client.get(reverse("gestao_whatsapp")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("gestao_destinatarios")).status_code, 200)
 
     def test_especialista_importa_bases(self):
         from gestao.periodo import periodo_ativo
@@ -1239,6 +1239,28 @@ class SyncWAClientTests(TestCase):
         EVOLUTION_API_URL="https://evo.test",
         EVOLUTION_API_KEY="evo.key",
         EVOLUTION_INSTANCE_NAME="nio_gc_tickets",
+        N8N_OUTBOUND_WEBHOOK_URL="https://n8n.test/hook",
+        SYNCWA_MODO_TESTE=False,
+    )
+    def test_enviar_texto_instancia_pessoal_nao_usa_n8n_nem_chip_admin(self):
+        from unittest.mock import MagicMock, patch
+
+        from gestao.messaging.syncwa import enviar_texto
+
+        fake = MagicMock()
+        fake.status_code = 200
+        fake.json.return_value = {"key": {"id": "ml-p"}}
+        with patch("gestao.messaging.syncwa.requests.post", return_value=fake) as post:
+            result = enviar_texto("5531999999999", "oi", instance="nio_u42")
+        self.assertTrue(result.ok)
+        self.assertEqual(post.call_count, 1)
+        self.assertIn("/message/sendText/nio_u42", post.call_args.args[0])
+        self.assertNotIn("n8n.test", post.call_args.args[0])
+
+    @override_settings(
+        EVOLUTION_API_URL="https://evo.test",
+        EVOLUTION_API_KEY="evo.key",
+        EVOLUTION_INSTANCE_NAME="nio_gc_tickets",
         N8N_OUTBOUND_WEBHOOK_URL="",
         SYNCWA_MODO_TESTE=True,
         SYNCWA_TEST_JID="5531888888888",
@@ -1281,14 +1303,25 @@ class WhatsAppPareamentoTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "Gerar QR Code")
         self.assertContains(r, "nio_gc_tickets")
+        self.assertContains(r, "Chip de envio")
+        self.assertContains(r, "Instância da gestão")
 
-    def test_especialista_nao_acessa(self):
+    def test_especialista_acessa_instancia_propria(self):
         User = get_user_model()
         spec = User.objects.create_user("specwa", "sw@x.com", "x", is_staff=True)
         PerfilStaff.objects.create(user=spec, papel=PerfilStaff.Papel.ESPECIALISTA)
         self.client.force_login(spec)
         r = self.client.get(reverse("gestao_whatsapp"))
-        self.assertEqual(r.status_code, 404)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, f"nio_u{spec.pk}")
+        self.assertContains(r, "chip da gestão")
+        self.assertNotContains(r, "Chip de envio")
+        self.assertNotContains(r, "Instância da gestão")
+        from gestao.models import InstanciaWhatsApp
+
+        self.assertTrue(
+            InstanciaWhatsApp.objects.filter(user=spec, nome=f"nio_u{spec.pk}").exists()
+        )
 
     @override_settings(EVOLUTION_API_URL="", EVOLUTION_API_KEY="")
     def test_status_sem_config(self):
@@ -1300,7 +1333,7 @@ class WhatsAppPareamentoTests(TestCase):
         from unittest.mock import patch
 
         with patch(
-            "gestao.views_whatsapp.EvolutionConnectionService.get_status",
+            "gestao.messaging.evolution_connection.EvolutionConnectionService.get_status",
             return_value={
                 "instanceName": "nio_gc_tickets",
                 "state": "open",
@@ -1318,7 +1351,7 @@ class WhatsAppPareamentoTests(TestCase):
         from unittest.mock import patch
 
         with patch(
-            "gestao.views_whatsapp.EvolutionConnectionService.get_qrcode",
+            "gestao.messaging.evolution_connection.EvolutionConnectionService.get_qrcode",
             return_value={
                 "instanceName": "nio_gc_tickets",
                 "base64": "data:image/png;base64,AAA",
@@ -1333,7 +1366,7 @@ class WhatsAppPareamentoTests(TestCase):
         from unittest.mock import patch
 
         with patch(
-            "gestao.views_whatsapp.EvolutionConnectionService.disconnect",
+            "gestao.messaging.evolution_connection.EvolutionConnectionService.disconnect",
             return_value={
                 "success": True,
                 "instanceName": "nio_gc_tickets",
@@ -1344,6 +1377,240 @@ class WhatsAppPareamentoTests(TestCase):
             r = self.client.post(reverse("gestao_whatsapp_disconnect"))
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json()["success"])
+
+    def test_gestor_salva_chip_de_envio(self):
+        from gestao.messaging.instancia import modo_envio_whatsapp
+
+        r = self.client.post(
+            reverse("gestao_whatsapp"),
+            {"action": "modo_envio", "modo_envio": "pessoal"},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(modo_envio_whatsapp(), "pessoal")
+        r2 = self.client.post(
+            reverse("gestao_whatsapp"),
+            {"action": "modo_envio", "modo_envio": "central"},
+        )
+        self.assertEqual(r2.status_code, 302)
+        self.assertEqual(modo_envio_whatsapp(), "central")
+
+    def test_especialista_nao_altera_chip_de_envio(self):
+        from gestao.messaging.instancia import modo_envio_whatsapp
+
+        User = get_user_model()
+        spec = User.objects.create_user("specmodo", "smw@x.com", "x", is_staff=True)
+        PerfilStaff.objects.create(user=spec, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self.client.force_login(spec)
+        r = self.client.post(
+            reverse("gestao_whatsapp"),
+            {"action": "modo_envio", "modo_envio": "pessoal"},
+        )
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(modo_envio_whatsapp(), "central")
+
+    def test_ensure_exists_cria_quando_fechada(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.evolution_connection import EvolutionConnectionService
+
+        svc = EvolutionConnectionService(instance_name="nio_u9")
+        with patch.object(
+            svc, "get_status", return_value={"state": "close", "connected": False}
+        ):
+            with patch.object(svc, "create_instance") as create:
+                svc.ensure_exists()
+        create.assert_called_once()
+
+    def test_ensure_exists_nao_recria_quando_conectada(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.evolution_connection import EvolutionConnectionService
+
+        svc = EvolutionConnectionService(instance_name="nio_u9")
+        with patch.object(
+            svc, "get_status", return_value={"state": "open", "connected": True}
+        ):
+            with patch.object(svc, "create_instance") as create:
+                svc.ensure_exists()
+        create.assert_not_called()
+
+    def test_especialista_qr_garante_instancia_evolution(self):
+        from unittest.mock import patch
+
+        User = get_user_model()
+        spec = User.objects.create_user("specqr", "sqr@x.com", "x", is_staff=True)
+        PerfilStaff.objects.create(user=spec, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self.client.force_login(spec)
+        with patch(
+            "gestao.messaging.evolution_connection.EvolutionConnectionService.get_status",
+            return_value={
+                "instanceName": f"nio_u{spec.pk}",
+                "state": "close",
+                "connected": False,
+            },
+        ), patch(
+            "gestao.messaging.evolution_connection.EvolutionConnectionService.create_instance",
+            return_value={},
+        ) as create, patch(
+            "gestao.messaging.evolution_connection.EvolutionConnectionService._request",
+            return_value={"base64": "data:image/png;base64,AAA", "count": 1},
+        ):
+            r = self.client.get(reverse("gestao_whatsapp_qrcode"))
+        self.assertEqual(r.status_code, 200)
+        create.assert_called()
+        self.assertTrue(r.json()["base64"].startswith("data:image/png;base64,"))
+
+
+@override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+        },
+    },
+    EVOLUTION_API_URL="https://evo.test",
+    EVOLUTION_API_KEY="evo.key",
+    EVOLUTION_INSTANCE_NAME="nio_gc_tickets",
+    N8N_OUTBOUND_WEBHOOK_URL="",
+    SYNCWA_MODO_TESTE=False,
+)
+class InstanciaEnvioTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.gestor = User.objects.create_superuser("ginst", "gi@x.com", "x")
+        PerfilStaff.objects.create(user=self.gestor, papel=PerfilStaff.Papel.GESTOR)
+        self.spec = User.objects.create_user("specinst", "si@x.com", "x", is_staff=True)
+        PerfilStaff.objects.create(user=self.spec, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self.ger = User.objects.create_user("gerinst", "ge@x.com", "x", is_staff=True)
+        PerfilStaff.objects.create(user=self.ger, papel=PerfilStaff.Papel.GERENCIA)
+        self.pdv = Parceiro.objects.create(codigo_pdv="inst1", nome="PDV INST")
+        from gestao.models import Destinatario
+
+        self.dest = Destinatario.objects.create(
+            parceiro=self.pdv,
+            nome="Contato",
+            jid="5531999999999",
+            envio_capilaridade=True,
+        )
+
+    def _enviar(self, user):
+        from gestao.messaging.envio import _enviar_para_lista
+        from gestao.models import EnvioWhatsApp
+
+        return _enviar_para_lista(
+            tipo=EnvioWhatsApp.Tipo.CAPILARIDADE,
+            mensagem="Bom dia carteira",
+            destinos=[self.dest],
+            parceiro=self.pdv,
+            user=user,
+        )
+
+    def test_padrao_especialista_envia_pelo_chip_gestao(self):
+        from unittest.mock import MagicMock, patch
+
+        fake = MagicMock()
+        fake.status_code = 200
+        fake.json.return_value = {"key": {"id": "ml-c"}}
+        with patch("gestao.messaging.syncwa.requests.post", return_value=fake) as post:
+            resumo = self._enviar(self.spec)
+        self.assertEqual(resumo.enviados, 1)
+        self.assertEqual(resumo.erros, 0)
+        self.assertIn("/message/sendText/nio_gc_tickets", post.call_args.args[0])
+        self.assertNotIn(f"nio_u{self.spec.pk}", post.call_args.args[0])
+
+    def test_especialista_conectado_envia_pela_instancia_propria(self):
+        from unittest.mock import MagicMock, patch
+
+        from gestao.messaging.instancia import salvar_modo_envio
+        from gestao.models import InstanciaWhatsApp
+
+        salvar_modo_envio("pessoal")
+        InstanciaWhatsApp.objects.create(
+            user=self.spec, nome=f"nio_u{self.spec.pk}", estado="open"
+        )
+        fake = MagicMock()
+        fake.status_code = 200
+        fake.json.return_value = {"key": {"id": "ml-u"}}
+        with patch(
+            "gestao.messaging.instancia.EvolutionConnectionService.get_status",
+            return_value={"state": "open", "connected": True, "owner": "5531888888888"},
+        ), patch("gestao.messaging.syncwa.requests.post", return_value=fake) as post:
+            resumo = self._enviar(self.spec)
+        self.assertEqual(resumo.enviados, 1)
+        self.assertEqual(resumo.erros, 0)
+        self.assertEqual(post.call_count, 1)
+        url = post.call_args.args[0]
+        self.assertIn(f"/message/sendText/nio_u{self.spec.pk}", url)
+        self.assertNotIn("nio_gc_tickets", url)
+        self.assertNotIn("n8n.test", url)
+
+    def test_especialista_desconectado_nao_cai_no_chip_admin(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.instancia import salvar_modo_envio
+        from gestao.models import InstanciaWhatsApp
+
+        salvar_modo_envio("pessoal")
+        InstanciaWhatsApp.objects.create(
+            user=self.spec, nome=f"nio_u{self.spec.pk}", estado="close"
+        )
+        with patch(
+            "gestao.messaging.instancia.EvolutionConnectionService.get_status",
+            return_value={"state": "close", "connected": False},
+        ), patch("gestao.messaging.syncwa.requests.post") as post:
+            resumo = self._enviar(self.spec)
+        self.assertEqual(resumo.enviados, 0)
+        self.assertEqual(resumo.erros, 1)
+        self.assertTrue(any("Conecte seu WhatsApp" in d for d in resumo.detalhes))
+        post.assert_not_called()
+
+    def test_especialista_sem_registro_nao_usa_chip_admin(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.instancia import salvar_modo_envio
+
+        salvar_modo_envio("pessoal")
+        with patch("gestao.messaging.syncwa.requests.post") as post:
+            resumo = self._enviar(self.spec)
+        self.assertEqual(resumo.enviados, 0)
+        self.assertEqual(resumo.erros, 1)
+        self.assertTrue(any("Conecte seu WhatsApp" in d for d in resumo.detalhes))
+        post.assert_not_called()
+
+    def test_gerencia_usa_instancia_propria(self):
+        from unittest.mock import MagicMock, patch
+
+        from gestao.messaging.instancia import salvar_modo_envio
+        from gestao.models import InstanciaWhatsApp
+
+        salvar_modo_envio("pessoal")
+        InstanciaWhatsApp.objects.create(
+            user=self.ger, nome=f"nio_u{self.ger.pk}", estado="open"
+        )
+        fake = MagicMock()
+        fake.status_code = 200
+        fake.json.return_value = {"key": {"id": "ml-g"}}
+        with patch(
+            "gestao.messaging.instancia.EvolutionConnectionService.get_status",
+            return_value={"state": "open", "connected": True},
+        ), patch("gestao.messaging.syncwa.requests.post", return_value=fake) as post:
+            resumo = self._enviar(self.ger)
+        self.assertEqual(resumo.enviados, 1)
+        self.assertIn(f"/message/sendText/nio_u{self.ger.pk}", post.call_args.args[0])
+        self.assertNotIn("nio_gc_tickets", post.call_args.args[0])
+
+    def test_gestor_usa_instancia_central(self):
+        from unittest.mock import MagicMock, patch
+
+        fake = MagicMock()
+        fake.status_code = 200
+        fake.json.return_value = {"key": {"id": "ml-a"}}
+        with patch("gestao.messaging.syncwa.requests.post", return_value=fake) as post:
+            resumo = self._enviar(self.gestor)
+        self.assertEqual(resumo.enviados, 1)
+        url = post.call_args.args[0]
+        self.assertIn("/message/sendText/nio_gc_tickets", url)
+        self.assertNotIn(f"nio_u{self.gestor.pk}", url)
 
 
 @override_settings(
@@ -1434,6 +1701,7 @@ class DestinatarioEnvioTests(TestCase):
         dest = Destinatario.objects.get(nome="Grupo Inova")
         self.assertTrue(dest.envio_capilaridade)
         self.assertFalse(dest.envio_fpd)
+        self.assertIsNone(dest.owner_id)
 
     def test_sincroniza_whatsapp_do_especialista_em_massa(self):
         from gestao.models import Destinatario
@@ -1792,10 +2060,18 @@ class DestinatarioEnvioTests(TestCase):
         self.pdv.especialista = spec
         self.pdv.save(update_fields=["especialista"])
         self.client.force_login(spec)
+        from gestao.models import InstanciaWhatsApp
+
+        InstanciaWhatsApp.objects.create(
+            user=spec, nome=f"nio_u{spec.pk}", estado="open"
+        )
         fake = MagicMock()
         fake.status_code = 200
         fake.json.return_value = {"key": {"id": "ml-esp"}}
-        with patch("gestao.messaging.syncwa.requests.post", return_value=fake) as post:
+        with patch(
+            "gestao.messaging.instancia.EvolutionConnectionService.get_status",
+            return_value={"state": "open", "connected": True},
+        ), patch("gestao.messaging.syncwa.requests.post", return_value=fake) as post:
             r = self.client.post(
                 reverse("gestao_capilaridade"),
                 {"action": "enviar_pdv", "parceiro": self.pdv.id},
@@ -1809,6 +2085,9 @@ class DestinatarioEnvioTests(TestCase):
             self.assertNotIn("120363grupo", log.destino_jid)
         for call in post.call_args_list:
             self.assertNotIn("120363grupo", call.kwargs["json"]["number"])
+            self.assertIn(f"/message/", call.args[0])
+            self.assertIn("nio_gc_tickets", call.args[0])
+            self.assertNotIn(f"nio_u{spec.pk}", call.args[0])
 
     def test_enviar_teste_via_envios(self):
         from unittest.mock import MagicMock, patch
@@ -1823,6 +2102,137 @@ class DestinatarioEnvioTests(TestCase):
                 r = self.client.post(reverse("gestao_envios"), {"action": "teste"})
         self.assertEqual(r.status_code, 302)
         self.assertTrue(EnvioWhatsApp.objects.filter(tipo=EnvioWhatsApp.Tipo.TESTE).exists())
+
+    def test_especialista_cadastra_e_envia_pela_lista_propria(self):
+        from unittest.mock import MagicMock, patch
+
+        from gestao.messaging.envio import destinos_para_envio
+        from gestao.models import Destinatario, InstanciaWhatsApp
+
+        User = get_user_model()
+        spec = User.objects.create_user("specdest", "sd@x.com", "x", is_staff=True)
+        PerfilStaff.objects.create(
+            user=spec, papel=PerfilStaff.Papel.ESPECIALISTA, whatsapp="5531911112222"
+        )
+        self.pdv.especialista = spec
+        self.pdv.save(update_fields=["especialista"])
+        Destinatario.objects.create(
+            parceiro=self.pdv,
+            nome="Grupo gestão",
+            jid="120363gestao@g.us",
+            envio_capilaridade=True,
+        )
+        pessoal = Destinatario.objects.create(
+            parceiro=self.pdv,
+            owner=spec,
+            nome="Grupo da Ana",
+            jid="120363ana@g.us",
+            envio_capilaridade=True,
+        )
+        destinos = destinos_para_envio(spec, "envio_capilaridade", self.pdv)
+        self.assertEqual([d.jid for d in destinos], ["120363ana@g.us"])
+        self.assertEqual(destinos[0].destinatario, pessoal)
+        gestor_dest = destinos_para_envio(self.gestor, "envio_capilaridade", self.pdv)
+        self.assertEqual([d.jid for d in gestor_dest], ["120363gestao@g.us"])
+
+        InstanciaWhatsApp.objects.create(
+            user=spec, nome=f"nio_u{spec.pk}", estado="open"
+        )
+        self.client.force_login(spec)
+        fake = MagicMock()
+        fake.status_code = 200
+        fake.json.return_value = {"key": {"id": "ml-lista"}}
+        with patch(
+            "gestao.messaging.instancia.EvolutionConnectionService.get_status",
+            return_value={"state": "open", "connected": True},
+        ), patch("gestao.messaging.syncwa.requests.post", return_value=fake) as post:
+            r = self.client.post(
+                reverse("gestao_capilaridade"),
+                {"action": "enviar_pdv", "parceiro": self.pdv.id},
+            )
+        self.assertEqual(r.status_code, 302)
+        for call in post.call_args_list:
+            num = call.kwargs["json"].get("number", "")
+            self.assertNotIn("120363gestao", num)
+            self.assertNotIn("5531911112222", num)
+            self.assertIn("120363ana", num)
+
+    def test_especialista_acessa_lista_propria_e_nao_a_da_gestao(self):
+        from gestao.models import Destinatario
+
+        User = get_user_model()
+        spec = User.objects.create_user("speclista", "sl@x.com", "x", is_staff=True)
+        PerfilStaff.objects.create(user=spec, papel=PerfilStaff.Papel.ESPECIALISTA)
+        colega = User.objects.create_user("colega", "co@x.com", "x", is_staff=True)
+        PerfilStaff.objects.create(user=colega, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self.pdv.especialista = spec
+        self.pdv.save(update_fields=["especialista"])
+        pdv_colega = Parceiro.objects.create(
+            codigo_pdv="col1", nome="PDV Colega", especialista=colega
+        )
+        gestao_dest = Destinatario.objects.create(
+            parceiro=self.pdv, nome="Grupo gestão secreto", jid="120363sec@g.us"
+        )
+        dest_colega = Destinatario.objects.create(
+            parceiro=pdv_colega,
+            owner=colega,
+            nome="Grupo do colega",
+            jid="120363col@g.us",
+        )
+        self.client.force_login(spec)
+        r = self.client.get(reverse("gestao_destinatarios"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "sua")
+        self.assertNotContains(r, "Grupo gestão secreto")
+        self.assertNotContains(r, "Grupo do colega")
+        criar = self.client.post(
+            reverse("gestao_destinatarios"),
+            {
+                "parceiro": self.pdv.id,
+                "nome": "Meu grupo",
+                "jid": "120363meu@g.us",
+                "tipo": Destinatario.TipoDestino.GRUPO,
+                "prioridade": 10,
+                "ativo": "on",
+                "envio_capilaridade": "on",
+            },
+        )
+        self.assertEqual(criar.status_code, 302)
+        meu = Destinatario.objects.get(nome="Meu grupo")
+        self.assertEqual(meu.owner, spec)
+        self.assertEqual(
+            self.client.get(reverse("gestao_destinatario_editar", args=[gestao_dest.pk])).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(reverse("gestao_destinatario_editar", args=[dest_colega.pk])).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(reverse("gestao_destinatario_editar", args=[meu.pk])).status_code,
+            200,
+        )
+
+    def test_gerencia_acessa_destinatarios(self):
+        User = get_user_model()
+        ger = User.objects.create_user("gerdest", "gd@x.com", "x", is_staff=True)
+        PerfilStaff.objects.create(
+            user=ger, papel=PerfilStaff.Papel.GERENCIA, gerencia="PP"
+        )
+        spec = User.objects.create_user("specpp", "spp@x.com", "x", is_staff=True)
+        PerfilStaff.objects.create(
+            user=spec, papel=PerfilStaff.Papel.ESPECIALISTA, gerencia="PP"
+        )
+        self.pdv.especialista = spec
+        self.pdv.save(update_fields=["especialista"])
+        self.client.force_login(ger)
+        r = self.client.get(reverse("gestao_destinatarios"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "sua")
+        self.assertIn(
+            self.pdv.pk,
+            r.context["form"].fields["parceiro"].queryset.values_list("pk", flat=True),
+        )
 
 
 class ComissionamentoTests(TestCase):

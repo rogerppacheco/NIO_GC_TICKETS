@@ -30,7 +30,9 @@
         <label>{{ form.envio_venda_indevida }} Venda indevida</label>
         <label>{{ form.envio_recompra }} Recompra</label>
         <label>{{ form.envio_resultados }} Resultados</label>
+        {% if form.ranking_consolidado %}
         <label>{{ form.ranking_consolidado }} Ranking consolidado</label>
+        {% endif %}
       </div>
       <div class="full help"><strong>Enviar a máscara também por e-mail:</strong></div>
       <div class="full" style="display:flex;flex-wrap:wrap;gap:1rem">

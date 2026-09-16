@@ -4,6 +4,7 @@ import re
 
 from django.db.models import Q
 
+from tickets.acesso import eh_gestor, parceiros_para_destinatarios
 from tickets.models import Parceiro, PerfilStaff
 
 from .models import Destinatario
@@ -71,6 +72,7 @@ def sincronizar_destinatarios_especialistas(parceiros=None) -> dict:
                 filtro |= Q(jid=jid_gestor)
             apagados, _ = Destinatario.objects.filter(
                 parceiro=pdv,
+                owner__isnull=True,
                 tipo=Destinatario.TipoDestino.INDIVIDUAL,
             ).filter(filtro).delete()
             if apagados:
@@ -82,9 +84,10 @@ def sincronizar_destinatarios_especialistas(parceiros=None) -> dict:
             continue
         nome = nome_destinatario_especialista(spec)
         existente = (
-            Destinatario.objects.filter(parceiro=pdv, jid=jid).first()
+            Destinatario.objects.filter(parceiro=pdv, jid=jid, owner__isnull=True).first()
             or Destinatario.objects.filter(
                 parceiro=pdv,
+                owner__isnull=True,
                 tipo=Destinatario.TipoDestino.INDIVIDUAL,
                 nome__startswith=PREFIXO_NOME,
             ).first()
@@ -129,3 +132,26 @@ def sincronizar_destinatarios_especialistas(parceiros=None) -> dict:
         "sem_especialista": sem_especialista,
         "removidos": removidos,
     }
+
+
+def owner_da_lista(user):
+    """None = lista da gestão. Caso contrário, a lista pessoal do usuário."""
+    if user is None or eh_gestor(user):
+        return None
+    return user
+
+
+def qs_destinatarios_da_lista(user):
+    """Destinatários que a tela de Comunicação mostra para o usuário."""
+    qs = Destinatario.objects.select_related(
+        "parceiro",
+        "parceiro__especialista",
+        "parceiro__especialista__perfil_staff",
+        "owner",
+    )
+    visiveis = parceiros_para_destinatarios(user)
+    if eh_gestor(user):
+        return qs.filter(owner__isnull=True).filter(
+            Q(parceiro__in=visiveis) | Q(parceiro__isnull=True)
+        )
+    return qs.filter(owner=user, parceiro__in=visiveis)

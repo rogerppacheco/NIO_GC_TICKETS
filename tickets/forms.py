@@ -242,7 +242,7 @@ class EspecialistaForm(forms.Form):
             }
         super().__init__(*args, **kwargs)
         self.fields["mascara_grupo"].queryset = Destinatario.objects.filter(
-            tipo=Destinatario.TipoDestino.GRUPO, ativo=True
+            tipo=Destinatario.TipoDestino.GRUPO, ativo=True, owner__isnull=True
         ).select_related("parceiro").order_by("nome")
         self.fields["mascara_grupo"].label_from_instance = lambda obj: (
             f"{obj.nome} ({obj.parceiro.nome})" if getattr(obj, "parceiro_id", None) and obj.parceiro else obj.nome
@@ -426,7 +426,7 @@ class StaffPerfilForm(forms.Form):
             }
         super().__init__(*args, **kwargs)
         self.fields["mascara_grupo"].queryset = Destinatario.objects.filter(
-            tipo=Destinatario.TipoDestino.GRUPO, ativo=True
+            tipo=Destinatario.TipoDestino.GRUPO, ativo=True, owner__isnull=True
         ).select_related("parceiro").order_by("nome")
         self.fields["mascara_grupo"].label_from_instance = lambda obj: (
             f"{obj.nome} ({obj.parceiro.nome})" if getattr(obj, "parceiro_id", None) and obj.parceiro else obj.nome

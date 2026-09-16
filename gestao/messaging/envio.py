@@ -34,7 +34,8 @@ from ..planilhas import (
 )
 from ..relatorios import montar_mascara_pdv, resumo_geral
 from .email_smtp import enviar_email_com_anexos, smtp_configurado
-from .syncwa import SyncWAResult, enviar_documento, enviar_texto, modo_teste_ativo, syncwa_configurado
+from .instancia import instancia_para_envio
+from .syncwa import SyncWAError, SyncWAResult, enviar_documento, enviar_texto, modo_teste_ativo, syncwa_configurado
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 FLAG_EMAIL = {
@@ -95,20 +96,40 @@ def destinos_para_envio(
     *,
     somente_grupos: bool = False,
 ) -> list[DestinoEnvio]:
-    """OSAB/Comissionamento: empresário do parceiro. Demais: gestor usa Destinatários; especialista, o próprio WhatsApp."""
-    if flag == "envio_osab" and parceiro is not None and not somente_grupos:
-        return destinos_osab(user, parceiro)
-    if flag == "envio_comissionamento" and parceiro is not None and not somente_grupos:
-        return destinos_comissionamento(user, parceiro)
-    if user is not None and not eh_gestor(user):
+    """Gestor usa a lista da gestão. Especialista/gerência usam a lista pessoal; sem cadastro, o WhatsApp do perfil."""
+    pessoal = user is not None and not eh_gestor(user)
+    if pessoal:
+        lista = _destinos_da_lista(user, flag, parceiro, somente_grupos)
+        if lista:
+            return lista
+        if somente_grupos:
+            return []
+        if flag == "envio_osab" and parceiro is not None:
+            return destinos_osab(user, parceiro)
+        if flag == "envio_comissionamento" and parceiro is not None:
+            return destinos_comissionamento(user, parceiro)
         jid = whatsapp_do_usuario(user)
         if not jid:
             return []
         nome = (user.get_full_name() or user.get_username() or "Especialista").strip()
         return [DestinoEnvio(jid=jid, nome=nome, parceiro=parceiro)]
+    if flag == "envio_osab" and parceiro is not None and not somente_grupos:
+        return destinos_osab(user, parceiro)
+    if flag == "envio_comissionamento" and parceiro is not None and not somente_grupos:
+        return destinos_comissionamento(user, parceiro)
+    return _destinos_da_lista(user, flag, parceiro, somente_grupos)
+
+
+def _destinos_da_lista(
+    user: AbstractBaseUser | None,
+    flag: str,
+    parceiro: Parceiro | None,
+    somente_grupos: bool,
+) -> list[DestinoEnvio]:
+    owner = None if user is None or eh_gestor(user) else user
     return [
         DestinoEnvio(jid=d.jid, nome=d.nome, parceiro=d.parceiro, destinatario=d)
-        for d in destinatarios_para(flag, parceiro, somente_grupos=somente_grupos)
+        for d in destinatarios_para(flag, parceiro, somente_grupos=somente_grupos, owner=owner)
     ]
 
 
@@ -165,6 +186,7 @@ def destinos_comissionamento(
     if not destinos:
         for dest in Destinatario.objects.filter(
             parceiro=parceiro,
+            owner__isnull=True,
             ativo=True,
             envio_comissionamento=True,
         ):
@@ -178,6 +200,7 @@ def destinos_comissionamento(
     if not destinos:
         for dest in Destinatario.objects.filter(
             parceiro=parceiro,
+            owner__isnull=True,
             ativo=True,
             tipo=Destinatario.TipoDestino.GRUPO,
         ):
@@ -211,6 +234,7 @@ def destinos_osab(user: AbstractBaseUser | None, parceiro: Parceiro) -> list[Des
     if n_empresario == 0:
         for dest in Destinatario.objects.filter(
             parceiro=parceiro,
+            owner__isnull=True,
             ativo=True,
             tipo=Destinatario.TipoDestino.GRUPO,
             envio_osab=True,
@@ -237,7 +261,9 @@ def emails_para_envio(
     flag_email = FLAG_EMAIL.get(flag)
     if not flag_email:
         return []
-    qs = Destinatario.objects.filter(ativo=True, **{flag_email: True}).exclude(email="")
+    qs = Destinatario.objects.filter(
+        ativo=True, owner__isnull=True, **{flag_email: True}
+    ).exclude(email="")
     if parceiro is not None:
         qs = qs.filter(parceiro=parceiro)
     vistos: list[str] = []
@@ -308,7 +334,10 @@ def _talvez_email(
 
 def _msg_sem_destino(user: AbstractBaseUser | None) -> str:
     if user is not None and not eh_gestor(user):
-        return "Cadastre seu WhatsApp em Meu perfil para receber as máscaras."
+        return (
+            "Cadastre destinatários em Comunicação → Destinatários "
+            "ou o WhatsApp em Meu perfil."
+        )
     return "Nenhum destinatário ativo para este envio."
 
 
@@ -317,8 +346,13 @@ def destinatarios_para(
     parceiro: Parceiro | None = None,
     *,
     somente_grupos: bool = False,
+    owner=None,
 ) -> QuerySet[Destinatario]:
     qs = Destinatario.objects.filter(ativo=True).select_related("parceiro")
+    if owner is None:
+        qs = qs.filter(owner__isnull=True)
+    else:
+        qs = qs.filter(owner=owner)
     if parceiro is not None:
         qs = qs.filter(parceiro=parceiro)
     qs = qs.filter(**{flag: True})
@@ -381,6 +415,12 @@ def _enviar_para_lista(
         resumo.erros += 1
         resumo.detalhes.append("WhatsApp (Evolution) não configurado.")
         return resumo
+    try:
+        inst = instancia_para_envio(user)
+    except SyncWAError as exc:
+        resumo.erros += 1
+        resumo.detalhes.append(str(exc))
+        return resumo
     lista = [
         dest
         if isinstance(dest, DestinoEnvio)
@@ -394,7 +434,7 @@ def _enviar_para_lista(
 
     teste = modo_teste_ativo()
     for dest in lista:
-        result = enviar_texto(dest.jid, mensagem)
+        result = enviar_texto(dest.jid, mensagem, instance=inst)
         _registrar(
             tipo=tipo,
             mensagem=mensagem,
@@ -443,7 +483,7 @@ def enviar_teste(user: AbstractBaseUser | None = None) -> ResumoEnvio:
         )
     if not jid and not modo_teste_ativo():
         # Sem JID de teste e sem modo teste: tenta o primeiro destinatário ativo
-        dest = Destinatario.objects.filter(ativo=True).order_by("prioridade").first()
+        dest = Destinatario.objects.filter(ativo=True, owner__isnull=True).order_by("prioridade").first()
         if not dest:
             return ResumoEnvio(erros=1, detalhes=["Cadastre um destinatário ou defina SYNCWA_TEST_JID."])
         return _enviar_para_lista(
@@ -457,7 +497,11 @@ def enviar_teste(user: AbstractBaseUser | None = None) -> ResumoEnvio:
     resumo = ResumoEnvio()
     if not syncwa_configurado():
         return ResumoEnvio(erros=1, detalhes=["WhatsApp (Evolution) não configurado."])
-    result = enviar_texto(jid or settings.SYNCWA_TEST_JID, texto)
+    try:
+        inst = instancia_para_envio(user)
+    except SyncWAError as exc:
+        return ResumoEnvio(erros=1, detalhes=[str(exc)])
+    result = enviar_texto(jid or settings.SYNCWA_TEST_JID, texto, instance=inst)
     _registrar(
         tipo=EnvioWhatsApp.Tipo.TESTE,
         mensagem=texto,
@@ -723,6 +767,10 @@ def _enviar_com_anexo(
     resumo = ResumoEnvio()
     if not syncwa_configurado():
         return ResumoEnvio(erros=1, detalhes=["WhatsApp (Evolution) não configurado."])
+    try:
+        inst = instancia_para_envio(user)
+    except SyncWAError as exc:
+        return ResumoEnvio(erros=1, detalhes=[str(exc)])
     lista = [
         dest
         if isinstance(dest, DestinoEnvio)
@@ -743,6 +791,7 @@ def _enviar_com_anexo(
                 conteudo=arquivo_bytes,
                 file_name=nome_arquivo,
                 caption=caption if texto_extra else msg[:1024],
+                instance=inst,
             )
             _registrar(
                 tipo=tipo,
@@ -763,7 +812,7 @@ def _enviar_com_anexo(
                 continue
 
         if texto_extra or not arquivo_bytes:
-            result_txt = enviar_texto(dest.jid, msg)
+            result_txt = enviar_texto(dest.jid, msg, instance=inst)
             _registrar(
                 tipo=tipo,
                 mensagem=msg,
@@ -1418,6 +1467,7 @@ def enviar_ranking(
             Destinatario.objects.filter(
                 pk=destinatario_id,
                 ativo=True,
+                owner__isnull=True,
                 tipo=Destinatario.TipoDestino.GRUPO,
                 envio_resultados=True,
             )
@@ -1461,6 +1511,7 @@ def _destino_grupo(destinatario_id: int, parceiros: list[Parceiro] | None = None
     qs = Destinatario.objects.filter(
         pk=destinatario_id,
         ativo=True,
+        owner__isnull=True,
         tipo=Destinatario.TipoDestino.GRUPO,
         envio_resultados=True,
     )

@@ -16,6 +16,7 @@ from tickets.acesso import (
     GERENCIA_TODAS,
     eh_gestor,
     escopo_gestao,
+    equipe_required,
     gestor_required,
     listar_gerencias,
     parceiros_gestao,
@@ -66,6 +67,7 @@ from .messaging.envio import (
     enviar_ranking,
 )
 from .messaging.syncwa import (
+    SyncWAError,
     alternar_modo_teste_sessao,
     healthcheck,
     listar_grupos,
@@ -73,6 +75,7 @@ from .messaging.syncwa import (
     modo_teste_sessao,
     syncwa_configurado,
 )
+from .messaging.instancia import instancia_para_envio, modo_envio_whatsapp
 from .models import (
     CadastroTerceiro,
     ConfiguracaoOSAB,
@@ -92,7 +95,11 @@ from .models import (
     RelatorioVendaIndevida,
     VendaOSAB,
 )
-from .destinatarios_especialista import sincronizar_destinatarios_especialistas
+from .destinatarios_especialista import (
+    owner_da_lista,
+    qs_destinatarios_da_lista,
+    sincronizar_destinatarios_especialistas,
+)
 from .parceiros import classificar_parceiros_osab, sincronizar_parceiros_osab
 from .periodo import periodo_ativo, salvar_periodo
 from .pipelines.churn import processar_churn
@@ -603,6 +610,7 @@ def _grupos_ranking(parceiros: list[Parceiro]):
     return (
         Destinatario.objects.filter(
             ativo=True,
+            owner__isnull=True,
             tipo=Destinatario.TipoDestino.GRUPO,
             envio_resultados=True,
         )
@@ -1917,10 +1925,24 @@ def _flash_resumo(request, titulo: str, resumo) -> None:
         messages.info(request, linha)
 
 
-@gestor_required
+def _destinatario_ou_404(request: HttpRequest, pk: int) -> Destinatario:
+    dest = get_object_or_404(Destinatario, pk=pk)
+    if eh_gestor(request.user):
+        return dest
+    if dest.owner_id != request.user.pk:
+        raise Http404("Página não encontrada.")
+    visiveis = parceiros_para_destinatarios(request.user)
+    if not dest.parceiro_id or not visiveis.filter(pk=dest.parceiro_id).exists():
+        raise Http404("Página não encontrada.")
+    return dest
+
+
+@equipe_required
 def destinatarios_view(request: HttpRequest) -> HttpResponse:
     visiveis = parceiros_para_destinatarios(request.user)
     if request.method == "POST" and request.POST.get("action") == "sincronizar_especialistas":
+        if not eh_gestor(request.user):
+            raise Http404("Página não encontrada.")
         cad = sincronizar_destinatarios_especialistas(visiveis)
         partes = [
             f"{len(cad['criados'])} criado(s)",
@@ -1946,22 +1968,28 @@ def destinatarios_view(request: HttpRequest) -> HttpResponse:
             + extra,
         )
         return _voltar(request, "gestao_destinatarios")
-    form = DestinatarioForm(request.POST or None)
+    form = DestinatarioForm(request.POST or None, user=request.user)
     form.fields["parceiro"].queryset = visiveis
     if request.method == "POST" and form.is_valid():
         form.save()
         messages.success(request, "Destinatário salvo.")
         return _voltar(request, "gestao_destinatarios")
-    lista = Destinatario.objects.select_related(
-        "parceiro",
-        "parceiro__especialista",
-        "parceiro__especialista__perfil_staff",
-    ).filter(parceiro__in=visiveis)
+    lista = qs_destinatarios_da_lista(request.user)
     grupos = None
-    if request.GET.get("grupos") == "1" and syncwa_configurado():
-        grupos = listar_grupos()
-        if not grupos.get("ok"):
-            messages.error(request, f"Não foi possível listar grupos: {grupos.get('error')}")
+    if request.GET.get("grupos") == "1":
+        if not syncwa_configurado():
+            messages.error(request, "Evolution não configurada — não dá para listar grupos.")
+        else:
+            try:
+                inst = instancia_para_envio(request.user)
+            except SyncWAError as exc:
+                messages.error(request, str(exc))
+            else:
+                grupos = listar_grupos(instance=inst)
+                if not grupos.get("ok"):
+                    messages.error(
+                        request, f"Não foi possível listar grupos: {grupos.get('error')}"
+                    )
     return render(
         request,
         "gestao/destinatarios.html",
@@ -1976,11 +2004,13 @@ def destinatarios_view(request: HttpRequest) -> HttpResponse:
     )
 
 
-@gestor_required
+@equipe_required
 def destinatario_do_grupo(request: HttpRequest) -> HttpResponse:
     """Cadastra rápido um grupo WhatsApp como destinatário de um PDV ou ranking consolidado."""
     if request.method != "POST":
         return _voltar(request, "gestao_destinatarios")
+    visiveis = parceiros_para_destinatarios(request.user)
+    owner = owner_da_lista(request.user)
     parceiro_id = (request.POST.get("parceiro") or "").strip()
     ranking_consolidado = request.POST.get("ranking_consolidado") == "1"
     jid = (request.POST.get("jid") or "").strip()
@@ -1989,7 +2019,11 @@ def destinatario_do_grupo(request: HttpRequest) -> HttpResponse:
         messages.error(request, "Informe um JID de grupo válido (@g.us).")
         return redirect(f"{reverse('gestao_destinatarios')}?grupos=1")
     if ranking_consolidado:
-        existente = Destinatario.objects.filter(jid=jid, ranking_consolidado=True).first()
+        if not eh_gestor(request.user):
+            raise Http404("Página não encontrada.")
+        existente = Destinatario.objects.filter(
+            jid=jid, ranking_consolidado=True, owner__isnull=True
+        ).first()
         if existente:
             existente.nome = nome[:150]
             existente.envio_resultados = True
@@ -1999,6 +2033,7 @@ def destinatario_do_grupo(request: HttpRequest) -> HttpResponse:
             return _voltar(request, "gestao_destinatarios")
         Destinatario.objects.create(
             parceiro=None,
+            owner=None,
             nome=nome[:150],
             jid=jid,
             tipo=Destinatario.TipoDestino.GRUPO,
@@ -2017,15 +2052,16 @@ def destinatario_do_grupo(request: HttpRequest) -> HttpResponse:
         )
         return _voltar(request, "gestao_destinatarios")
     if not parceiro_id:
-        messages.error(request, "Informe o PDV ou marque Ranking consolidado.")
+        messages.error(request, "Informe o PDV.")
         return redirect(f"{reverse('gestao_destinatarios')}?grupos=1")
-    parceiro = get_object_or_404(Parceiro, pk=parceiro_id, ativo=True)
-    existente = Destinatario.objects.filter(parceiro=parceiro, jid=jid).first()
+    parceiro = get_object_or_404(visiveis, pk=parceiro_id)
+    existente = Destinatario.objects.filter(parceiro=parceiro, jid=jid, owner=owner).first()
     if existente:
         messages.warning(request, f"Já existe destinatário {existente.nome} com este JID neste PDV.")
         return _voltar(request, "gestao_destinatarios")
     Destinatario.objects.create(
         parceiro=parceiro,
+        owner=owner,
         nome=nome[:150],
         jid=jid,
         tipo=Destinatario.TipoDestino.GRUPO,
@@ -2039,10 +2075,10 @@ def destinatario_do_grupo(request: HttpRequest) -> HttpResponse:
     return _voltar(request, "gestao_destinatarios")
 
 
-@gestor_required
+@equipe_required
 def destinatario_editar(request: HttpRequest, pk: int) -> HttpResponse:
-    dest = get_object_or_404(Destinatario, pk=pk)
-    form = DestinatarioForm(request.POST or None, instance=dest)
+    dest = _destinatario_ou_404(request, pk)
+    form = DestinatarioForm(request.POST or None, instance=dest, user=request.user)
     form.fields["parceiro"].queryset = parceiros_para_destinatarios(request.user)
     if request.method == "POST" and form.is_valid():
         form.save()
@@ -2055,18 +2091,18 @@ def destinatario_editar(request: HttpRequest, pk: int) -> HttpResponse:
     )
 
 
-@gestor_required
+@equipe_required
 def destinatario_excluir(request: HttpRequest, pk: int) -> HttpResponse:
-    dest = get_object_or_404(Destinatario, pk=pk)
+    dest = _destinatario_ou_404(request, pk)
     if request.method == "POST":
         dest.delete()
         messages.success(request, "Destinatário excluído.")
     return _voltar(request, "gestao_destinatarios")
 
 
-@gestor_required
+@equipe_required
 def destinatario_toggle(request: HttpRequest, pk: int) -> HttpResponse:
-    dest = get_object_or_404(Destinatario, pk=pk)
+    dest = _destinatario_ou_404(request, pk)
     if request.method == "POST":
         dest.ativo = not dest.ativo
         dest.save(update_fields=["ativo", "atualizado_em"])
@@ -2204,7 +2240,13 @@ def envios_view(request: HttpRequest) -> HttpResponse:
                 _flash_resumo(request, "Recompra", enviar_recompra(rel, request.user))
             return _voltar(request, "gestao_envios")
 
-    health = healthcheck() if syncwa_configurado() else {"ok": False, "error": "não configurado"}
+    if syncwa_configurado():
+        try:
+            health = healthcheck(instance=instancia_para_envio(request.user))
+        except SyncWAError as exc:
+            health = {"ok": False, "error": str(exc)}
+    else:
+        health = {"ok": False, "error": "não configurado"}
     _, filtro_logs = _filtro_relatorios(request)
     logs = EnvioWhatsApp.objects.select_related("parceiro__especialista", "destinatario").filter(
         filtro_logs
@@ -2222,6 +2264,7 @@ def envios_view(request: HttpRequest) -> HttpResponse:
             "modo_teste": modo_teste_ativo(),
             "health": health,
             "logs": logs,
-            "qtd_destinatarios": Destinatario.objects.filter(ativo=True).count(),
+            "qtd_destinatarios": qs_destinatarios_da_lista(request.user).filter(ativo=True).count(),
+            "modo_envio": modo_envio_whatsapp(),
         },
     )
