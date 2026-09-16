@@ -1676,6 +1676,26 @@ body.page-portal .portal-extra .btn { padding: 0.38rem 0.7rem; font-size: 0.82re
 }
 .rota-ag-dot.is-empty { background: #eef1f4; color: transparent; }
 .rota-ag-dot.is-done { background: var(--brand); color: #fff; }
+.rota-especs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.95rem;
+}
+.rota-espec-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.8rem 0.9rem;
+  background: #f7fbfa;
+}
+.rota-espec-card h3 { margin: 0.1rem 0 0.35rem; font-size: 1.02rem; }
+.rota-espec-card p { margin: 0; }
+button.rota-ag-dot {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+button.rota-ag-dot.is-empty { background: #eef1f4; }
 @media (max-width: 720px) {
   .rota-week { gap: 0.28rem; }
   .rota-day { padding: 0.4rem 0.1rem; }

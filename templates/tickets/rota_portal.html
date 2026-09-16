@@ -35,6 +35,45 @@
   <nav class="rota-week" id="rota-week" aria-label="Semana atual"></nav>
 
   {% if visao_equipe %}
+  <section class="rota-card rota-card-resultado" id="bloco-resultado">
+    <header class="rota-card-h">
+      <div>
+        <p class="rota-kicker">Resultado</p>
+        <h2>Consolidado · <span id="rota-resultado-dia">dia selecionado</span></h2>
+      </div>
+      <p class="help" style="margin:0;max-width:22rem">Clique no PDV ou na bolinha do dia para abrir o detalhe abaixo.</p>
+    </header>
+    <div class="rota-card-b">
+      <div class="rota-kpis" id="rota-kpis">
+        <div class="rota-kpi"><span class="rota-kpi-label">VBs do dia</span><strong id="kpi-vb-dia">0</strong></div>
+        <div class="rota-kpi"><span class="rota-kpi-label">VBs da semana</span><strong id="kpi-vb-semana">0</strong></div>
+        <div class="rota-kpi"><span class="rota-kpi-label">Equipes no dia</span><strong id="kpi-eq-dia">0</strong></div>
+        <div class="rota-kpi"><span class="rota-kpi-label">Pessoas no dia</span><strong id="kpi-pe-dia">0</strong></div>
+        <div class="rota-kpi"><span class="rota-kpi-label">PDVs com rota</span><strong id="kpi-pdv-dia">0</strong></div>
+      </div>
+      <div class="rota-especs" id="rota-especs"></div>
+      <div class="table-scroll" style="margin-top:0.9rem">
+        <table class="table rota-agendas-table" id="rota-resultado-table">
+          <thead>
+            <tr>
+              <th>Parceiro</th>
+              <th>Especialista</th>
+              <th>VBs dia</th>
+              <th>Equipes</th>
+              <th>Pessoas</th>
+              <th>VBs semana</th>
+            </tr>
+          </thead>
+          <tbody id="rota-resultado-body">
+            <tr><td colspan="6" class="help">Carregando consolidado…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if visao_equipe %}
   <section class="rota-card rota-card-agendas" id="bloco-agendas">
     <header class="rota-card-h">
       <div>
@@ -70,7 +109,7 @@
   <form id="rota-form" class="rota-form" hidden>
     {% csrf_token %}
     {% if visao_equipe %}
-    <p class="help" id="rota-pdv-hint">Escolha um PDV na agenda ou na linha do tempo para registrar o dia.</p>
+    <p class="help" id="rota-pdv-hint">Clique no PDV ou na bolinha do dia na agenda para ver o resultado e editar a rota.</p>
     {% endif %}
     <div class="rota-grid">
       <section class="rota-card" aria-labelledby="rota-checkin-title">
@@ -118,6 +157,12 @@
           <div class="rota-field">
             <span class="rota-label">Como cada equipe vai atuar, e quantas pessoas</span>
             <div id="rota-equipes" class="rota-equipes"></div>
+          </div>
+
+          <div class="rota-field">
+            <label for="planejamento_vb_dia">Planejamento absoluto do dia (VBs)</label>
+            <input class="rota-input" type="number" inputmode="numeric" id="planejamento_vb_dia" name="planejamento_vb_dia" min="0" step="1" value="0" required>
+            <p class="help">Exemplo: 10 VBs neste dia, neste PDV.</p>
           </div>
 
           <div class="rota-field" id="bloco-semana" hidden>
@@ -172,6 +217,7 @@
           <div class="rota-resumo" id="rota-resumo" role="status">
             <strong id="rota-resumo-equipes">1 equipe em campo</strong>
             <span id="rota-resumo-pessoas">0 pessoas</span>
+            <span id="rota-resumo-vb">0 VBs</span>
             <span id="rota-resumo-rh"></span>
           </div>
 

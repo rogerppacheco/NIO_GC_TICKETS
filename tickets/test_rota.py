@@ -190,6 +190,7 @@ class RotaApiTests(TestCase):
             ],
             "qtd_contratacoes": 1,
             "qtd_desligamentos": 0,
+            "planejamento_vb_dia": 10,
             "uf": "MG",
             "cidade": "BELO HORIZONTE",
             "bairro": "CENTRO",
@@ -207,6 +208,7 @@ class RotaApiTests(TestCase):
         self.assertEqual(body["total_campo"], 5)
         self.assertEqual(body["tipo_rota"], "MISTO")
         self.assertEqual(body["qtd_contratacoes"], 1)
+        self.assertEqual(body["planejamento_vb_dia"], 10)
 
     def test_parceiro_nao_ve_agendas_da_equipe(self):
         r = self.client.get(reverse("rota_api_agendas"))
@@ -305,11 +307,14 @@ class RotaEquipeTests(TestCase):
         self.assertEqual(r.status_code, 200)
         items = r.json()["data"]["items"]
         self.assertTrue(any(i["codigo_pdv"] == "ROTA3" for i in items))
+        self.assertIn("totais", r.json()["data"])
+        self.assertIn("especialistas", r.json()["data"])
 
     def test_checkin_pela_equipe(self):
         payload = {
             "pdv": self.pdv.id,
             "equipes": [{"atuacao": "DIGITAL", "pessoas": 4}],
+            "planejamento_vb_dia": 10,
         }
         if timezone.localdate().weekday() == 0:
             payload["vendas_planejadas_semana"] = 10
@@ -322,4 +327,8 @@ class RotaEquipeTests(TestCase):
         ck = CheckinRotaDiaria.objects.get(parceiro=self.pdv, data=timezone.localdate())
         self.assertEqual(ck.tipo_rota, "DIGITAL")
         self.assertEqual(ck.qtd_vendedores, 4)
+        self.assertEqual(ck.planejamento_vb_dia, 10)
         self.assertEqual(ck.criado_por_user_id, self.spec.id)
+        agendas = self.client.get(reverse("rota_api_agendas")).json()["data"]
+        self.assertEqual(agendas["totais"]["dia"]["vb"], 10)
+        self.assertEqual(agendas["especialistas"][0]["dia"]["vb"], 10)

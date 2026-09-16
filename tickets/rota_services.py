@@ -227,6 +227,7 @@ def serializar_checkin(checkin: CheckinRotaDiaria | None) -> dict[str, Any] | No
         "total_campo": total_campo,
         "qtd_contratacoes": checkin.qtd_contratacoes,
         "qtd_desligamentos": checkin.qtd_desligamentos,
+        "planejamento_vb_dia": checkin.planejamento_vb_dia,
         "local": {
             "uf": checkin.uf,
             "cidade": checkin.cidade,
@@ -263,6 +264,7 @@ def resumo_semana(parceiro: Parceiro, ref: date | None = None) -> dict[str, Any]
             item["qtd_equipes"] = ck.qtd_equipes or 1
             item["qtd_vendedores"] = ck.qtd_vendedores
             item["tipo_rota"] = ck.tipo_rota
+            item["planejamento_vb_dia"] = ck.planejamento_vb_dia or 0
         dias.append(item)
     return {
         "semana_inicio": ini.isoformat(),
@@ -271,40 +273,144 @@ def resumo_semana(parceiro: Parceiro, ref: date | None = None) -> dict[str, Any]
     }
 
 
-def agendas_equipe(user, q: str = "") -> dict[str, Any]:
-    qs = parceiros_visiveis(user).filter(ativo=True)
+def _totais_vazios() -> dict[str, int]:
+    return {
+        "vb": 0,
+        "equipes": 0,
+        "pessoas": 0,
+        "pdvs": 0,
+        "contratacoes": 0,
+        "desligamentos": 0,
+    }
+
+
+def _somar_checkin(acc: dict[str, int], ck: CheckinRotaDiaria) -> None:
+    acc["vb"] += int(ck.planejamento_vb_dia or 0)
+    acc["equipes"] += int(ck.qtd_equipes or 1)
+    acc["pessoas"] += int(ck.qtd_vendedores or 0)
+    acc["contratacoes"] += int(ck.qtd_contratacoes or 0)
+    acc["desligamentos"] += int(ck.qtd_desligamentos or 0)
+
+
+def _nome_especialista(user) -> str:
+    if not user:
+        return "Sem especialista"
+    nome = (user.get_full_name() or "").strip()
+    return nome or user.username
+
+
+def agendas_equipe(user, q: str = "", dia: date | None = None) -> dict[str, Any]:
+    qs = parceiros_visiveis(user).filter(ativo=True).select_related("especialista")
     termo = (q or "").strip()
     if termo:
         qs = qs.filter(Q(codigo_pdv__icontains=termo) | Q(nome__icontains=termo))
-    pdvs = list(qs.order_by("nome", "codigo_pdv")[:80])
     ini = segunda_da_semana()
     fim = domingo_da_semana()
-    checkins = CheckinRotaDiaria.objects.filter(
-        parceiro_id__in=[p.id for p in pdvs], data__range=(ini, fim)
+    dia_ref = dia or hoje_local()
+    if not data_na_semana_atual(dia_ref):
+        dia_ref = hoje_local()
+
+    ids_todos = list(qs.values_list("id", flat=True))
+    pdvs = list(qs.order_by("especialista__first_name", "especialista__username", "nome", "codigo_pdv")[:120])
+    checkins = list(
+        CheckinRotaDiaria.objects.filter(
+            parceiro_id__in=ids_todos, data__range=(ini, fim)
+        ).select_related("parceiro", "parceiro__especialista")
     )
     por_pdv: dict[int, dict[str, dict[str, Any]]] = {}
+    totais_semana = _totais_vazios()
+    totais_dia = _totais_vazios()
+    pdvs_dia: set[int] = set()
+    pdvs_semana: set[int] = set()
+    por_espec: dict[Any, dict[str, Any]] = {}
+
     for ck in checkins:
         por_pdv.setdefault(ck.parceiro_id, {})[ck.data.isoformat()] = {
             "qtd_equipes": ck.qtd_equipes or 1,
             "qtd_vendedores": ck.qtd_vendedores,
             "tipo_rota": ck.tipo_rota,
+            "planejamento_vb_dia": ck.planejamento_vb_dia or 0,
         }
+        _somar_checkin(totais_semana, ck)
+        pdvs_semana.add(ck.parceiro_id)
+        spec = ck.parceiro.especialista
+        sid = spec.pk if spec else None
+        bloco = por_espec.setdefault(
+            sid,
+            {
+                "id": sid,
+                "nome": _nome_especialista(spec),
+                "dia": _totais_vazios(),
+                "semana": _totais_vazios(),
+                "pdvs_dia": set(),
+                "pdvs_semana": set(),
+            },
+        )
+        _somar_checkin(bloco["semana"], ck)
+        bloco["pdvs_semana"].add(ck.parceiro_id)
+        if ck.data == dia_ref:
+            _somar_checkin(totais_dia, ck)
+            pdvs_dia.add(ck.parceiro_id)
+            _somar_checkin(bloco["dia"], ck)
+            bloco["pdvs_dia"].add(ck.parceiro_id)
+
+    totais_semana["pdvs"] = len(pdvs_semana)
+    totais_dia["pdvs"] = len(pdvs_dia)
+
+    especialistas = []
+    for sid, bloco in sorted(por_espec.items(), key=lambda x: (x[1]["nome"] or "").casefold()):
+        dia_acc = bloco["dia"]
+        sem_acc = bloco["semana"]
+        dia_acc["pdvs"] = len(bloco["pdvs_dia"])
+        sem_acc["pdvs"] = len(bloco["pdvs_semana"])
+        especialistas.append(
+            {
+                "id": bloco["id"],
+                "nome": bloco["nome"],
+                "dia": {k: dia_acc[k] for k in ("vb", "equipes", "pessoas", "pdvs", "contratacoes", "desligamentos")},
+                "semana": {k: sem_acc[k] for k in ("vb", "equipes", "pessoas", "pdvs", "contratacoes", "desligamentos")},
+            }
+        )
+
     items = []
     for pdv in pdvs:
         mapa = por_pdv.get(pdv.id, {})
+        semana_pdv = _totais_vazios()
+        for info in mapa.values():
+            semana_pdv["vb"] += int(info.get("planejamento_vb_dia") or 0)
+            semana_pdv["equipes"] += int(info.get("qtd_equipes") or 0)
+            semana_pdv["pessoas"] += int(info.get("qtd_vendedores") or 0)
+        dia_info = mapa.get(dia_ref.isoformat())
+        spec = pdv.especialista
         items.append(
             {
                 "id": pdv.id,
                 "codigo_pdv": pdv.codigo_pdv,
                 "nome": pdv.nome,
+                "especialista": _nome_especialista(spec) if spec else "Sem especialista",
+                "especialista_id": spec.pk if spec else None,
                 "dias": mapa,
                 "preenchidos": len(mapa),
+                "dia": {
+                    "vb": int(dia_info.get("planejamento_vb_dia") or 0) if dia_info else 0,
+                    "equipes": int(dia_info.get("qtd_equipes") or 0) if dia_info else 0,
+                    "pessoas": int(dia_info.get("qtd_vendedores") or 0) if dia_info else 0,
+                    "preenchido": bool(dia_info),
+                },
+                "semana": {
+                    "vb": semana_pdv["vb"],
+                    "equipes": semana_pdv["equipes"],
+                    "pessoas": semana_pdv["pessoas"],
+                },
             }
         )
     return {
         "semana_inicio": ini.isoformat(),
         "semana_fim": fim.isoformat(),
+        "data": dia_ref.isoformat(),
         "total": len(items),
+        "totais": {"dia": totais_dia, "semana": totais_semana},
+        "especialistas": especialistas,
         "items": items,
     }
 
@@ -440,6 +546,7 @@ def salvar_checkin(
     equipes: Any = None,
     qtd_contratacoes: int = 0,
     qtd_desligamentos: int = 0,
+    planejamento_vb_dia: int = 0,
 ) -> CheckinRotaDiaria:
     ref = dia or hoje_local()
     if not data_na_semana_atual(ref):
@@ -452,6 +559,8 @@ def salvar_checkin(
         raise ValueError("Informe quantas pessoas atuam em cada equipe.")
     if int(qtd_contratacoes) < 0 or int(qtd_desligamentos) < 0:
         raise ValueError("Contratações e desligamentos não podem ser negativos.")
+    if int(planejamento_vb_dia) < 0:
+        raise ValueError("Planejamento de VBs do dia inválido.")
 
     uf_limpo = (uf or "").strip().upper()[:2]
     cidade_txt = (cidade or "").strip()
@@ -515,6 +624,7 @@ def salvar_checkin(
         "equipes": equipes_ok,
         "qtd_contratacoes": int(qtd_contratacoes),
         "qtd_desligamentos": int(qtd_desligamentos),
+        "planejamento_vb_dia": int(planejamento_vb_dia),
         "uf": uf_limpo,
         "cidade": cidade_txt,
         "bairro": bairro_txt,

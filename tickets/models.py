@@ -1029,6 +1029,10 @@ class CheckinRotaDiaria(models.Model):
     equipes = models.JSONField(default=list, blank=True)
     qtd_contratacoes = models.PositiveIntegerField(default=0)
     qtd_desligamentos = models.PositiveIntegerField(default=0)
+    planejamento_vb_dia = models.PositiveIntegerField(
+        default=0,
+        help_text="Planejamento absoluto de VBs do dia.",
+    )
     uf = models.CharField(max_length=2, blank=True)
     cidade = models.CharField(max_length=120, blank=True)
     bairro = models.CharField(max_length=120, blank=True)

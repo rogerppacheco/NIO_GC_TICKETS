@@ -230,7 +230,14 @@ def rota_api_hoje(request: HttpRequest) -> JsonResponse:
 def rota_api_agendas(request: HttpRequest) -> JsonResponse:
     if not tem_acesso_interno(request.user):
         return _json_error("forbidden", "Agenda consolidada só para a equipe NIO.", status=403)
-    return _json_ok(agendas_equipe(request.user, request.GET.get("q") or ""))
+    raw_dia = (request.GET.get("data") or "").strip()
+    dia = hoje_local()
+    if raw_dia:
+        try:
+            dia = date.fromisoformat(raw_dia)
+        except ValueError:
+            return _json_error("validation_error", "Data inválida.", fields={"data": "Use AAAA-MM-DD."})
+    return _json_ok(agendas_equipe(request.user, request.GET.get("q") or "", dia))
 
 
 @login_required
@@ -420,6 +427,11 @@ def rota_api_checkin(request: HttpRequest) -> JsonResponse:
         fields["qtd_desligamentos"] = "Número inválido."
         desligamentos = 0
 
+    vb_dia = _int_campo(body.get("planejamento_vb_dia"), 0)
+    if vb_dia is None or vb_dia < 0:
+        fields["planejamento_vb_dia"] = "Informe o planejamento de VBs do dia."
+        vb_dia = 0
+
     uf = str(body.get("uf") or "").strip().upper()[:2]
     cidade = str(body.get("cidade") or "").strip()
     bairro = str(body.get("bairro") or "").strip()
@@ -488,6 +500,7 @@ def rota_api_checkin(request: HttpRequest) -> JsonResponse:
             equipes=equipes_ok,
             qtd_contratacoes=contratacoes,
             qtd_desligamentos=desligamentos,
+            planejamento_vb_dia=vb_dia,
         )
     except ValueError as exc:
         return _json_error("validation_error", str(exc), status=422)

@@ -38,6 +38,7 @@
     bairroFonte: document.getElementById("bairro-fonte"),
     qtdEquipes: document.getElementById("qtd_equipes"),
     equipes: document.getElementById("rota-equipes"),
+    vbDia: document.getElementById("planejamento_vb_dia"),
     vendas: document.getElementById("vendas_planejadas_semana"),
     blocoContratacao: document.getElementById("bloco-contratacao"),
     blocoDesligamento: document.getElementById("bloco-desligamento"),
@@ -46,6 +47,7 @@
     resumo: document.getElementById("rota-resumo"),
     resumoEquipes: document.getElementById("rota-resumo-equipes"),
     resumoPessoas: document.getElementById("rota-resumo-pessoas"),
+    resumoVb: document.getElementById("rota-resumo-vb"),
     resumoRh: document.getElementById("rota-resumo-rh"),
     formError: document.getElementById("rota-form-error"),
     statusSalvo: document.getElementById("rota-status-salvo"),
@@ -56,6 +58,14 @@
     spinBairro: document.getElementById("spin-bairro"),
     agendasQ: document.getElementById("rota-agendas-q"),
     agendasBody: document.getElementById("rota-agendas-body"),
+    resultadoDia: document.getElementById("rota-resultado-dia"),
+    kpiVbDia: document.getElementById("kpi-vb-dia"),
+    kpiVbSemana: document.getElementById("kpi-vb-semana"),
+    kpiEqDia: document.getElementById("kpi-eq-dia"),
+    kpiPeDia: document.getElementById("kpi-pe-dia"),
+    kpiPdvDia: document.getElementById("kpi-pdv-dia"),
+    especs: document.getElementById("rota-especs"),
+    resultadoBody: document.getElementById("rota-resultado-body"),
     dfvEmpty: document.getElementById("dfv-empty"),
     dfvLoading: document.getElementById("dfv-loading"),
     dfvErro: document.getElementById("dfv-erro"),
@@ -205,6 +215,10 @@
       n + (n === 1 ? " equipe em campo" : " equipes em campo");
     el.resumoPessoas.textContent =
       pessoas + (pessoas === 1 ? " pessoa" : " pessoas");
+    if (el.resumoVb) {
+      var vb = Number(el.vbDia && el.vbDia.value) || 0;
+      el.resumoVb.textContent = vb + " VBs";
+    }
     var rh = [];
     var c = qtdContratacoes();
     var d = qtdDesligamentos();
@@ -554,6 +568,7 @@
     el.qtdContratacoes.value = "";
     el.qtdDesligamentos.value = "";
     if (el.vendas) el.vendas.value = "";
+    if (el.vbDia) el.vbDia.value = "0";
     show(el.alertaSemana, false);
     show(el.statusSalvo, false);
     show(el.formError, false);
@@ -575,6 +590,7 @@
     setRadio("houve_desligamento", d > 0 ? "sim" : "nao");
     el.qtdContratacoes.value = c > 0 ? String(c) : "";
     el.qtdDesligamentos.value = d > 0 ? String(d) : "";
+    if (el.vbDia) el.vbDia.value = String(Number(checkin.planejamento_vb_dia) || 0);
     syncRh();
     el.statusSalvo.textContent = "Rota deste dia já registrada — você pode atualizar.";
     show(el.statusSalvo, true);
@@ -594,6 +610,7 @@
       show(el.form, visaoEquipe);
       if (el.pdvHint) show(el.pdvHint, true);
       show(el.skeleton, false);
+      if (visaoEquipe) loadAgendas();
       return;
     }
     if (el.pdvHint) show(el.pdvHint, false);
@@ -610,8 +627,12 @@
         return;
       }
       aplicarPayload(out.data.data, { manterLoc: options.manterLoc });
+      if (options.scroll && el.form) {
+        el.form.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
     } finally {
       show(el.skeleton, false);
+      if (visaoEquipe) loadAgendas();
     }
   }
 
@@ -669,13 +690,97 @@
     syncLocal();
   }
 
+  function renderResultado(payload) {
+    var totais = (payload && payload.totais) || {};
+    var dia = totais.dia || {};
+    var semana = totais.semana || {};
+    if (el.resultadoDia && payload && payload.data) {
+      var p = String(payload.data).split("-");
+      el.resultadoDia.textContent = p.length === 3 ? p[2] + "/" + p[1] : payload.data;
+    }
+    if (el.kpiVbDia) el.kpiVbDia.textContent = fmtNum(dia.vb || 0);
+    if (el.kpiVbSemana) el.kpiVbSemana.textContent = fmtNum(semana.vb || 0);
+    if (el.kpiEqDia) el.kpiEqDia.textContent = fmtNum(dia.equipes || 0);
+    if (el.kpiPeDia) el.kpiPeDia.textContent = fmtNum(dia.pessoas || 0);
+    if (el.kpiPdvDia) el.kpiPdvDia.textContent = fmtNum(dia.pdvs || 0);
+
+    if (el.especs) {
+      var grupos = (payload && payload.especialistas) || [];
+      if (!grupos.length) {
+        el.especs.innerHTML = "";
+      } else {
+        el.especs.innerHTML = grupos
+          .map(function (g) {
+            var d = g.dia || {};
+            var s = g.semana || {};
+            return (
+              "<article class=\"rota-espec-card\">" +
+              "<p class=\"rota-kicker\">Especialista</p>" +
+              "<h3>" +
+              (g.nome || "Sem especialista") +
+              "</h3>" +
+              "<p><strong>" +
+              fmtNum(d.vb || 0) +
+              " VBs</strong> no dia · " +
+              fmtNum(s.vb || 0) +
+              " na semana</p>" +
+              "<p class=\"help\">" +
+              fmtNum(d.equipes || 0) +
+              " equipes · " +
+              fmtNum(d.pessoas || 0) +
+              " pessoas · " +
+              fmtNum(d.pdvs || 0) +
+              " PDVs no dia</p>" +
+              "</article>"
+            );
+          })
+          .join("");
+      }
+    }
+
+    if (!el.resultadoBody) return;
+    var linhas = (payload && payload.items) || [];
+    if (!linhas.length) {
+      el.resultadoBody.innerHTML =
+        "<tr><td colspan=\"6\" class=\"help\">Nenhum PDV nesta busca.</td></tr>";
+      return;
+    }
+    el.resultadoBody.innerHTML = "";
+    linhas.forEach(function (pdv) {
+      var tr = document.createElement("tr");
+      if (String(pdv.id) === String(state.pdvId)) tr.className = "is-on";
+      var diaP = pdv.dia || {};
+      var semP = pdv.semana || {};
+      tr.innerHTML =
+        "<td><button type=\"button\" class=\"rota-agendas-pdv\" data-pdv=\"" +
+        pdv.id +
+        "\">" +
+        pdv.codigo_pdv +
+        " · " +
+        pdv.nome +
+        "</button></td>" +
+        "<td>" +
+        (pdv.especialista || "—") +
+        "</td>" +
+        "<td>" +
+        (diaP.preenchido ? fmtNum(diaP.vb || 0) : "—") +
+        "</td>" +
+        "<td>" +
+        (diaP.preenchido ? fmtNum(diaP.equipes || 0) : "—") +
+        "</td>" +
+        "<td>" +
+        (diaP.preenchido ? fmtNum(diaP.pessoas || 0) : "—") +
+        "</td>" +
+        "<td>" +
+        fmtNum(semP.vb || 0) +
+        "</td>";
+      el.resultadoBody.appendChild(tr);
+    });
+  }
+
   function renderAgendas(payload) {
     if (!el.agendasBody) return;
     var items = (payload && payload.items) || [];
-    var dias = (state.semana && state.semana.dias) || [];
-    if (!dias.length && payload && payload.semana_inicio) {
-      dias = ["1", "2", "3", "4", "5", "6", "7"];
-    }
     if (!items.length) {
       el.agendasBody.innerHTML =
         "<tr><td colspan=\"8\" class=\"help\">Nenhum PDV nesta busca.</td></tr>";
@@ -695,13 +800,29 @@
         "</button>";
       var cells = (state.semana.dias || []).map(function (slot) {
         var info = (pdv.dias || {})[slot.data];
-        if (!info) return "<td><span class=\"rota-ag-dot is-empty\"></span></td>";
+        if (!info) {
+          return (
+            "<td><button type=\"button\" class=\"rota-ag-dot is-empty\" data-pdv=\"" +
+            pdv.id +
+            "\" data-dia=\"" +
+            slot.data +
+            "\" aria-label=\"Abrir " +
+            slot.label +
+            "\"></button></td>"
+          );
+        }
         return (
-          "<td><span class=\"rota-ag-dot is-done\" title=\"" +
+          "<td><button type=\"button\" class=\"rota-ag-dot is-done\" data-pdv=\"" +
+          pdv.id +
+          "\" data-dia=\"" +
+          slot.data +
+          "\" title=\"" +
           (info.qtd_equipes || 1) +
-          " equipes\">" +
+          " equipes · " +
+          fmtNum(info.planejamento_vb_dia || 0) +
+          " VBs\">" +
           (info.qtd_equipes || 1) +
-          "</span></td>"
+          "</button></td>"
         );
       });
       tr.innerHTML = "<td>" + nome + "</td>" + cells.join("");
@@ -712,14 +833,19 @@
   async function loadAgendas() {
     if (!visaoEquipe || !urls.agendas) return;
     var q = el.agendasQ ? el.agendasQ.value : "";
-    var out = await api(urls.agendas + (q ? "?q=" + encodeURIComponent(q) : ""));
-    if (out.data.ok) renderAgendas(out.data.data);
+    var params = [];
+    if (state.dia) params.push("data=" + encodeURIComponent(state.dia));
+    if (q) params.push("q=" + encodeURIComponent(q));
+    var out = await api(urls.agendas + (params.length ? "?" + params.join("&") : ""));
+    if (out.data.ok) {
+      renderAgendas(out.data.data);
+      renderResultado(out.data.data);
+    }
   }
 
-  async function selecionarPdv(id) {
+  async function selecionarPdv(id, dia) {
     state.pdvId = String(id || "");
-    await carregarDia(state.dia || state.hoje);
-    loadAgendas();
+    await carregarDia(dia || state.dia || state.hoje, { scroll: true });
   }
 
   async function init() {
@@ -766,7 +892,7 @@
   el.form.addEventListener("input", function (ev) {
     var t = ev.target;
     if (!t) return;
-    if (t.name === "pessoas_equipe" || t.id === "qtd_contratacoes" || t.id === "qtd_desligamentos") {
+    if (t.name === "pessoas_equipe" || t.id === "qtd_contratacoes" || t.id === "qtd_desligamentos" || t.id === "planejamento_vb_dia") {
       syncResumo();
     }
   });
@@ -806,6 +932,13 @@
     el.agendasBody.addEventListener("click", function (ev) {
       var btn = ev.target.closest("[data-pdv]");
       if (!btn) return;
+      selecionarPdv(btn.getAttribute("data-pdv"), btn.getAttribute("data-dia") || undefined);
+    });
+  }
+  if (el.resultadoBody) {
+    el.resultadoBody.addEventListener("click", function (ev) {
+      var btn = ev.target.closest("[data-pdv]");
+      if (!btn) return;
       selecionarPdv(btn.getAttribute("data-pdv"));
     });
   }
@@ -829,6 +962,7 @@
       qtd_vendedores: totalPessoas(),
       qtd_contratacoes: qtdContratacoes(),
       qtd_desligamentos: qtdDesligamentos(),
+      planejamento_vb_dia: Number(el.vbDia && el.vbDia.value) || 0,
       uf: el.uf.value || "",
       cidade: el.cidade.value || "",
       bairro: (el.bairro.value || "").trim(),
@@ -868,7 +1002,9 @@
         (n === 1 ? " equipe" : " equipes") +
         " em campo · " +
         (salvo.total_campo || totalPessoas()) +
-        " pessoas.";
+        " pessoas · " +
+        (salvo.planejamento_vb_dia || 0) +
+        " VBs.";
       show(el.statusSalvo, true);
       loadAgendas();
     } finally {
