@@ -48,9 +48,9 @@ def senha_trocar(request: HttpRequest) -> HttpResponse:
                 ip=ip_de(request),
             )
             messages.success(request, "Senha atualizada.")
-            if parceiro_de(request.user):
-                return redirect("portal_parceiro")
-            return redirect("fila")
+            from .acesso import destino_pos_login
+
+            return redirect(destino_pos_login(request.user))
     return render(
         request,
         "tickets/senha_trocar.html",

@@ -190,9 +190,9 @@ def portal_inicio(request: HttpRequest) -> HttpResponse:
     pdv = parceiro_de(request.user)
     if pdv:
         return redirect("portal_parceiro")
-    if tem_acesso_interno(request.user):
-        return redirect("fila")
-    return redirect("login")
+    if not tem_acesso_interno(request.user):
+        return redirect("login")
+    return render(request, "tickets/portal_inicio.html")
 
 
 def _chave_pedido(pedido: str | None) -> str:

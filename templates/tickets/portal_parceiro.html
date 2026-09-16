@@ -1,22 +1,25 @@
 {% extends "base.html" %}
 {% block title %}Portal · {{ parceiro.nome }}{% endblock %}
-{% block main_class %}wrap wrap-wide{% endblock %}
+{% block body_class %}page-portal{% endblock %}
+{% block main_class %}wrap wrap-portal{% endblock %}
 {% block content %}
 <div class="hero">
   <div>
     <h1>Olá, {{ contato.nome }}</h1>
     <p>PDV {{ parceiro.codigo_pdv }} — {{ parceiro.nome }}</p>
   </div>
-  <a class="btn btn-secondary" href="{% url 'portal_contato' %}?trocar=1">Trocar contato</a>
-  <a class="btn btn-secondary" href="{% url 'portal_sair' %}">Sair</a>
+  <div class="hero-actions">
+    <a class="btn btn-secondary" href="{% url 'portal_contato' %}?trocar=1">Trocar contato</a>
+    <a class="btn btn-secondary" href="{% url 'portal_sair' %}">Sair</a>
+  </div>
 </div>
 
 {% include "tickets/_portal_cards.html" %}
 
-<div class="grid-2" style="margin-top:1.25rem">
+<div class="portal-extra grid-2">
   <div class="panel">
     <div class="panel-h"><h2>Atalhos</h2></div>
-    <div class="panel-b" style="display:flex;flex-direction:column;gap:0.75rem">
+    <div class="panel-b portal-atalhos">
       <a class="btn btn-primary" href="{% url 'abrir_demanda_form' %}">Abrir nova demanda</a>
       <a class="btn btn-secondary" href="{% url 'minhas_demandas' %}">Ver demandas do PDV</a>
       <a class="btn btn-secondary" href="{% url 'consulta_busca' %}">Consultar por protocolo</a>
@@ -26,7 +29,7 @@
     <div class="panel-h"><h2>Últimas do PDV</h2></div>
     <div class="panel-b">
       {% for t in recentes %}
-        <div style="display:flex;justify-content:space-between;gap:0.75rem;align-items:center;padding:0.55rem 0;border-bottom:1px solid var(--line)">
+        <div class="portal-recente">
           <div>
             <a class="protocolo" href="{% url 'consulta_protocolo' t.protocolo %}">{{ t.protocolo }}</a>
             <div class="help">{{ t.contato.nome|default:"—" }} · {{ t.get_tipo_display }} · {{ t.criado_em|date:"d/m/Y H:i" }}</div>
@@ -37,7 +40,7 @@
         <p class="help">Nenhuma demanda neste PDV ainda.</p>
       {% endfor %}
       {% if recentes %}
-        <div style="margin-top:0.85rem">
+        <div class="portal-recente-mais">
           <a href="{% url 'minhas_demandas' %}">Ver todas →</a>
         </div>
       {% endif %}

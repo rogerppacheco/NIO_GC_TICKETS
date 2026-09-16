@@ -1260,66 +1260,89 @@ body.page-fila .app-frame { height: 100vh; min-height: 0; overflow: hidden; }
 }
 .portal-cards {
   margin-top: 0.25rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
 }
-body.page-portal {
-  height: 100vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-body.page-portal .app-frame {
-  flex: 1;
+.portal-cards > * { min-width: 0; }
+.portal-cards .consulta-card {
+  padding: 0.7rem 0.8rem;
+  gap: 0.28rem;
   min-height: 0;
-  height: auto;
+}
+.portal-cards .consulta-ico { font-size: 1.25rem; }
+.portal-cards .consulta-card h2 { font-size: 1rem; }
+.portal-cards .consulta-card p {
+  font-size: 0.78rem;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
+}
+.portal-cards .consulta-tag {
+  margin-top: auto;
+  font-size: 0.66rem;
+  padding: 0.1rem 0.42rem;
+}
+.portal-cards .consulta-card-vtal { gap: 0.35rem; }
+.portal-cards .consulta-sync { font-size: 0.7rem; margin: 0; }
+.portal-cards .consulta-forms-access {
+  padding: 0.35rem 0.45rem;
+  gap: 0.4rem;
+}
+.portal-cards .consulta-forms-icon {
+  width: 1.6rem;
+  height: 1.6rem;
+  font-size: 0.8rem;
+  border-radius: 8px;
+}
+.portal-cards .consulta-forms-label { font-size: 0.76rem; }
+.portal-cards .consulta-forms-hint { display: none; }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; justify-content: flex-end; }
+.portal-atalhos { display: flex; flex-direction: column; gap: 0.4rem; }
+.portal-recente {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.32rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.portal-recente:last-of-type { border-bottom: 0; }
+.portal-recente-mais { margin-top: 0.45rem; }
+body.page-portal .app-frame {
+  min-height: 100vh;
 }
 body.page-portal .wrap-portal {
-  flex: 1;
-  min-height: 0;
   max-width: none;
   width: 100%;
   margin: 0;
-  padding: 0.85rem 1.15rem 1rem;
+  padding: 0.65rem 1rem 0.85rem;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 body.page-portal .hero {
   flex-shrink: 0;
   align-items: center;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.55rem;
 }
-body.page-portal .hero h1 { font-size: 1.35rem; }
-body.page-portal .hero p { margin-top: 0.15rem; font-size: 0.92rem; }
-body.page-portal .portal-cards {
-  flex: 1;
-  min-height: 0;
-  margin: 0;
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 0.85rem;
+body.page-portal .hero h1 { font-size: 1.28rem; }
+body.page-portal .hero p { margin-top: 0.1rem; font-size: 0.88rem; }
+body.page-portal .portal-cards { margin: 0; }
+body.page-portal .portal-extra {
+  margin-top: 0.65rem;
+  gap: 0.65rem;
 }
-body.page-portal .portal-cards > :nth-child(-n+3) { grid-column: span 2; }
-body.page-portal .portal-cards > :nth-child(n+4) { grid-column: span 3; }
-body.page-portal .consulta-card {
-  height: 100%;
-  min-height: 0;
-  justify-content: center;
-  padding: 1rem 1.1rem;
+body.page-portal .portal-extra .panel-h { padding: 0.4rem 0.7rem; }
+body.page-portal .portal-extra .panel-h h2 { font-size: 0.92rem; }
+body.page-portal .portal-extra .panel-b { padding: 0.5rem 0.7rem; }
+body.page-portal .portal-extra .btn { padding: 0.38rem 0.7rem; font-size: 0.82rem; }
+@media (max-width: 1100px) {
+  .portal-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-body.page-portal .consulta-card p { font-size: 0.88rem; }
-body.page-portal .consulta-forms-access { padding: 0.55rem 0.7rem; }
-@media (max-width: 900px), (max-height: 640px) {
-  body.page-portal { height: auto; overflow: auto; }
-  body.page-portal .app-frame { overflow: visible; }
-  body.page-portal .wrap-portal { overflow: visible; }
-  body.page-portal .portal-cards {
-    grid-template-columns: 1fr;
-    grid-template-rows: none;
-  }
-  body.page-portal .portal-cards > :nth-child(-n+3),
-  body.page-portal .portal-cards > :nth-child(n+4) { grid-column: auto; }
+@media (max-width: 700px) {
+  .portal-cards { grid-template-columns: 1fr; }
 }
 .consultas-tabs {
   margin-top: 0.25rem;

@@ -1,18 +1,17 @@
 {% extends "base.html" %}
-{% block title %}NIO ESPECIALISTA Tickets · Portal parceiros{% endblock %}
+{% block title %}Portal · NIO ESPECIALISTA Tickets{% endblock %}
 {% block body_class %}page-portal{% endblock %}
 {% block main_class %}wrap wrap-portal{% endblock %}
 {% block content %}
 <div class="hero">
   <div>
-    <h1>NIO ESPECIALISTA Tickets</h1>
-    <p>Demandas, consultas e guias operacionais para parceiros Nova Fibra.</p>
+    <h1>Olá, {{ nav_primeiro_nome|default:user.username }}</h1>
+    <p>Fila, consultas, processos e materiais — o mesmo hub do ponto de venda.</p>
   </div>
-  {% if portal_contato %}
-    <a class="btn btn-secondary" href="{% url 'portal_parceiro' %}">Meu portal ({{ portal_contato.nome }})</a>
-  {% else %}
-    <a class="btn btn-secondary" href="{% url 'consulta_busca' %}">Consultar protocolo</a>
-  {% endif %}
+  <div class="hero-actions">
+    <a class="btn btn-primary" href="{% url 'fila' %}">Abrir fila</a>
+    <a class="btn btn-secondary" href="{% url 'ticket_criar' %}">Nova demanda</a>
+  </div>
 </div>
 
 {% include "tickets/_portal_cards.html" %}

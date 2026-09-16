@@ -1912,6 +1912,25 @@ class LoginUnificadoTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "Usuário ou senha inválidos")
 
+    def test_especialista_ve_portal_com_cards(self):
+        self.client.force_login(self.spec)
+        r = self.client.get(reverse("portal_inicio"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Trade Hub")
+        self.assertContains(r, "Central de processos")
+        self.assertContains(r, "Consulta DFV")
+        self.assertContains(r, "Viabilidade VTAL")
+        self.assertContains(r, reverse("fila"))
+        self.assertContains(r, reverse("ticket_criar"))
+        self.assertNotContains(r, "Quem está operando")
+        login = self.client.post(
+            reverse("login"),
+            {"username": "spec_nio", "password": "senha-spec-ok1"},
+        )
+        self.assertEqual(login.status_code, 302)
+        self.assertIn("/abrir/", login["Location"])
+        self.assertNotIn("/fila/", login["Location"])
+
     def test_gerencia_acessa_fila_e_acessos(self):
         self.client.force_login(self.ger)
         self.assertEqual(self.client.get(reverse("fila")).status_code, 200)

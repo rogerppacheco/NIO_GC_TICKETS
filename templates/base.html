@@ -25,6 +25,7 @@
       </button>
       <nav class="nav" id="site-nav" aria-label="Principal">
         {% if tem_acesso_interno %}
+          <a href="{% url 'portal_inicio' %}" {% if request.resolver_match.url_name == 'portal_inicio' %}class="is-on"{% endif %}>Portal</a>
           <a href="{% url 'fila' %}" {% if request.resolver_match.url_name == 'fila' %}class="is-on"{% endif %}>Fila {% if nav_novos %}<span class="badge">{{ nav_novos }}</span>{% endif %}</a>
           <a href="{% url 'ticket_criar' %}" {% if request.resolver_match.url_name == 'ticket_criar' %}class="is-on"{% endif %}>Nova demanda</a>
           <details class="nav-more">

@@ -1,18 +1,32 @@
 {% load static %}
 <div class="consultas-grid portal-cards">
+  {% if tem_acesso_interno %}
+  <a class="consulta-card" href="{% url 'fila' %}">
+    <span class="consulta-ico">📥</span>
+    <h2>Fila</h2>
+    <p>Acompanhe e responda as demandas dos seus PDVs.</p>
+    <span class="consulta-tag">Operação do dia</span>
+  </a>
+  <a class="consulta-card" href="{% url 'ticket_criar' %}">
+    <span class="consulta-ico">🎫</span>
+    <h2>Nova demanda</h2>
+    <p>Abra uma solicitação na fila do especialista.</p>
+    <span class="consulta-tag">Equipe NIO</span>
+  </a>
+  {% else %}
   <a class="consulta-card" href="{% if portal_parceiro and portal_contato %}{% url 'rota_portal' %}{% else %}{% url 'portal_contato' %}?next=rota{% endif %}">
     <span class="consulta-ico">🗺️</span>
     <h2>Rota</h2>
     <p>Check-in diário: tipo de rota, equipe, bairro e HPs livres (DFV).</p>
     <span class="consulta-tag">Operação do dia</span>
   </a>
-
   <a class="consulta-card" href="{% url 'abrir_demanda_form' %}">
     <span class="consulta-ico">🎫</span>
     <h2>Abrir demanda</h2>
     <p>Registre uma solicitação ao especialista NIO do seu PDV.</p>
     <span class="consulta-tag">Portal parceiro</span>
   </a>
+  {% endif %}
 
   <a class="consulta-card" href="{% url 'consulta_dfv' %}">
     <span class="consulta-ico">🏢</span>

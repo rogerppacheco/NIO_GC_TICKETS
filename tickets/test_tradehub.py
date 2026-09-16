@@ -70,6 +70,8 @@ class TradeHubPagesTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, reverse("tradehub"))
         self.assertContains(resp, "Trade Hub")
+        self.assertContains(resp, "page-portal")
+        self.assertContains(resp, "portal-cards")
 
     def test_extras_aparecem_na_home(self):
         resp = self.client.get(reverse("tradehub"))

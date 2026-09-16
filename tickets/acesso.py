@@ -301,6 +301,8 @@ def destino_pos_login(user) -> str:
 
     if eh_parceiro(user) or parceiro_de(user):
         return reverse("portal_parceiro")
+    if tem_acesso_interno(user):
+        return reverse("portal_inicio")
     return reverse("fila")
 
 
