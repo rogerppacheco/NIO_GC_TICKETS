@@ -12,11 +12,17 @@
     dfv: root.dataset.dfvUrl,
     validar: root.dataset.validarUrl,
     checkin: root.dataset.checkinUrl,
+    agendas: root.dataset.agendasUrl,
   };
 
+  var visaoEquipe = root.dataset.visaoEquipe === "1";
+
   var el = {
+    week: document.getElementById("rota-week"),
     skeleton: document.getElementById("rota-skeleton"),
     form: document.getElementById("rota-form"),
+    title: document.getElementById("rota-checkin-title"),
+    pdvHint: document.getElementById("rota-pdv-hint"),
     blocoSemana: document.getElementById("bloco-semana"),
     blocoLocal: document.getElementById("bloco-local"),
     metaHint: document.getElementById("meta-semana-hint"),
@@ -29,10 +35,18 @@
     uf: document.getElementById("rota_uf"),
     cidade: document.getElementById("rota_cidade"),
     bairro: document.getElementById("rota_bairro"),
-    bairrosList: document.getElementById("rota_bairros_list"),
     bairroFonte: document.getElementById("bairro-fonte"),
-    qtd: document.getElementById("qtd_vendedores"),
+    qtdEquipes: document.getElementById("qtd_equipes"),
+    equipes: document.getElementById("rota-equipes"),
     vendas: document.getElementById("vendas_planejadas_semana"),
+    blocoContratacao: document.getElementById("bloco-contratacao"),
+    blocoDesligamento: document.getElementById("bloco-desligamento"),
+    qtdContratacoes: document.getElementById("qtd_contratacoes"),
+    qtdDesligamentos: document.getElementById("qtd_desligamentos"),
+    resumo: document.getElementById("rota-resumo"),
+    resumoEquipes: document.getElementById("rota-resumo-equipes"),
+    resumoPessoas: document.getElementById("rota-resumo-pessoas"),
+    resumoRh: document.getElementById("rota-resumo-rh"),
     formError: document.getElementById("rota-form-error"),
     statusSalvo: document.getElementById("rota-status-salvo"),
     btnSalvar: document.getElementById("btn-salvar-rota"),
@@ -40,6 +54,8 @@
     spinUf: document.getElementById("spin-uf"),
     spinCidade: document.getElementById("spin-cidade"),
     spinBairro: document.getElementById("spin-bairro"),
+    agendasQ: document.getElementById("rota-agendas-q"),
+    agendasBody: document.getElementById("rota-agendas-body"),
     dfvEmpty: document.getElementById("dfv-empty"),
     dfvLoading: document.getElementById("dfv-loading"),
     dfvErro: document.getElementById("dfv-erro"),
@@ -60,13 +76,18 @@
   };
 
   var state = {
+    pdvId: root.dataset.pdvId || "",
+    dia: "",
+    hoje: "",
     ehSegunda: false,
+    semana: { dias: [] },
     metaSemana: null,
     dfvResumo: null,
     bairroTimer: null,
     bairroReq: 0,
     cidadeReq: 0,
     bairrosListReq: 0,
+    agendasTimer: null,
   };
 
   function csrfToken() {
@@ -89,22 +110,21 @@
     field.classList.toggle("is-busy", !!on);
   }
 
-  function lockSalvar(on) {
-    if (!el.btnSalvar) return;
-    el.btnSalvar.disabled = !!on;
-  }
-
-  function clearAllSpinners() {
-    setSpinner(el.spinUf, false);
-    setSpinner(el.spinCidade, false);
-    setSpinner(el.spinBairro, false);
-    setSpinner(el.spinSalvar, false);
-    show(el.dfvLoading, false);
-  }
-
   function fmtNum(n) {
     if (n === null || n === undefined || n === "") return "—";
     return Number(n).toLocaleString("pt-BR");
+  }
+
+  function withPdv(url, extra) {
+    var parts = [];
+    if (state.pdvId) parts.push("pdv=" + encodeURIComponent(state.pdvId));
+    Object.keys(extra || {}).forEach(function (k) {
+      if (extra[k] !== undefined && extra[k] !== "") {
+        parts.push(encodeURIComponent(k) + "=" + encodeURIComponent(extra[k]));
+      }
+    });
+    if (!parts.length) return url;
+    return url + (url.indexOf("?") >= 0 ? "&" : "?") + parts.join("&");
   }
 
   async function api(url, options) {
@@ -129,24 +149,130 @@
     return { res: res, data: data };
   }
 
-  function tipoRota() {
-    var checked = el.form.querySelector('input[name="tipo_rota"]:checked');
-    return checked ? checked.value : "PRESENCIAL";
+  function radioVal(name, fallback) {
+    var checked = el.form.querySelector('input[name="' + name + '"]:checked');
+    return checked ? checked.value : fallback;
   }
 
-  function syncTipo() {
-    var presencial = tipoRota() === "PRESENCIAL";
-    show(el.blocoLocal, presencial);
-    if (!presencial) {
-      resetDfv();
+  function setRadio(name, value) {
+    var node = el.form.querySelector('input[name="' + name + '"][value="' + value + '"]');
+    if (node) node.checked = true;
+  }
+
+  function precisaLocal() {
+    return lerEquipes().some(function (eq) {
+      return eq.atuacao !== "DIGITAL";
+    });
+  }
+
+  function lerEquipes() {
+    var rows = el.equipes.querySelectorAll(".rota-equipe");
+    var saida = [];
+    rows.forEach(function (row, idx) {
+      var atuacao = row.querySelector('input[type="radio"]:checked');
+      var pessoas = row.querySelector('input[name="pessoas_equipe"]');
+      saida.push({
+        ordem: idx + 1,
+        atuacao: atuacao ? atuacao.value : "PAP",
+        pessoas: Number(pessoas && pessoas.value) || 0,
+      });
+    });
+    return saida;
+  }
+
+  function totalPessoas() {
+    return lerEquipes().reduce(function (acc, eq) {
+      return acc + (eq.pessoas > 0 ? eq.pessoas : 0);
+    }, 0);
+  }
+
+  function qtdContratacoes() {
+    return radioVal("houve_contratacao", "nao") === "sim"
+      ? Number(el.qtdContratacoes.value) || 0
+      : 0;
+  }
+
+  function qtdDesligamentos() {
+    return radioVal("houve_desligamento", "nao") === "sim"
+      ? Number(el.qtdDesligamentos.value) || 0
+      : 0;
+  }
+
+  function syncResumo() {
+    var n = Number(el.qtdEquipes.value) || 0;
+    var pessoas = totalPessoas();
+    el.resumoEquipes.textContent =
+      n + (n === 1 ? " equipe em campo" : " equipes em campo");
+    el.resumoPessoas.textContent =
+      pessoas + (pessoas === 1 ? " pessoa" : " pessoas");
+    var rh = [];
+    var c = qtdContratacoes();
+    var d = qtdDesligamentos();
+    if (c) rh.push("+" + c + " contratação" + (c === 1 ? "" : "ões"));
+    if (d) rh.push(d + " desligamento" + (d === 1 ? "" : "s"));
+    el.resumoRh.textContent = rh.join(" · ");
+  }
+
+  function syncLocal() {
+    var precisa = precisaLocal();
+    show(el.blocoLocal, precisa);
+    if (!precisa) resetDfv();
+  }
+
+  function syncRh() {
+    show(el.blocoContratacao, radioVal("houve_contratacao", "nao") === "sim");
+    show(el.blocoDesligamento, radioVal("houve_desligamento", "nao") === "sim");
+    syncResumo();
+  }
+
+  function renderEquipes(preset) {
+    var n = Math.max(1, Math.min(12, Number(el.qtdEquipes.value) || 1));
+    el.qtdEquipes.value = String(n);
+    var atuais = preset && preset.length ? preset : lerEquipes();
+    el.equipes.innerHTML = "";
+    for (var i = 0; i < n; i++) {
+      var base = atuais[i] || { atuacao: "PAP", pessoas: 1 };
+      var wrap = document.createElement("div");
+      wrap.className = "rota-equipe";
+      wrap.innerHTML =
+        "<p class=\"rota-equipe-n\">Equipe " +
+        (i + 1) +
+        "</p>" +
+        "<div class=\"rota-segment\" role=\"group\" aria-label=\"Atuação da equipe " +
+        (i + 1) +
+        "\">" +
+        ["PAP", "DIGITAL", "MISTO"]
+          .map(function (modo) {
+            var checked = (base.atuacao || "PAP") === modo ? " checked" : "";
+            var label = modo === "MISTO" ? "Misto" : modo === "DIGITAL" ? "Digital" : "PAP";
+            return (
+              "<label class=\"rota-seg\"><input type=\"radio\" name=\"atuacao_" +
+              i +
+              "\" value=\"" +
+              modo +
+              "\"" +
+              checked +
+              "><span>" +
+              label +
+              "</span></label>"
+            );
+          })
+          .join("") +
+        "</div>" +
+        "<label class=\"rota-equipe-pessoas\">Pessoas <input class=\"rota-input\" type=\"number\" inputmode=\"numeric\" name=\"pessoas_equipe\" min=\"1\" max=\"80\" step=\"1\" value=\"" +
+        (base.pessoas > 0 ? base.pessoas : 1) +
+        "\"></label>";
+      el.equipes.appendChild(wrap);
     }
+    syncLocal();
+    syncResumo();
   }
 
-  function fillSelect(select, items, valueKey, labelKey, selected) {
+  function fillSelect(select, items, valueKey, labelKey, selected, emptyLabel) {
     select.innerHTML = "";
     var opt0 = document.createElement("option");
     opt0.value = "";
-    opt0.textContent = "Selecione";
+    opt0.textContent = emptyLabel || "Selecione";
     select.appendChild(opt0);
     var seen = {};
     (items || []).forEach(function (item) {
@@ -166,10 +292,8 @@
   }
 
   function resetBairroField(message) {
-    el.bairro.value = "";
-    el.bairrosList.innerHTML = "";
+    fillSelect(el.bairro, [], "bairro", "bairro", "", "Selecione a cidade");
     el.bairro.disabled = true;
-    el.bairro.placeholder = "Selecione a cidade";
     el.bairroFonte.textContent = message || "";
     resetDfv();
   }
@@ -210,7 +334,6 @@
       el.dfvClasseSocial.textContent = perfil.classe_social_predominante || "—";
     }
     el.dfvCdos.textContent = fmtNum(perfil.cdos_distintos);
-
     el.dfvAlertas.innerHTML = "";
     (resumo.alertas || []).forEach(function (a) {
       var li = document.createElement("li");
@@ -223,12 +346,10 @@
         "</span>";
       el.dfvAlertas.appendChild(li);
     });
-
     var meta = resumo.meta || {};
     el.dfvMeta.textContent = meta.incompleto
       ? "Resumo parcial (volume alto no bairro)."
       : "Fonte: " + (meta.fonte || "DFV");
-
     show(el.dfvEmpty, false);
     show(el.dfvLoading, false);
     show(el.dfvErro, false);
@@ -243,7 +364,7 @@
     setSpinner(el.spinUf, true);
     el.cidade.disabled = true;
     try {
-      var out = await api(urls.ufs);
+      var out = await api(withPdv(urls.ufs));
       if (!out.data.ok) return;
       fillSelect(el.uf, out.data.data.items, "uf", "uf", selectedUf);
     } finally {
@@ -265,7 +386,7 @@
     }
     setSpinner(el.spinCidade, true);
     try {
-      var out = await api(urls.cidades + "?uf=" + encodeURIComponent(uf));
+      var out = await api(withPdv(urls.cidades, { uf: uf }));
       if (reqId !== state.cidadeReq) return;
       if (!out.data.ok) return;
       fillSelect(el.cidade, out.data.data.items, "cidade", "cidade", selectedCidade);
@@ -278,66 +399,42 @@
     }
   }
 
-  /** Só chama após seleção de cidade (não no carregamento inicial de UF). */
   async function loadBairros(uf, cidade, preserveBairro) {
     var reqId = ++state.bairrosListReq;
     var keep = (preserveBairro || "").trim();
-    el.bairrosList.innerHTML = "";
-    el.bairroFonte.textContent = "";
     if (!(uf && cidade)) {
       resetBairroField();
       return;
     }
     el.bairro.disabled = true;
-    el.bairro.placeholder = "Carregando bairros…";
-    if (!keep) el.bairro.value = "";
     setFieldBusy(el.fieldBairro, true);
     setSpinner(el.spinBairro, true);
     try {
-      var out = await api(
-        urls.bairros +
-          "?uf=" +
-          encodeURIComponent(uf) +
-          "&cidade=" +
-          encodeURIComponent(cidade)
-      );
+      var out = await api(withPdv(urls.bairros, { uf: uf, cidade: cidade }));
       if (reqId !== state.bairrosListReq) return;
       if (!out.data.ok) {
-        el.bairro.placeholder = "Digite o bairro";
-        el.bairroFonte.textContent =
-          "Não foi possível listar bairros; digite manualmente.";
-        if (keep) el.bairro.value = keep;
+        fillSelect(el.bairro, [], "bairro", "bairro", "", "Lista indisponível");
+        el.bairroFonte.textContent = "Não foi possível listar os bairros disponíveis.";
         return;
       }
       var items = out.data.data.items || [];
-      var seen = {};
-      items.forEach(function (item) {
-        var nome = String(item.bairro || "").trim();
-        if (!nome) return;
-        var key = nome.toUpperCase();
-        if (seen[key]) return;
-        seen[key] = true;
-        var opt = document.createElement("option");
-        opt.value = nome;
-        el.bairrosList.appendChild(opt);
-      });
-      el.bairro.placeholder = "Selecione ou digite o bairro";
-      if (keep) el.bairro.value = keep;
+      fillSelect(el.bairro, items, "bairro", "bairro", keep, "Selecione o bairro");
+      el.bairro.disabled = items.length === 0;
       var fonte = out.data.data.fonte || "";
       el.bairroFonte.textContent = items.length
-        ? items.length + " bairros carregados após a cidade (" + fonte + ")"
-        : "Nenhum bairro na lista — digite manualmente (" + fonte + ")";
+        ? items.length + " bairros disponíveis"
+        : "Nenhum bairro disponível para esta cidade (" + fonte + ").";
+      if (keep && el.bairro.value === keep) scheduleDfv();
     } finally {
       if (reqId === state.bairrosListReq) {
         setSpinner(el.spinBairro, false);
         setFieldBusy(el.fieldBairro, false);
-        el.bairro.disabled = false;
       }
     }
   }
 
   async function loadDfv(uf, cidade, bairro) {
-    if (!(uf && cidade && bairro) || tipoRota() !== "PRESENCIAL") {
+    if (!(uf && cidade && bairro) || !precisaLocal()) {
       resetDfv();
       return;
     }
@@ -347,19 +444,9 @@
     show(el.dfvErro, false);
     show(el.dfvLoading, true);
     el.dfvLocal.textContent = bairro + " · " + cidade + "/" + uf;
-    el.bairro.disabled = true;
-    lockSalvar(true);
-
+    el.btnSalvar.disabled = true;
     try {
-      var out = await api(
-        urls.dfv +
-          "?uf=" +
-          encodeURIComponent(uf) +
-          "&cidade=" +
-          encodeURIComponent(cidade) +
-          "&bairro=" +
-          encodeURIComponent(bairro)
-      );
+      var out = await api(withPdv(urls.dfv, { uf: uf, cidade: cidade, bairro: bairro }));
       if (reqId !== state.bairroReq) return;
       if (!out.data.ok) {
         show(el.dfvErro, true);
@@ -380,8 +467,7 @@
     } finally {
       if (reqId === state.bairroReq) {
         show(el.dfvLoading, false);
-        el.bairro.disabled = false;
-        lockSalvar(false);
+        el.btnSalvar.disabled = false;
       }
     }
   }
@@ -389,13 +475,13 @@
   function scheduleDfv() {
     clearTimeout(state.bairroTimer);
     var bairro = (el.bairro.value || "").trim();
-    if (!bairro) {
+    if (!bairro || !precisaLocal()) {
       resetDfv();
       return;
     }
     state.bairroTimer = setTimeout(function () {
       loadDfv(el.uf.value, el.cidade.value, bairro);
-    }, 400);
+    }, 250);
   }
 
   function renderAlertaSemana(status, mensagem, metaRef) {
@@ -412,7 +498,7 @@
   }
 
   async function validarSemana() {
-    if (!state.ehSegunda) return;
+    if (!state.ehSegunda || !state.pdvId) return;
     var raw = el.vendas.value;
     if (raw === "" || raw === null) {
       show(el.alertaSemana, false);
@@ -420,30 +506,101 @@
     }
     var out = await api(urls.validar, {
       method: "POST",
-      body: JSON.stringify({ vendas_planejadas: Number(raw) }),
+      body: JSON.stringify({ vendas_planejadas: Number(raw), pdv: state.pdvId }),
     });
     if (!out.data.ok) return;
     var d = out.data.data;
     renderAlertaSemana(d.status_alerta, d.mensagem, d.meta_referencia);
   }
 
+  function rotuloDia(iso) {
+    if (!iso) return "Rota";
+    var p = iso.split("-");
+    return "Rota de " + p[2] + "/" + p[1];
+  }
+
+  function renderWeek() {
+    if (!el.week) return;
+    el.week.innerHTML = "";
+    (state.semana.dias || []).forEach(function (dia) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "rota-day";
+      if (dia.data === state.dia) btn.classList.add("is-on");
+      if (dia.eh_hoje) btn.classList.add("is-hoje");
+      if (dia.preenchido) btn.classList.add("is-done");
+      btn.dataset.data = dia.data;
+      btn.innerHTML =
+        "<span class=\"rota-day-lab\">" +
+        dia.label +
+        "</span><span class=\"rota-day-num\">" +
+        dia.data.slice(8) +
+        "</span>" +
+        (dia.preenchido
+          ? "<span class=\"rota-day-dot\">" + (dia.qtd_equipes || 1) + "</span>"
+          : "");
+      btn.addEventListener("click", function () {
+        carregarDia(dia.data);
+      });
+      el.week.appendChild(btn);
+    });
+  }
+
+  function resetFormulario() {
+    el.qtdEquipes.value = "1";
+    renderEquipes([{ atuacao: "PAP", pessoas: 1 }]);
+    setRadio("houve_contratacao", "nao");
+    setRadio("houve_desligamento", "nao");
+    el.qtdContratacoes.value = "";
+    el.qtdDesligamentos.value = "";
+    if (el.vendas) el.vendas.value = "";
+    show(el.alertaSemana, false);
+    show(el.statusSalvo, false);
+    show(el.formError, false);
+    el.btnSalvar.querySelector(".btn-label").textContent = "Registrar rota";
+    syncRh();
+  }
+
   function applyCheckin(checkin) {
-    if (!checkin) return;
-    var radio = el.form.querySelector(
-      'input[name="tipo_rota"][value="' + checkin.tipo_rota + '"]'
-    );
-    if (radio) radio.checked = true;
-    el.qtd.value = checkin.qtd_vendedores;
-    syncTipo();
-    el.statusSalvo.textContent =
-      "Check-in de hoje já registrado — você pode atualizar.";
+    if (!checkin) {
+      resetFormulario();
+      return;
+    }
+    var equipes = checkin.equipes && checkin.equipes.length ? checkin.equipes : [];
+    el.qtdEquipes.value = String(checkin.qtd_equipes || equipes.length || 1);
+    renderEquipes(equipes);
+    var c = Number(checkin.qtd_contratacoes) || 0;
+    var d = Number(checkin.qtd_desligamentos) || 0;
+    setRadio("houve_contratacao", c > 0 ? "sim" : "nao");
+    setRadio("houve_desligamento", d > 0 ? "sim" : "nao");
+    el.qtdContratacoes.value = c > 0 ? String(c) : "";
+    el.qtdDesligamentos.value = d > 0 ? String(d) : "";
+    syncRh();
+    el.statusSalvo.textContent = "Rota deste dia já registrada — você pode atualizar.";
     show(el.statusSalvo, true);
     el.btnSalvar.querySelector(".btn-label").textContent = "Atualizar rota";
   }
 
-  async function init() {
+  function podeEditar() {
+    return !!state.pdvId;
+  }
+
+  async function carregarDia(iso, opts) {
+    var options = opts || {};
+    state.dia = iso;
+    renderWeek();
+    if (el.title) el.title.textContent = rotuloDia(iso);
+    if (!state.pdvId) {
+      show(el.form, visaoEquipe);
+      if (el.pdvHint) show(el.pdvHint, true);
+      show(el.skeleton, false);
+      return;
+    }
+    if (el.pdvHint) show(el.pdvHint, false);
+    show(el.skeleton, true);
+    show(el.form, false);
     try {
-      var out = await api(urls.hoje);
+      var out = await api(withPdv(urls.hoje, { data: iso }));
       show(el.skeleton, false);
       show(el.form, true);
       if (!out.data.ok) {
@@ -452,59 +609,173 @@
           (out.data.error && out.data.error.message) || "Falha ao carregar.";
         return;
       }
-      var data = out.data.data;
-      state.ehSegunda = !!data.eh_segunda;
-      state.metaSemana = data.meta_semana || {};
-      show(el.blocoSemana, state.ehSegunda);
-      if (state.ehSegunda) {
-        el.metaHint.textContent =
-          "Meta semanal de referência: " +
-          fmtNum(state.metaSemana.valor) +
-          " (meta mensal VL " +
-          fmtNum(state.metaSemana.meta_mensal_vl) +
-          " ÷ 4).";
-        if (data.planejamento_semana) {
-          el.vendas.value = data.planejamento_semana.vendas_planejadas;
-          renderAlertaSemana(
-            data.planejamento_semana.status_alerta,
-            data.planejamento_semana.mensagem,
-            data.planejamento_semana.meta_referencia
-          );
-        }
-      }
+      aplicarPayload(out.data.data, { manterLoc: options.manterLoc });
+    } finally {
+      show(el.skeleton, false);
+    }
+  }
 
+  async function aplicarPayload(data, opts) {
+    var options = opts || {};
+    state.hoje = data.hoje || state.hoje;
+    state.ehSegunda = !!data.eh_segunda;
+    state.metaSemana = data.meta_semana || {};
+    if (data.semana) state.semana = data.semana;
+    if (data.pdv && data.pdv.id) state.pdvId = String(data.pdv.id);
+    state.dia = data.data || state.dia;
+    renderWeek();
+    if (el.title) el.title.textContent = rotuloDia(state.dia);
+
+    show(el.blocoSemana, state.ehSegunda);
+    if (state.ehSegunda) {
+      el.metaHint.textContent =
+        "Meta semanal de referência: " +
+        fmtNum(state.metaSemana.valor) +
+        " (meta mensal VL " +
+        fmtNum(state.metaSemana.meta_mensal_vl) +
+        " ÷ 4).";
+      if (data.planejamento_semana) {
+        el.vendas.value = data.planejamento_semana.vendas_planejadas;
+        renderAlertaSemana(
+          data.planejamento_semana.status_alerta,
+          data.planejamento_semana.mensagem,
+          data.planejamento_semana.meta_referencia
+        );
+      } else if (!data.checkin) {
+        el.vendas.value = "";
+        show(el.alertaSemana, false);
+      }
+    }
+
+    applyCheckin(data.checkin || null);
+
+    if (!options.manterLoc) {
       var loc = (data.checkin && data.checkin.local) || data.defaults || {};
       var uf = loc.uf || "";
       var cidade = loc.cidade || "";
       var bairro = loc.bairro || "";
-
       await loadUfs(uf);
       if (uf) {
         await loadCidades(uf, cidade);
-        // Bairros só depois da cidade definida (check-in ou default com cidade)
         if (cidade) {
           await loadBairros(uf, cidade, bairro);
-          if (bairro && (!data.checkin || data.checkin.tipo_rota === "PRESENCIAL")) {
-            scheduleDfv();
-          }
         } else {
           resetBairroField("Selecione a cidade para carregar os bairros.");
         }
+      } else {
+        resetBairroField();
       }
+    }
+    syncLocal();
+  }
 
-      if (data.checkin) applyCheckin(data.checkin);
-      syncTipo();
+  function renderAgendas(payload) {
+    if (!el.agendasBody) return;
+    var items = (payload && payload.items) || [];
+    var dias = (state.semana && state.semana.dias) || [];
+    if (!dias.length && payload && payload.semana_inicio) {
+      dias = ["1", "2", "3", "4", "5", "6", "7"];
+    }
+    if (!items.length) {
+      el.agendasBody.innerHTML =
+        "<tr><td colspan=\"8\" class=\"help\">Nenhum PDV nesta busca.</td></tr>";
+      return;
+    }
+    el.agendasBody.innerHTML = "";
+    items.forEach(function (pdv) {
+      var tr = document.createElement("tr");
+      if (String(pdv.id) === String(state.pdvId)) tr.className = "is-on";
+      var nome =
+        "<button type=\"button\" class=\"rota-agendas-pdv\" data-pdv=\"" +
+        pdv.id +
+        "\">" +
+        pdv.codigo_pdv +
+        " · " +
+        pdv.nome +
+        "</button>";
+      var cells = (state.semana.dias || []).map(function (slot) {
+        var info = (pdv.dias || {})[slot.data];
+        if (!info) return "<td><span class=\"rota-ag-dot is-empty\"></span></td>";
+        return (
+          "<td><span class=\"rota-ag-dot is-done\" title=\"" +
+          (info.qtd_equipes || 1) +
+          " equipes\">" +
+          (info.qtd_equipes || 1) +
+          "</span></td>"
+        );
+      });
+      tr.innerHTML = "<td>" + nome + "</td>" + cells.join("");
+      el.agendasBody.appendChild(tr);
+    });
+  }
+
+  async function loadAgendas() {
+    if (!visaoEquipe || !urls.agendas) return;
+    var q = el.agendasQ ? el.agendasQ.value : "";
+    var out = await api(urls.agendas + (q ? "?q=" + encodeURIComponent(q) : ""));
+    if (out.data.ok) renderAgendas(out.data.data);
+  }
+
+  async function selecionarPdv(id) {
+    state.pdvId = String(id || "");
+    await carregarDia(state.dia || state.hoje);
+    loadAgendas();
+  }
+
+  async function init() {
+    try {
+      var out = await api(withPdv(urls.hoje));
+      if (!out.data.ok) {
+        show(el.skeleton, false);
+        show(el.form, true);
+        show(el.formError, true);
+        el.formError.textContent =
+          (out.data.error && out.data.error.message) || "Falha ao carregar.";
+        return;
+      }
+      var data = out.data.data;
+      state.hoje = data.hoje || data.data;
+      state.dia = data.data;
+      if (data.pdv && data.pdv.id) state.pdvId = String(data.pdv.id);
+      if (data.semana) state.semana = data.semana;
+      renderWeek();
+      show(el.skeleton, false);
+      if (state.pdvId) {
+        show(el.form, true);
+        await aplicarPayload(data);
+      } else {
+        show(el.form, visaoEquipe);
+        if (el.pdvHint) show(el.pdvHint, true);
+      }
+      await loadAgendas();
     } finally {
-      clearAllSpinners();
+      show(el.skeleton, false);
     }
   }
 
   el.form.addEventListener("change", function (ev) {
-    if (ev.target && ev.target.name === "tipo_rota") syncTipo();
+    var t = ev.target;
+    if (!t) return;
+    if (t.name === "houve_contratacao" || t.name === "houve_desligamento") syncRh();
+    if (t.name && t.name.indexOf("atuacao_") === 0) {
+      syncLocal();
+      scheduleDfv();
+    }
+    if (t.name === "pessoas_equipe") syncResumo();
+  });
+  el.form.addEventListener("input", function (ev) {
+    var t = ev.target;
+    if (!t) return;
+    if (t.name === "pessoas_equipe" || t.id === "qtd_contratacoes" || t.id === "qtd_desligamentos") {
+      syncResumo();
+    }
+  });
+
+  el.qtdEquipes.addEventListener("change", function () {
+    renderEquipes();
   });
 
   el.uf.addEventListener("change", function () {
-    // Trocar UF: limpa cidade/bairro; bairros só após nova cidade
     loadCidades(el.uf.value, "");
   });
 
@@ -517,7 +788,6 @@
     loadBairros(el.uf.value, cidade, "");
   });
 
-  el.bairro.addEventListener("input", scheduleDfv);
   el.bairro.addEventListener("change", scheduleDfv);
 
   if (el.vendas) {
@@ -525,15 +795,40 @@
     el.vendas.addEventListener("blur", validarSemana);
   }
 
+  if (el.agendasQ) {
+    el.agendasQ.addEventListener("input", function () {
+      clearTimeout(state.agendasTimer);
+      state.agendasTimer = setTimeout(loadAgendas, 280);
+    });
+  }
+
+  if (el.agendasBody) {
+    el.agendasBody.addEventListener("click", function (ev) {
+      var btn = ev.target.closest("[data-pdv]");
+      if (!btn) return;
+      selecionarPdv(btn.getAttribute("data-pdv"));
+    });
+  }
+
   el.form.addEventListener("submit", async function (ev) {
     ev.preventDefault();
     show(el.formError, false);
+    if (!podeEditar()) {
+      show(el.formError, true);
+      el.formError.textContent = "Selecione o PDV na agenda.";
+      return;
+    }
     setSpinner(el.spinSalvar, true);
     el.btnSalvar.disabled = true;
 
+    var equipes = lerEquipes();
     var payload = {
-      tipo_rota: tipoRota(),
-      qtd_vendedores: Number(el.qtd.value),
+      data: state.dia,
+      pdv: state.pdvId,
+      equipes: equipes,
+      qtd_vendedores: totalPessoas(),
+      qtd_contratacoes: qtdContratacoes(),
+      qtd_desligamentos: qtdDesligamentos(),
       uf: el.uf.value || "",
       cidade: el.cidade.value || "",
       bairro: (el.bairro.value || "").trim(),
@@ -560,9 +855,22 @@
         return;
       }
 
-      applyCheckin(out.data.data);
-      el.statusSalvo.textContent = "Rota salva com sucesso.";
+      var salvo = out.data.data;
+      if (salvo.semana) {
+        state.semana = salvo.semana;
+        renderWeek();
+      }
+      applyCheckin(salvo);
+      var n = salvo.qtd_equipes || equipes.length;
+      el.statusSalvo.textContent =
+        "Rota salva · " +
+        n +
+        (n === 1 ? " equipe" : " equipes") +
+        " em campo · " +
+        (salvo.total_campo || totalPessoas()) +
+        " pessoas.";
       show(el.statusSalvo, true);
+      loadAgendas();
     } finally {
       setSpinner(el.spinSalvar, false);
       el.btnSalvar.disabled = false;

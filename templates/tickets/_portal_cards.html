@@ -13,11 +13,17 @@
     <p>Abra uma solicitação na fila do especialista.</p>
     <span class="consulta-tag">Equipe NIO</span>
   </a>
+  <a class="consulta-card" href="{% url 'rota_portal' %}">
+    <span class="consulta-ico">🗺️</span>
+    <h2>Rota</h2>
+    <p>Semana atual: local, equipes em campo, contratação e desligamento.</p>
+    <span class="consulta-tag">Agendas dos PDVs</span>
+  </a>
   {% else %}
   <a class="consulta-card" href="{% if portal_parceiro and portal_contato %}{% url 'rota_portal' %}{% else %}{% url 'portal_contato' %}?next=rota{% endif %}">
     <span class="consulta-ico">🗺️</span>
     <h2>Rota</h2>
-    <p>Check-in diário: tipo de rota, equipe, bairro e HPs livres (DFV).</p>
+    <p>Check-in da semana: local, equipes em campo e movimento de time.</p>
     <span class="consulta-tag">Operação do dia</span>
   </a>
   <a class="consulta-card" href="{% url 'abrir_demanda_form' %}">

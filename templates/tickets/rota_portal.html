@@ -1,15 +1,21 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}Rota · {{ parceiro.nome }}{% endblock %}
+{% block title %}{% if visao_equipe %}Rota · Agendas{% elif parceiro %}Rota · {{ parceiro.nome }}{% else %}Rota{% endif %}{% endblock %}
 {% block main_class %}wrap wrap-wide{% endblock %}
 {% block body_class %}page-rota{% endblock %}
 {% block content %}
 <div class="hero rota-hero">
   <div>
-    <h1>Rota do dia</h1>
-    <p>PDV {{ parceiro.codigo_pdv }} — {{ parceiro.nome }} · {{ contato.nome }}</p>
+    <h1>Rota da semana</h1>
+    <p>
+      {% if visao_equipe %}
+        Semana atual, segunda a domingo. Especialista, gerência e admin veem as agendas dos PDVs.
+      {% else %}
+        PDV {{ parceiro.codigo_pdv }} — {{ parceiro.nome }} · {{ contato.nome }}
+      {% endif %}
+    </p>
   </div>
-  <a class="btn btn-secondary" href="{% url 'portal_parceiro' %}">Voltar ao portal</a>
+  <a class="btn btn-secondary" href="{% if visao_equipe %}{% url 'portal_inicio' %}{% else %}{% url 'portal_parceiro' %}{% endif %}">Voltar ao portal</a>
 </div>
 
 <div
@@ -22,7 +28,39 @@
   data-dfv-url="{% url 'rota_api_dfv_resumo' %}"
   data-validar-url="{% url 'rota_api_planejamento_validar' %}"
   data-checkin-url="{% url 'rota_api_checkin' %}"
+  data-agendas-url="{% url 'rota_api_agendas' %}"
+  data-visao-equipe="{% if visao_equipe %}1{% else %}0{% endif %}"
+  {% if parceiro %}data-pdv-id="{{ parceiro.id }}"{% endif %}
 >
+  <nav class="rota-week" id="rota-week" aria-label="Semana atual"></nav>
+
+  {% if visao_equipe %}
+  <section class="rota-card rota-card-agendas" id="bloco-agendas">
+    <header class="rota-card-h">
+      <div>
+        <p class="rota-kicker">Equipe NIO</p>
+        <h2>Agendas da semana</h2>
+      </div>
+      <input class="rota-input rota-agendas-q" type="search" id="rota-agendas-q" placeholder="Buscar PDV…">
+    </header>
+    <div class="rota-card-b" style="padding-top:0">
+      <div class="table-scroll">
+        <table class="table rota-agendas-table" id="rota-agendas-table">
+          <thead>
+            <tr>
+              <th>PDV</th>
+              <th>Seg</th><th>Ter</th><th>Qua</th><th>Qui</th><th>Sex</th><th>Sáb</th><th>Dom</th>
+            </tr>
+          </thead>
+          <tbody id="rota-agendas-body">
+            <tr><td colspan="8" class="help">Carregando agendas…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
   <div class="rota-skeleton" id="rota-skeleton" aria-hidden="false">
     <div class="skel skel-line"></div>
     <div class="skel skel-block"></div>
@@ -31,45 +69,16 @@
 
   <form id="rota-form" class="rota-form" hidden>
     {% csrf_token %}
+    {% if visao_equipe %}
+    <p class="help" id="rota-pdv-hint">Escolha um PDV na agenda ou na linha do tempo para registrar o dia.</p>
+    {% endif %}
     <div class="rota-grid">
       <section class="rota-card" aria-labelledby="rota-checkin-title">
         <header class="rota-card-h">
-          <p class="rota-kicker">Check-in diário</p>
-          <h2 id="rota-checkin-title">Rota de hoje</h2>
+          <p class="rota-kicker">Check-in do dia</p>
+          <h2 id="rota-checkin-title">Rota</h2>
         </header>
         <div class="rota-card-b rota-fields">
-          <div class="rota-field">
-            <span class="rota-label">Qual será a sua rota hoje?</span>
-            <div class="rota-segment" role="group" aria-label="Tipo de rota">
-              <label class="rota-seg">
-                <input type="radio" name="tipo_rota" value="PRESENCIAL" checked>
-                <span>Presencial</span>
-              </label>
-              <label class="rota-seg">
-                <input type="radio" name="tipo_rota" value="DIGITAL">
-                <span>Digital</span>
-              </label>
-            </div>
-          </div>
-
-          <div class="rota-field">
-            <label for="qtd_vendedores">Quantos vendedores atuarão hoje?</label>
-            <input class="rota-input" type="number" inputmode="numeric" id="qtd_vendedores" name="qtd_vendedores" min="1" step="1" required>
-          </div>
-
-          <div class="rota-field" id="bloco-semana" hidden>
-            <label for="vendas_planejadas_semana">Quantidade de vendas planejada para a semana</label>
-            <input class="rota-input" type="number" inputmode="numeric" id="vendas_planejadas_semana" name="vendas_planejadas_semana" min="0" step="1">
-            <p class="help" id="meta-semana-hint"></p>
-            <div id="alerta-semana" class="rota-callout" hidden role="status">
-              <span class="rota-callout-ico" id="alerta-semana-ico" aria-hidden="true"></span>
-              <div>
-                <strong id="alerta-semana-titulo"></strong>
-                <p id="alerta-semana-msg"></p>
-              </div>
-            </div>
-          </div>
-
           <div id="bloco-local" class="rota-local">
             <div class="rota-field" id="field-uf">
               <label for="rota_uf">UF</label>
@@ -92,12 +101,78 @@
             <div class="rota-field rota-field-bairro" id="field-bairro">
               <label for="rota_bairro">Bairro</label>
               <div class="rota-control">
-                <input class="rota-input" list="rota_bairros_list" id="rota_bairro" name="bairro" autocomplete="off" disabled placeholder="Selecione a cidade">
-                <datalist id="rota_bairros_list"></datalist>
+                <select class="rota-input" id="rota_bairro" name="bairro" disabled>
+                  <option value="">Selecione a cidade</option>
+                </select>
                 <span class="rota-spinner" id="spin-bairro" hidden></span>
               </div>
               <p class="help" id="bairro-fonte"></p>
             </div>
+          </div>
+
+          <div class="rota-field">
+            <label for="qtd_equipes">Quantas equipes vão a campo?</label>
+            <input class="rota-input" type="number" inputmode="numeric" id="qtd_equipes" name="qtd_equipes" min="1" max="12" step="1" value="1" required>
+          </div>
+
+          <div class="rota-field">
+            <span class="rota-label">Como cada equipe vai atuar, e quantas pessoas</span>
+            <div id="rota-equipes" class="rota-equipes"></div>
+          </div>
+
+          <div class="rota-field" id="bloco-semana" hidden>
+            <label for="vendas_planejadas_semana">Quantidade de vendas planejada para a semana</label>
+            <input class="rota-input" type="number" inputmode="numeric" id="vendas_planejadas_semana" name="vendas_planejadas_semana" min="0" step="1">
+            <p class="help" id="meta-semana-hint"></p>
+            <div id="alerta-semana" class="rota-callout" hidden role="status">
+              <span class="rota-callout-ico" id="alerta-semana-ico" aria-hidden="true"></span>
+              <div>
+                <strong id="alerta-semana-titulo"></strong>
+                <p id="alerta-semana-msg"></p>
+              </div>
+            </div>
+          </div>
+
+          <div class="rota-field">
+            <span class="rota-label">Houve contratação neste dia?</span>
+            <div class="rota-segment" role="group" aria-label="Contratação">
+              <label class="rota-seg">
+                <input type="radio" name="houve_contratacao" value="nao" checked>
+                <span>Não</span>
+              </label>
+              <label class="rota-seg">
+                <input type="radio" name="houve_contratacao" value="sim">
+                <span>Sim</span>
+              </label>
+            </div>
+            <div class="rota-field" id="bloco-contratacao" hidden style="margin-top:0.65rem">
+              <label for="qtd_contratacoes">Quantas contratações?</label>
+              <input class="rota-input" type="number" inputmode="numeric" id="qtd_contratacoes" name="qtd_contratacoes" min="1" step="1">
+            </div>
+          </div>
+
+          <div class="rota-field">
+            <span class="rota-label">Houve desligamento neste dia?</span>
+            <div class="rota-segment" role="group" aria-label="Desligamento">
+              <label class="rota-seg">
+                <input type="radio" name="houve_desligamento" value="nao" checked>
+                <span>Não</span>
+              </label>
+              <label class="rota-seg">
+                <input type="radio" name="houve_desligamento" value="sim">
+                <span>Sim</span>
+              </label>
+            </div>
+            <div class="rota-field" id="bloco-desligamento" hidden style="margin-top:0.65rem">
+              <label for="qtd_desligamentos">Quantos desligamentos?</label>
+              <input class="rota-input" type="number" inputmode="numeric" id="qtd_desligamentos" name="qtd_desligamentos" min="1" step="1">
+            </div>
+          </div>
+
+          <div class="rota-resumo" id="rota-resumo" role="status">
+            <strong id="rota-resumo-equipes">1 equipe em campo</strong>
+            <span id="rota-resumo-pessoas">0 pessoas</span>
+            <span id="rota-resumo-rh"></span>
           </div>
 
           <p class="rota-error" id="rota-form-error" hidden></p>
@@ -122,7 +197,7 @@
         </header>
         <div class="rota-card-b">
           <div id="dfv-empty" class="rota-dfv-empty">
-            Escolha o bairro da rota presencial para ver HPs livres, crédito e alertas.
+            Escolha o bairro quando houver equipe PAP ou mista para ver HPs livres.
           </div>
           <div id="dfv-loading" class="rota-dfv-skel" hidden aria-live="polite">
             <span class="visually-hidden">Consultando disponibilidade de fibra</span>

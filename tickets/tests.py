@@ -1922,6 +1922,8 @@ class LoginUnificadoTests(TestCase):
         self.assertContains(r, "Viabilidade VTAL")
         self.assertContains(r, reverse("fila"))
         self.assertContains(r, reverse("ticket_criar"))
+        self.assertContains(r, reverse("rota_portal"))
+        self.assertContains(r, "Rota")
         self.assertNotContains(r, "Quem está operando")
         login = self.client.post(
             reverse("login"),

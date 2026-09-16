@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Views do card Rota (portal parceiro)."""
+"""Views do card Rota (portal parceiro e equipe)."""
 from __future__ import annotations
 
 import json
 import logging
+from datetime import date
 from typing import Any
 
 from django.contrib.auth.decorators import login_required
@@ -12,6 +13,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_GET, require_http_methods
 
+from tickets.acesso import parceiros_visiveis, tem_acesso_interno
 from tickets.consultas.dfv_powerbi_service import (
     DfvPowerBiDisabled,
     DfvPowerBiError,
@@ -19,20 +21,27 @@ from tickets.consultas.dfv_powerbi_service import (
     consultar_agregado_por_bairro,
     listar_bairros_dfv,
 )
-from tickets.models import CheckinRotaDiaria
+from tickets.models import CheckinRotaDiaria, PlanejamentoSemanalRota
 from tickets.rota_services import (
+    agendas_equipe,
     classificar_alerta,
+    data_na_semana_atual,
     defaults_localizacao,
+    dias_da_semana,
+    domingo_da_semana,
     eh_segunda,
     hoje_local,
     listar_bairros_parceiro,
     listar_cidades,
     listar_ufs,
     meta_semana_parceiro,
+    normalizar_equipes,
+    precisa_local,
+    resumo_semana,
     salvar_checkin,
+    segunda_da_semana,
     serializar_checkin,
     serializar_planejamento,
-    segunda_da_semana,
 )
 from tickets.views import _portal_sessao
 
@@ -62,17 +71,6 @@ def _json_ok(data: Any, status: int = 200) -> JsonResponse:
     return JsonResponse({"ok": True, "data": data}, status=status)
 
 
-def _exige_portal(request: HttpRequest):
-    parceiro, contato = _portal_sessao(request)
-    if not parceiro or not contato:
-        return None, None, _json_error(
-            "unauthenticated",
-            "Identifique o PDV e o contato para usar a Rota.",
-            status=401,
-        )
-    return parceiro, contato, None
-
-
 def _parse_json(request: HttpRequest) -> dict[str, Any]:
     if not request.body:
         return {}
@@ -83,9 +81,70 @@ def _parse_json(request: HttpRequest) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _int_campo(valor: Any, default: int | None = None) -> int | None:
+    if valor is None or valor == "":
+        return default
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return None
+
+
+def _exige_rota(request: HttpRequest, *, exige_pdv: bool = True, body: dict | None = None):
+    user = request.user
+    if tem_acesso_interno(user):
+        qs = parceiros_visiveis(user)
+        raw = ""
+        if body:
+            raw = str(body.get("pdv") or "").strip()
+        if not raw:
+            raw = (request.GET.get("pdv") or "").strip()
+        pdv = None
+        if raw:
+            try:
+                pdv = qs.filter(pk=int(raw)).first()
+            except (TypeError, ValueError):
+                pdv = None
+            if not pdv:
+                return None, None, _json_error("not_found", "PDV não encontrado.", status=404)
+        if exige_pdv and not pdv:
+            return None, None, _json_error(
+                "validation_error",
+                "Selecione o PDV.",
+                status=422,
+                fields={"pdv": "Obrigatório."},
+            )
+        return pdv, None, None
+
+    parceiro, contato = _portal_sessao(request)
+    if not parceiro or not contato:
+        return None, None, _json_error(
+            "unauthenticated",
+            "Identifique o PDV e o contato para usar a Rota.",
+            status=401,
+        )
+    return parceiro, contato, None
+
+
+def _serial_pdv(parceiro) -> dict[str, Any] | None:
+    if not parceiro:
+        return None
+    return {"id": parceiro.id, "codigo_pdv": parceiro.codigo_pdv, "nome": parceiro.nome}
+
+
 @login_required
 def rota_portal(request: HttpRequest) -> HttpResponse:
     """Página do check-in diário de rota."""
+    if tem_acesso_interno(request.user):
+        return render(
+            request,
+            "tickets/rota_portal.html",
+            {
+                "parceiro": None,
+                "contato": None,
+                "visao_equipe": True,
+            },
+        )
     parceiro, contato = _portal_sessao(request)
     if not parceiro or not contato:
         return redirect(f"{reverse('portal_contato')}?next=rota")
@@ -95,6 +154,7 @@ def rota_portal(request: HttpRequest) -> HttpResponse:
         {
             "parceiro": parceiro,
             "contato": contato,
+            "visao_equipe": False,
         },
     )
 
@@ -102,33 +162,64 @@ def rota_portal(request: HttpRequest) -> HttpResponse:
 @login_required
 @require_GET
 def rota_api_hoje(request: HttpRequest) -> JsonResponse:
-    parceiro, contato, err = _exige_portal(request)
+    parceiro, _contato, err = _exige_rota(
+        request, exige_pdv=not tem_acesso_interno(request.user)
+    )
     if err:
         return err
 
     hoje = hoje_local()
-    checkin = CheckinRotaDiaria.objects.filter(parceiro=parceiro, data=hoje).select_related(
-        "planejamento"
-    ).first()
-    from tickets.models import PlanejamentoSemanalRota
+    raw_dia = (request.GET.get("data") or "").strip()
+    dia = hoje
+    if raw_dia:
+        try:
+            dia = date.fromisoformat(raw_dia)
+        except ValueError:
+            return _json_error("validation_error", "Data inválida.", fields={"data": "Use AAAA-MM-DD."})
+        if not data_na_semana_atual(dia):
+            return _json_error(
+                "validation_error",
+                "Só é possível ver a semana atual.",
+                fields={"data": "Fora da semana corrente."},
+            )
 
-    plan = PlanejamentoSemanalRota.objects.filter(
-        parceiro=parceiro, semana_inicio=segunda_da_semana(hoje)
-    ).first()
-    if checkin and checkin.planejamento_id:
-        plan = checkin.planejamento
+    checkin = None
+    plan = None
+    defaults = {"uf": "", "cidade": "", "pracas": []}
+    meta = {"fonte": "", "valor": 0, "meta_mensal_vl": 0, "plano_dia": 0, "meta_vendedores": 0}
+    semana = {
+        "semana_inicio": segunda_da_semana(hoje).isoformat(),
+        "semana_fim": domingo_da_semana(hoje).isoformat(),
+        "dias": dias_da_semana(hoje),
+    }
+    if parceiro:
+        semana = resumo_semana(parceiro, hoje)
+        checkin = CheckinRotaDiaria.objects.filter(parceiro=parceiro, data=dia).select_related(
+            "planejamento"
+        ).first()
+        plan = PlanejamentoSemanalRota.objects.filter(
+            parceiro=parceiro, semana_inicio=segunda_da_semana(hoje)
+        ).first()
+        if checkin and checkin.planejamento_id:
+            plan = checkin.planejamento
+        defaults = defaults_localizacao(parceiro)
+        meta = meta_semana_parceiro(parceiro, hoje)
 
     return _json_ok(
         {
-            "data": hoje.isoformat(),
-            "eh_segunda": eh_segunda(hoje),
+            "data": dia.isoformat(),
+            "hoje": hoje.isoformat(),
+            "eh_segunda": eh_segunda(dia),
+            "semana": semana,
             "checkin": serializar_checkin(checkin),
             "planejamento_semana": serializar_planejamento(plan),
-            "defaults": defaults_localizacao(parceiro),
-            "meta_semana": meta_semana_parceiro(parceiro, hoje),
+            "defaults": defaults,
+            "meta_semana": meta,
+            "pdv": _serial_pdv(parceiro),
+            "visao_equipe": tem_acesso_interno(request.user),
             "permissoes": {
-                "pode_registrar": True,
-                "pode_editar": True,
+                "pode_registrar": bool(parceiro),
+                "pode_editar": bool(parceiro),
             },
         }
     )
@@ -136,8 +227,16 @@ def rota_api_hoje(request: HttpRequest) -> JsonResponse:
 
 @login_required
 @require_GET
+def rota_api_agendas(request: HttpRequest) -> JsonResponse:
+    if not tem_acesso_interno(request.user):
+        return _json_error("forbidden", "Agenda consolidada só para a equipe NIO.", status=403)
+    return _json_ok(agendas_equipe(request.user, request.GET.get("q") or ""))
+
+
+@login_required
+@require_GET
 def rota_api_ufs(request: HttpRequest) -> JsonResponse:
-    parceiro, _contato, err = _exige_portal(request)
+    parceiro, _contato, err = _exige_rota(request)
     if err:
         return err
     return _json_ok({"items": listar_ufs(parceiro)})
@@ -146,7 +245,7 @@ def rota_api_ufs(request: HttpRequest) -> JsonResponse:
 @login_required
 @require_GET
 def rota_api_cidades(request: HttpRequest) -> JsonResponse:
-    parceiro, _contato, err = _exige_portal(request)
+    parceiro, _contato, err = _exige_rota(request)
     if err:
         return err
     uf = (request.GET.get("uf") or "").strip().upper()
@@ -158,7 +257,7 @@ def rota_api_cidades(request: HttpRequest) -> JsonResponse:
 @login_required
 @require_GET
 def rota_api_bairros(request: HttpRequest) -> JsonResponse:
-    parceiro, _contato, err = _exige_portal(request)
+    parceiro, _contato, err = _exige_rota(request)
     if err:
         return err
     uf = (request.GET.get("uf") or "").strip().upper()
@@ -189,7 +288,6 @@ def rota_api_bairros(request: HttpRequest) -> JsonResponse:
         except DfvPowerBiError as exc:
             logger.warning("[ROTA] listar bairros DFV: %s", exc)
             fonte = "dfv_erro"
-            # UI ainda permite digitar bairro manualmente
             items = []
 
     return _json_ok(
@@ -206,7 +304,7 @@ def rota_api_bairros(request: HttpRequest) -> JsonResponse:
 @login_required
 @require_GET
 def rota_api_dfv_resumo(request: HttpRequest) -> JsonResponse:
-    _parceiro, _contato, err = _exige_portal(request)
+    _parceiro, _contato, err = _exige_rota(request)
     if err:
         return err
     uf = (request.GET.get("uf") or "").strip().upper()
@@ -249,10 +347,10 @@ def rota_api_dfv_resumo(request: HttpRequest) -> JsonResponse:
 @login_required
 @require_http_methods(["POST"])
 def rota_api_planejamento_validar(request: HttpRequest) -> JsonResponse:
-    parceiro, _contato, err = _exige_portal(request)
+    body = _parse_json(request)
+    parceiro, _contato, err = _exige_rota(request, body=body)
     if err:
         return err
-    body = _parse_json(request)
     try:
         vendas = int(body.get("vendas_planejadas"))
     except (TypeError, ValueError):
@@ -286,63 +384,80 @@ def rota_api_planejamento_validar(request: HttpRequest) -> JsonResponse:
 @login_required
 @require_http_methods(["POST", "PUT"])
 def rota_api_checkin(request: HttpRequest) -> JsonResponse:
-    parceiro, contato, err = _exige_portal(request)
+    body = _parse_json(request)
+    parceiro, contato, err = _exige_rota(request, body=body)
     if err:
         return err
 
-    body = _parse_json(request)
     fields: dict[str, str] = {}
+    hoje = hoje_local()
+    raw_dia = str(body.get("data") or "").strip()
+    dia = hoje
+    if raw_dia:
+        try:
+            dia = date.fromisoformat(raw_dia)
+        except ValueError:
+            fields["data"] = "Data inválida."
+        else:
+            if not data_na_semana_atual(dia):
+                fields["data"] = "Só a semana atual (segunda a domingo)."
 
+    equipes = body.get("equipes")
+    qtd = _int_campo(body.get("qtd_vendedores"), 0) or 0
     tipo = str(body.get("tipo_rota") or "").strip().upper()
-    if tipo not in CheckinRotaDiaria.TipoRota.values:
-        fields["tipo_rota"] = "Informe Presencial ou Digital."
-
-    try:
-        qtd = int(body.get("qtd_vendedores"))
-        if qtd < 1:
+    if not isinstance(equipes, list) or not equipes:
+        if tipo not in CheckinRotaDiaria.TipoRota.values:
+            fields["equipes"] = "Informe as equipes em campo."
+        if qtd < 1 and "equipes" not in fields:
             fields["qtd_vendedores"] = "Informe um número maior que zero."
-    except (TypeError, ValueError):
-        qtd = 0
-        fields["qtd_vendedores"] = "Informe um número maior que zero."
+
+    contratacoes = _int_campo(body.get("qtd_contratacoes"), 0)
+    desligamentos = _int_campo(body.get("qtd_desligamentos"), 0)
+    if contratacoes is None or contratacoes < 0:
+        fields["qtd_contratacoes"] = "Número inválido."
+        contratacoes = 0
+    if desligamentos is None or desligamentos < 0:
+        fields["qtd_desligamentos"] = "Número inválido."
+        desligamentos = 0
 
     uf = str(body.get("uf") or "").strip().upper()[:2]
     cidade = str(body.get("cidade") or "").strip()
     bairro = str(body.get("bairro") or "").strip()
 
-    if tipo == CheckinRotaDiaria.TipoRota.PRESENCIAL:
-        if len(uf) != 2:
-            fields["uf"] = "Obrigatório."
-        if not cidade:
-            fields["cidade"] = "Obrigatório."
-        if not bairro:
-            fields["bairro"] = "Obrigatório."
-
     vendas_semana = body.get("vendas_planejadas_semana", None)
-    if eh_segunda():
+    if eh_segunda(dia) and "data" not in fields:
         if vendas_semana is None or str(vendas_semana).strip() == "":
             fields["vendas_planejadas_semana"] = "Obrigatório às segundas-feiras."
             vendas_int = None
         else:
-            try:
-                vendas_int = int(vendas_semana)
-                if vendas_int < 0:
-                    fields["vendas_planejadas_semana"] = "Deve ser >= 0."
-            except (TypeError, ValueError):
+            vendas_int = _int_campo(vendas_semana)
+            if vendas_int is None or vendas_int < 0:
                 fields["vendas_planejadas_semana"] = "Número inválido."
                 vendas_int = None
     else:
         vendas_int = None
 
     if fields:
-        return _json_error(
-            "validation_error",
-            "Dados inválidos.",
-            status=422,
-            fields=fields,
-        )
+        return _json_error("validation_error", "Dados inválidos.", status=422, fields=fields)
+
+    try:
+        equipes_ok = normalizar_equipes(equipes, qtd, tipo)
+    except ValueError as exc:
+        return _json_error("validation_error", str(exc), status=422, fields={"equipes": str(exc)})
+
+    if precisa_local(equipes_ok):
+        loc_fields = {}
+        if len(uf) != 2:
+            loc_fields["uf"] = "Obrigatório."
+        if not cidade:
+            loc_fields["cidade"] = "Obrigatório."
+        if not bairro:
+            loc_fields["bairro"] = "Obrigatório."
+        if loc_fields:
+            return _json_error("validation_error", "Informe o local da rota.", status=422, fields=loc_fields)
 
     dfv_resumo = None
-    if tipo == CheckinRotaDiaria.TipoRota.PRESENCIAL and uf and cidade and bairro:
+    if precisa_local(equipes_ok) and uf and cidade and bairro:
         try:
             dfv_resumo = consultar_agregado_por_bairro(uf, cidade, bairro)
         except DfvPowerBiTimeout:
@@ -355,13 +470,13 @@ def rota_api_checkin(request: HttpRequest) -> JsonResponse:
             dfv_resumo = None
         except DfvPowerBiError as exc:
             logger.warning("[ROTA] checkin DFV: %s", exc)
-            # Permite salvar sem snapshot se DFV falhar (alerta no payload vazio)
             dfv_resumo = None
 
     try:
         checkin = salvar_checkin(
             parceiro=parceiro,
             contato=contato,
+            user=request.user if tem_acesso_interno(request.user) else None,
             tipo_rota=tipo,
             qtd_vendedores=qtd,
             uf=uf,
@@ -369,9 +484,15 @@ def rota_api_checkin(request: HttpRequest) -> JsonResponse:
             bairro=bairro,
             vendas_planejadas_semana=vendas_int,
             dfv_resumo=dfv_resumo,
+            dia=dia,
+            equipes=equipes_ok,
+            qtd_contratacoes=contratacoes,
+            qtd_desligamentos=desligamentos,
         )
     except ValueError as exc:
         return _json_error("validation_error", str(exc), status=422)
 
     created = checkin.criado_em == checkin.atualizado_em
-    return _json_ok(serializar_checkin(checkin), status=201 if created else 200)
+    data = serializar_checkin(checkin) or {}
+    data["semana"] = resumo_semana(parceiro, hoje)
+    return _json_ok(data, status=201 if created else 200)

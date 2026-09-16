@@ -1010,7 +1010,14 @@ class PlanejamentoSemanalRota(models.Model):
 class CheckinRotaDiaria(models.Model):
     class TipoRota(models.TextChoices):
         PRESENCIAL = "PRESENCIAL", "Presencial"
+        PAP = "PAP", "PAP"
         DIGITAL = "DIGITAL", "Digital"
+        MISTO = "MISTO", "Misto"
+
+    class AtuacaoEquipe(models.TextChoices):
+        PAP = "PAP", "PAP"
+        DIGITAL = "DIGITAL", "Digital"
+        MISTO = "MISTO", "Misto"
 
     parceiro = models.ForeignKey(
         Parceiro, on_delete=models.CASCADE, related_name="checkins_rota"
@@ -1018,6 +1025,10 @@ class CheckinRotaDiaria(models.Model):
     data = models.DateField(db_index=True)
     tipo_rota = models.CharField(max_length=16, choices=TipoRota.choices)
     qtd_vendedores = models.PositiveIntegerField()
+    qtd_equipes = models.PositiveIntegerField(default=1)
+    equipes = models.JSONField(default=list, blank=True)
+    qtd_contratacoes = models.PositiveIntegerField(default=0)
+    qtd_desligamentos = models.PositiveIntegerField(default=0)
     uf = models.CharField(max_length=2, blank=True)
     cidade = models.CharField(max_length=120, blank=True)
     bairro = models.CharField(max_length=120, blank=True)
@@ -1038,6 +1049,13 @@ class CheckinRotaDiaria(models.Model):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="checkins_rota",
+    )
+    criado_por_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="checkins_rota_user",
     )
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)

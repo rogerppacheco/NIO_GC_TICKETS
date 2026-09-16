@@ -92,6 +92,7 @@ urlpatterns = [
         rota_views.rota_api_planejamento_validar,
         name="rota_api_planejamento_validar",
     ),
+    path("abrir/rota/api/agendas/", rota_views.rota_api_agendas, name="rota_api_agendas"),
     path("abrir/rota/api/checkin/", rota_views.rota_api_checkin, name="rota_api_checkin"),
     path("abrir/minhas/", views.minhas_demandas, name="minhas_demandas"),
     path("abrir/sair/", views.portal_sair, name="portal_sair"),

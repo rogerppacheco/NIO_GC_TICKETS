@@ -58,6 +58,8 @@ class RotaServicesTests(TestCase):
         )
         self.assertEqual(checkin.tipo_rota, "DIGITAL")
         self.assertEqual(checkin.qtd_vendedores, 3)
+        self.assertEqual(checkin.qtd_equipes, 1)
+        self.assertEqual(checkin.equipes[0]["atuacao"], "DIGITAL")
 
 
 class RotaApiTests(TestCase):
@@ -100,6 +102,7 @@ class RotaApiTests(TestCase):
         self.assertTrue(body["ok"])
         self.assertEqual(body["data"]["defaults"]["uf"], "MG")
         self.assertEqual(body["data"]["meta_semana"]["valor"], 25)
+        self.assertEqual(len(body["data"]["semana"]["dias"]), 7)
 
     def test_ufs_e_cidades(self):
         # Duplicata com casing diferente não deve repetir UF na API
@@ -167,6 +170,47 @@ class RotaApiTests(TestCase):
         self.assertTrue(
             CheckinRotaDiaria.objects.filter(parceiro=self.pdv, data=timezone.localdate()).exists()
         )
+        ck = CheckinRotaDiaria.objects.get(parceiro=self.pdv, data=timezone.localdate())
+        self.assertEqual(ck.tipo_rota, "PAP")
+
+    @patch("tickets.rota_views.consultar_agregado_por_bairro")
+    def test_checkin_equipes_e_movimento(self, mock_dfv):
+        mock_dfv.return_value = {
+            "local": {"uf": "MG", "cidade": "BELO HORIZONTE", "bairro": "CENTRO"},
+            "indicadores": {"hp_livre": 4, "hps": 8, "pct_hc": 10, "fachadas_viaveis": 2, "fachadas_total": 3},
+            "credito": {"faixa_predominante": "Entre 50% e 70%"},
+            "perfil": {},
+            "alertas": [],
+            "meta": {"fonte": "test", "incompleto": False},
+        }
+        payload = {
+            "equipes": [
+                {"atuacao": "PAP", "pessoas": 3},
+                {"atuacao": "DIGITAL", "pessoas": 2},
+            ],
+            "qtd_contratacoes": 1,
+            "qtd_desligamentos": 0,
+            "uf": "MG",
+            "cidade": "BELO HORIZONTE",
+            "bairro": "CENTRO",
+        }
+        if timezone.localdate().weekday() == 0:
+            payload["vendas_planejadas_semana"] = 20
+        r = self.client.post(
+            reverse("rota_api_checkin"),
+            data=payload,
+            content_type="application/json",
+        )
+        self.assertIn(r.status_code, (200, 201))
+        body = r.json()["data"]
+        self.assertEqual(body["qtd_equipes"], 2)
+        self.assertEqual(body["total_campo"], 5)
+        self.assertEqual(body["tipo_rota"], "MISTO")
+        self.assertEqual(body["qtd_contratacoes"], 1)
+
+    def test_parceiro_nao_ve_agendas_da_equipe(self):
+        r = self.client.get(reverse("rota_api_agendas"))
+        self.assertEqual(r.status_code, 403)
 
     def test_portal_rota_render(self):
         with self.settings(
@@ -179,8 +223,9 @@ class RotaApiTests(TestCase):
         ):
             r = self.client.get(reverse("rota_portal"))
         self.assertEqual(r.status_code, 200)
-        self.assertContains(r, "Rota do dia")
+        self.assertContains(r, "Rota da semana")
         self.assertContains(r, "rota-app")
+        self.assertContains(r, "rota-week")
         self.assertContains(r, "rota_card.js")
 
 
@@ -226,3 +271,55 @@ class DfvAgregadoBairroTests(TestCase):
         self.assertEqual(resumo["credito"]["faixa_predominante"], "Entre 50% e 70%")
         self.assertEqual(resumo["perfil"]["classificacao_predominante"], "MEDIO")
         self.assertTrue(any(a["codigo"] == "hp_novo" for a in resumo["alertas"]))
+
+
+STORAGES_TESTE = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
+
+
+@override_settings(STORAGES=STORAGES_TESTE)
+class RotaEquipeTests(TestCase):
+    def setUp(self):
+        from tickets.models import PerfilStaff
+
+        User = get_user_model()
+        self.spec = User.objects.create_user(
+            username="spec-rota", password="senha-staff-ok1", first_name="Spec"
+        )
+        PerfilStaff.objects.create(user=self.spec, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self.pdv = Parceiro.objects.create(
+            codigo_pdv="ROTA3", nome="PDV Spec", especialista=self.spec
+        )
+        self.client.force_login(self.spec)
+
+    def test_especialista_abre_rota_sem_contato(self):
+        r = self.client.get(reverse("rota_portal"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Agendas da semana")
+        self.assertContains(r, "rota-week")
+
+    def test_agendas_lista_pdv_da_carteira(self):
+        r = self.client.get(reverse("rota_api_agendas"))
+        self.assertEqual(r.status_code, 200)
+        items = r.json()["data"]["items"]
+        self.assertTrue(any(i["codigo_pdv"] == "ROTA3" for i in items))
+
+    def test_checkin_pela_equipe(self):
+        payload = {
+            "pdv": self.pdv.id,
+            "equipes": [{"atuacao": "DIGITAL", "pessoas": 4}],
+        }
+        if timezone.localdate().weekday() == 0:
+            payload["vendas_planejadas_semana"] = 10
+        r = self.client.post(
+            reverse("rota_api_checkin"),
+            data=payload,
+            content_type="application/json",
+        )
+        self.assertIn(r.status_code, (200, 201))
+        ck = CheckinRotaDiaria.objects.get(parceiro=self.pdv, data=timezone.localdate())
+        self.assertEqual(ck.tipo_rota, "DIGITAL")
+        self.assertEqual(ck.qtd_vendedores, 4)
+        self.assertEqual(ck.criado_por_user_id, self.spec.id)
