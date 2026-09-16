@@ -24,18 +24,40 @@ ICONES = {
     "piloto_toolkit_meta": "🧪",
 }
 
+NOME = "Kit de marca"
+
+SLUGS_SOMENTE_EQUIPE = frozenset({"prospeccao", "pap_alto_valor"})
+
+GRUPOS = (
+    (
+        "loja",
+        "Para o PDV",
+        (
+            "manuais",
+            "enxoval_merchan",
+            "folheteria",
+            "ambientacao_escritorio",
+            "brindes",
+            "piloto_toolkit_meta",
+        ),
+    ),
+    ("time", "Para o time", ("uniformes",)),
+    ("canais", "Apps e comunicados", ("trade_digital", "vende_comunica")),
+    ("campo", "Uso interno", ("prospeccao", "pap_alto_valor")),
+)
+
 EXTRAS = {
     "prospeccao": {
         "titulo": "Prospecção",
-        "intro": "Apresentações, cards e materiais para prospecção de parceiros e PAP.",
+        "intro": "Apresentações e cards para abordar parceiro e PAP.",
     },
     "pap_alto_valor": {
         "titulo": "PAP Alto Valor",
-        "intro": "Cartas e peças para a operação PAP Alto Valor.",
+        "intro": "Cartas e peças da operação PAP Alto Valor.",
     },
     "piloto_toolkit_meta": {
         "titulo": "Piloto Toolkit Meta",
-        "intro": "Material do piloto de toolkit para Meta.",
+        "intro": "Arquivos do piloto de toolkit para Meta.",
     },
 }
 
@@ -177,7 +199,30 @@ def _contar_por_prefixo(prefixo: str) -> int:
     return sum(1 for item in _inventario() if item["path"].startswith(prefixo))
 
 
-def categorias() -> list[dict]:
+def pode_ver_categoria(user, slug: str) -> bool:
+    """PAP Alto Valor e Prospecção: só especialista ou gerência."""
+    if slug not in SLUGS_SOMENTE_EQUIPE:
+        return True
+    from .acesso import eh_especialista, eh_gerencia
+
+    return eh_especialista(user) or eh_gerencia(user)
+
+
+def slug_da_rel(rel: str) -> str:
+    partes = _norm(rel).split("/")
+    if len(partes) >= 2 and partes[0] == "materiais":
+        return partes[1]
+    return ""
+
+
+def pode_ver_material(user, rel: str) -> bool:
+    slug = slug_da_rel(rel)
+    if not slug:
+        return True
+    return pode_ver_categoria(user, slug)
+
+
+def categorias(user=None) -> list[dict]:
     base = list(_conteudo().get("categorias") or [])
     conhecidas = {c.get("slug") for c in base}
     tops: dict[str, int] = {}
@@ -194,7 +239,7 @@ def categorias() -> list[dict]:
             {
                 "slug": slug,
                 "titulo": extra.get("titulo") or humanizar(slug),
-                "intro": extra.get("intro") or "Materiais adicionais do repositório de trade.",
+                "intro": extra.get("intro") or "Outros arquivos desta biblioteca.",
             }
         )
         conhecidas.add(slug)
@@ -208,14 +253,49 @@ def categorias() -> list[dict]:
                 "n_arquivos": _contar_por_prefixo(f"materiais/{slug}/") if slug not in {"trade_digital", "vende_comunica"} else 0,
             }
         )
+    if user is not None:
+        saida = [cat for cat in saida if pode_ver_categoria(user, cat["slug"])]
     return saida
 
 
-def categoria(slug: str) -> dict | None:
-    for cat in categorias():
+def categoria(slug: str, user=None) -> dict | None:
+    for cat in categorias(user):
         if cat["slug"] == slug:
             return cat
     return None
+
+
+def categorias_agrupadas(user=None) -> list[dict]:
+    cats = categorias(user)
+    por_slug = {c["slug"]: c for c in cats}
+    grupos = []
+    vistos: set[str] = set()
+    for gid, titulo, slugs in GRUPOS:
+        itens = [por_slug[s] for s in slugs if s in por_slug]
+        if not itens:
+            continue
+        grupos.append({"id": gid, "titulo": titulo, "categorias": itens})
+        vistos.update(c["slug"] for c in itens)
+    resto = [c for c in cats if c["slug"] not in vistos]
+    if resto:
+        grupos.append({"id": "outros", "titulo": "Outros arquivos", "categorias": resto})
+    return grupos
+
+
+def filtrar_grupos(grupos: list[dict], q: str) -> list[dict]:
+    termo = (q or "").strip().lower()
+    if not termo:
+        return grupos
+    saida = []
+    for grupo in grupos:
+        cats = [
+            c
+            for c in grupo["categorias"]
+            if termo in (c.get("titulo") or "").lower() or termo in (c.get("intro") or "").lower()
+        ]
+        if cats:
+            saida.append({**grupo, "categorias": cats})
+    return saida
 
 
 def listar_pasta(prefixo: str) -> tuple[list[dict], list[dict]]:

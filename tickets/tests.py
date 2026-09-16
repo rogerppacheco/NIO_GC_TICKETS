@@ -1916,7 +1916,7 @@ class LoginUnificadoTests(TestCase):
         self.client.force_login(self.spec)
         r = self.client.get(reverse("portal_inicio"))
         self.assertEqual(r.status_code, 200)
-        self.assertContains(r, "Trade Hub")
+        self.assertContains(r, "Kit de marca")
         self.assertContains(r, "Central de processos")
         self.assertContains(r, "Consulta DFV")
         self.assertContains(r, "Viabilidade VTAL")

@@ -39,18 +39,26 @@
 <div class="panel" style="margin-bottom:1rem">
   <div class="panel-h"><h2>Chip de envio</h2></div>
   <div class="panel-b">
-    <p class="help" style="margin-bottom:0.8rem">Define de qual WhatsApp saem Capilaridade, OSAB, FPD e o restante da carteira. Destinatários de cada perfil continuam valendo nos dois modos.</p>
+    <p class="help" style="margin-bottom:0.8rem">De qual WhatsApp saem Capilaridade, OSAB, FPD e o restante. Destinatários de cada perfil valem nos dois modos.</p>
     <form method="post">
       {% csrf_token %}
       <input type="hidden" name="action" value="modo_envio">
-      <label style="display:flex;gap:0.6rem;align-items:flex-start;margin-bottom:0.7rem">
-        <input type="radio" name="modo_envio" value="central" {% if modo_envio != "pessoal" %}checked{% endif %}>
-        <span><strong>Instância da gestão</strong> (<code>{{ instance_global }}</code>) — principal. Todos os envios saem deste chip.</span>
-      </label>
-      <label style="display:flex;gap:0.6rem;align-items:flex-start;margin-bottom:0.9rem">
-        <input type="radio" name="modo_envio" value="pessoal" {% if modo_envio == "pessoal" %}checked{% endif %}>
-        <span><strong>Chip de cada especialista/gerência.</strong> Só envia se a pessoa estiver pareada. Sem fallback no chip da gestão.</span>
-      </label>
+      <div class="choice-stack" role="radiogroup" aria-label="Chip de envio">
+        <label class="choice-opt">
+          <input type="radio" name="modo_envio" value="central" {% if modo_envio != "pessoal" %}checked{% endif %}>
+          <span class="choice-opt-card">
+            <strong>Instância da gestão · {{ instance_global }}</strong>
+            <small>Principal. Todos os envios da carteira saem deste chip.</small>
+          </span>
+        </label>
+        <label class="choice-opt">
+          <input type="radio" name="modo_envio" value="pessoal" {% if modo_envio == "pessoal" %}checked{% endif %}>
+          <span class="choice-opt-card">
+            <strong>Chip de cada especialista ou gerência</strong>
+            <small>Só envia se a pessoa estiver pareada. Sem fallback no chip da gestão.</small>
+          </span>
+        </label>
+      </div>
       <button class="btn btn-primary" type="submit">Salvar chip de envio</button>
     </form>
   </div>

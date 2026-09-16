@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ titulo }} · Trade Hub{% endblock %}
+{% block title %}{{ titulo }} · {{ nome }}{% endblock %}
 {% block content %}
 <nav class="thub-crumb" aria-label="Navegação">
   {% for crumb in crumbs %}
@@ -29,7 +29,7 @@
       <p>{{ app.texto }}</p>
       {% if app.download %}
         <p style="margin-top:0.85rem">
-          <a class="btn btn-primary" href="{{ app.download }}" target="_blank" rel="noopener noreferrer">Baixar o Trade Digital</a>
+          <a class="btn btn-primary" href="{{ app.download }}" target="_blank" rel="noopener noreferrer">Baixar o app</a>
         </p>
       {% endif %}
     </div>
@@ -50,7 +50,7 @@
 </form>
 
 {% if destaques %}
-  <h2 class="thub-h">Destaques</h2>
+  <h2 class="thub-h">Comece por aqui</h2>
   <div class="consultas-grid" style="margin-bottom:1.25rem">
     {% for item in destaques %}
       <a class="consulta-card" href="{{ item.url }}" {% if item.tipo == "arquivo" %}target="_blank" rel="noopener"{% endif %}>
@@ -78,7 +78,7 @@
 {% endif %}
 
 {% if pastas %}
-  <h2 class="thub-h">Pastas</h2>
+  <h2 class="thub-h">Pastas nesta seção</h2>
   <div class="consultas-grid" style="margin-bottom:1.25rem">
     {% for pasta_item in pastas %}
       <a class="consulta-card" href="{{ pasta_item.url }}">
@@ -121,7 +121,7 @@
 {% elif not pastas and not destaques and not app %}
   <div class="panel">
     <div class="panel-b">
-      <p class="help">Nenhum material nesta pasta.</p>
+      <p class="help">Nenhum arquivo nesta pasta.</p>
     </div>
   </div>
 {% endif %}

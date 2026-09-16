@@ -19,13 +19,17 @@ def _prefixo_categoria(slug: str) -> str:
 @require_GET
 def tradehub_inicio(request: HttpRequest) -> HttpResponse:
     dados = catalogo.conteudo()
+    q = (request.GET.get("q") or "").strip()
+    grupos = catalogo.filtrar_grupos(catalogo.categorias_agrupadas(request.user), q)
     return render(
         request,
         "tickets/tradehub/inicio.html",
         {
+            "nome": catalogo.NOME,
             "home": dados.get("home") or {},
             "faq": dados.get("faq") or [],
-            "categorias": catalogo.categorias(),
+            "grupos": grupos,
+            "q": q,
         },
     )
 
@@ -33,7 +37,7 @@ def tradehub_inicio(request: HttpRequest) -> HttpResponse:
 @login_required
 @require_GET
 def tradehub_secao(request: HttpRequest, slug: str, pasta: str = "") -> HttpResponse:
-    cat = catalogo.categoria(slug)
+    cat = catalogo.categoria(slug, request.user)
     if not cat:
         raise Http404("Categoria não encontrada.")
     pasta = catalogo._norm(pasta).strip("/")
@@ -54,7 +58,7 @@ def tradehub_secao(request: HttpRequest, slug: str, pasta: str = "") -> HttpResp
     for item in pastas:
         rel = f"{pasta}/{item['rel']}".strip("/") if pasta else item["rel"]
         item["url"] = catalogo._url_pasta(slug, rel)
-    crumbs = [{"titulo": "Trade Hub", "url": "tradehub"}]
+    crumbs = [{"titulo": catalogo.NOME, "url": "tradehub"}]
     crumbs.append({"titulo": cat["titulo"], "url": None if not pasta else "secao", "slug": slug})
     if pasta:
         acumulado = []
@@ -73,6 +77,7 @@ def tradehub_secao(request: HttpRequest, slug: str, pasta: str = "") -> HttpResp
         request,
         "tickets/tradehub/secao.html",
         {
+            "nome": catalogo.NOME,
             "categoria": cat,
             "pasta": pasta,
             "titulo": catalogo.humanizar(pasta.split("/")[-1]) if pasta else cat["titulo"],
@@ -91,6 +96,8 @@ def tradehub_secao(request: HttpRequest, slug: str, pasta: str = "") -> HttpResp
 @require_http_methods(["GET", "HEAD"])
 def tradehub_arquivo(request: HttpRequest, rel: str) -> HttpResponse:
     rel = catalogo._norm(rel)
+    if not catalogo.pode_ver_material(request.user, rel):
+        raise Http404("Arquivo não encontrado.")
     local = catalogo.caminho_local(rel)
     if local and local.is_file():
         ctype = mimetypes.guess_type(local.name)[0] or "application/octet-stream"

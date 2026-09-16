@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from tickets.models import ContatoParceiro, Parceiro
+from tickets.models import ContatoParceiro, Parceiro, PerfilStaff
 
 STORAGES_TESTE = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
@@ -37,10 +37,15 @@ class TradeHubPagesTests(TestCase):
     def test_home_lista_categorias_e_faq(self):
         resp = self.client.get(reverse("tradehub"))
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "Trade Hub")
+        self.assertContains(resp, "Kit de marca")
+        self.assertNotContains(resp, "Trade Hub")
         self.assertContains(resp, "Manuais")
         self.assertContains(resp, "Enxoval Merchan")
-        self.assertContains(resp, "Há custos associados ao uso do portal de parceiros?")
+        self.assertContains(resp, "Para o PDV")
+        self.assertContains(resp, "Antes de baixar")
+        self.assertContains(resp, "Baixar estes arquivos tem custo?")
+        self.assertNotContains(resp, "Uso interno")
+        self.assertNotContains(resp, "Tire as suas dúvidas")
 
     def test_secao_manuais_mostra_destaques(self):
         resp = self.client.get(reverse("tradehub_secao", args=["manuais"]))
@@ -69,11 +74,67 @@ class TradeHubPagesTests(TestCase):
         resp = self.client.get(reverse("portal_parceiro"))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, reverse("tradehub"))
-        self.assertContains(resp, "Trade Hub")
+        self.assertContains(resp, "Kit de marca")
         self.assertContains(resp, "page-portal")
         self.assertContains(resp, "portal-cards")
 
-    def test_extras_aparecem_na_home(self):
+    def test_extras_restritas_nao_aparecem_para_pdv(self):
         resp = self.client.get(reverse("tradehub"))
+        self.assertNotContains(resp, "Prospecção")
+        self.assertNotContains(resp, "PAP Alto Valor")
+
+    def test_pdv_nao_abre_secoes_restritas(self):
+        for slug in ("prospeccao", "pap_alto_valor"):
+            resp = self.client.get(reverse("tradehub_secao", args=[slug]))
+            self.assertEqual(resp.status_code, 404, slug)
+
+    def test_pdv_nao_baixa_arquivo_restrito(self):
+        resp = self.client.get(
+            reverse("tradehub_arquivo", args=["materiais/prospeccao/qualquer.pdf"])
+        )
+        self.assertEqual(resp.status_code, 404)
+
+
+@override_settings(STORAGES=STORAGES_TESTE)
+class TradeHubEquipeTests(TestCase):
+    def _login_staff(self, papel):
+        User = get_user_model()
+        user = User.objects.create_user(
+            username=f"th-{papel.lower()}", password="senha-staff-ok1", first_name="Equipe"
+        )
+        PerfilStaff.objects.create(user=user, papel=papel)
+        self.client.force_login(user)
+        return user
+
+    def test_especialista_ve_cards_restritos(self):
+        self._login_staff(PerfilStaff.Papel.ESPECIALISTA)
+        resp = self.client.get(reverse("tradehub"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Kit de marca")
         self.assertContains(resp, "Prospecção")
         self.assertContains(resp, "PAP Alto Valor")
+        self.assertContains(resp, "Uso interno")
+
+    def test_gerencia_ve_cards_restritos(self):
+        self._login_staff(PerfilStaff.Papel.GERENCIA)
+        resp = self.client.get(reverse("tradehub"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Prospecção")
+        self.assertContains(resp, "PAP Alto Valor")
+
+    def test_gestor_nao_ve_cards_restritos(self):
+        self._login_staff(PerfilStaff.Papel.GESTOR)
+        resp = self.client.get(reverse("tradehub"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "Prospecção")
+        self.assertNotContains(resp, "PAP Alto Valor")
+        self.assertEqual(
+            self.client.get(reverse("tradehub_secao", args=["prospeccao"])).status_code,
+            404,
+        )
+
+    def test_especialista_abre_secao_restrita(self):
+        self._login_staff(PerfilStaff.Papel.ESPECIALISTA)
+        resp = self.client.get(reverse("tradehub_secao", args=["prospeccao"]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Prospecção")

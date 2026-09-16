@@ -1,33 +1,56 @@
 {% extends "base.html" %}
-{% block title %}Trade Hub · NIO GC Tickets{% endblock %}
+{% block title %}{{ nome }} · NIO ESPECIALISTA Tickets{% endblock %}
 {% block content %}
 <div class="hero">
   <div>
-    <h1>Trade Hub</h1>
+    <h1>{{ nome }}</h1>
     <p>{{ home.intro }}</p>
   </div>
 </div>
 
-<p class="help thub-aviso">{{ home.aviso }}</p>
+<form method="get" class="panel kit-busca">
+  <div class="panel-b" style="display:flex;gap:0.65rem;flex-wrap:wrap;align-items:flex-end">
+    <div style="flex:1;min-width:180px">
+      <label for="q">Buscar seção</label>
+      <input type="search" name="q" id="q" value="{{ q }}" placeholder="Manuais, folheto, uniforme…">
+    </div>
+    <button class="btn btn-primary" type="submit">Filtrar</button>
+    {% if q %}
+      <a class="btn btn-secondary" href="{% url 'tradehub' %}">Limpar</a>
+    {% endif %}
+  </div>
+</form>
 
-<div class="consultas-grid">
-  {% for cat in categorias %}
-    <a class="consulta-card" href="{% url 'tradehub_secao' cat.slug %}">
-      <span class="consulta-ico">{{ cat.icone }}</span>
-      <h2>{{ cat.titulo }}</h2>
-      <p>{{ cat.intro|truncatechars:140 }}</p>
-      {% if cat.n_arquivos %}
-        <span class="consulta-tag">{{ cat.n_arquivos }} arquivo{{ cat.n_arquivos|pluralize }}</span>
-      {% else %}
-        <span class="consulta-tag">Informações</span>
-      {% endif %}
-    </a>
-  {% endfor %}
-</div>
+{% for grupo in grupos %}
+  <section class="kit-grupo">
+    <h2>{{ grupo.titulo }}</h2>
+    <div class="consultas-grid">
+      {% for cat in grupo.categorias %}
+        <a class="consulta-card" href="{% url 'tradehub_secao' cat.slug %}">
+          <span class="consulta-ico">{{ cat.icone }}</span>
+          <h2>{{ cat.titulo }}</h2>
+          <p>{{ cat.intro|truncatechars:120 }}</p>
+          {% if cat.n_arquivos %}
+            <span class="consulta-tag">{{ cat.n_arquivos }} arquivo{{ cat.n_arquivos|pluralize }}</span>
+          {% else %}
+            <span class="consulta-tag">App ou comunicado</span>
+          {% endif %}
+        </a>
+      {% endfor %}
+    </div>
+  </section>
+{% empty %}
+  <div class="panel">
+    <div class="panel-b">
+      <p class="help">Nenhuma seção com esse nome.</p>
+    </div>
+  </div>
+{% endfor %}
 
+{% if faq and not q %}
 <section class="thub-faq-wrap" id="duvidas">
-  <h2>Tire as suas dúvidas</h2>
-  <p class="help">Respostas práticas sobre o uso dos materiais no PDV.</p>
+  <h2>Antes de baixar</h2>
+  <p class="help">O que muda na loja e o que continua igual.</p>
   <div class="thub-faq">
     {% for item in faq %}
       <details>
@@ -37,4 +60,5 @@
     {% endfor %}
   </div>
 </section>
+{% endif %}
 {% endblock %}

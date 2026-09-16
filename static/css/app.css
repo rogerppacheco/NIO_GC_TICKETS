@@ -519,6 +519,66 @@ input, select, textarea {
   width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 0.62rem 0.75rem;
   font: inherit; background: #fff; color: var(--ink);
 }
+input[type="radio"],
+input[type="checkbox"] {
+  width: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  accent-color: var(--brand);
+}
+.choice-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  max-width: 36rem;
+  margin: 0 0 1rem;
+}
+.choice-opt {
+  position: relative;
+  display: block;
+  margin: 0;
+  cursor: pointer;
+  color: var(--ink);
+  font-weight: 600;
+}
+.choice-opt input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.choice-opt-card {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.85rem 1rem 0.9rem;
+  background: #fff;
+  line-height: 1.35;
+}
+.choice-opt-card strong {
+  display: block;
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+.choice-opt-card small {
+  display: block;
+  margin-top: 0.28rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+.choice-opt input:focus-visible + .choice-opt-card {
+  outline: 2px solid rgba(15, 107, 92, 0.25);
+}
+.choice-opt input:checked + .choice-opt-card {
+  border-color: var(--brand);
+  background: #eef8f5;
+  box-shadow: inset 0 0 0 1px var(--brand);
+}
+.choice-opt input:checked + .choice-opt-card strong {
+  color: var(--brand);
+}
 input:focus, select:focus, textarea:focus {
   outline: 2px solid rgba(15, 107, 92, 0.25); border-color: var(--brand);
 }
@@ -1797,7 +1857,17 @@ body.page-portal .portal-extra .btn { padding: 0.38rem 0.7rem; font-size: 0.82re
   .rota-hero-kpi strong { font-size: 2.15rem; }
 }
 
-/* Trade Hub */
+/* Kit de marca */
+.kit-busca { margin-bottom: 1.15rem; }
+.kit-grupo { margin: 0 0 1.7rem; }
+.kit-grupo > h2 {
+  margin: 0 0 0.7rem;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  font-weight: 800;
+}
 .thub-aviso { max-width: 52rem; margin: -0.4rem 0 1.25rem; }
 .thub-h {
   margin: 0 0 0.75rem;
