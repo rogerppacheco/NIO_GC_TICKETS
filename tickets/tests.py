@@ -806,6 +806,7 @@ class EspecialistaAcessoTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "Meus parceiros")
         self.assertContains(r, "Outros especialistas")
+        self.assertContains(r, "Inativos")
         self.assertContains(r, "Empresários")
         self.assertContains(r, "data-tabela-busca")
         self.assertContains(r, "Buscar código")
@@ -813,6 +814,74 @@ class EspecialistaAcessoTests(TestCase):
         self.assertNotContains(meus, "PDV Ana")
         outros = self.client.get(reverse("parceiros"), {"escopo": "outros"})
         self.assertContains(outros, "PDV Ana")
+
+    @override_settings(
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    )
+    def test_lista_parceiros_aba_inativos(self):
+        self.pdv_outro.ativo = False
+        self.pdv_outro.save(update_fields=["ativo"])
+        self.client.force_login(self.gestor)
+        outros = self.client.get(reverse("parceiros"), {"escopo": "outros"})
+        self.assertNotContains(outros, "PDV Outro")
+        inativos = self.client.get(reverse("parceiros"), {"escopo": "inativos"})
+        self.assertEqual(inativos.status_code, 200)
+        self.assertContains(inativos, "PDV Outro")
+        self.assertContains(inativos, "Reativar")
+        self.assertNotContains(inativos, "PDV Ana")
+        self.assertContains(inativos, 'href="?escopo=inativos"')
+
+    @override_settings(
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    )
+    def test_inativar_abre_aba_inativos(self):
+        self.client.force_login(self.spec)
+        r = self.client.post(reverse("parceiro_inativar", args=[self.pdv_ana.pk]))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("escopo=inativos", r["Location"])
+        lista = self.client.get(reverse("parceiros"), {"escopo": "inativos"})
+        self.assertContains(lista, "PDV Ana")
+        self.assertContains(lista, "Reativar")
+        meus = self.client.get(reverse("parceiros"), {"escopo": "meus"})
+        self.assertNotContains(meus, "PDV Ana")
+
+    @override_settings(
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+            },
+        }
+    )
+    def test_reativar_devolve_parceiro_a_lista(self):
+        self.pdv_ana.ativo = False
+        self.pdv_ana.save(update_fields=["ativo"])
+        self.client.force_login(self.spec)
+        r = self.client.post(reverse("parceiro_reativar", args=[self.pdv_ana.pk]))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("escopo=meus", r["Location"])
+        self.pdv_ana.refresh_from_db()
+        self.assertTrue(self.pdv_ana.ativo)
+        meus = self.client.get(reverse("parceiros"), {"escopo": "meus"})
+        self.assertContains(meus, "PDV Ana")
+        inativos = self.client.get(reverse("parceiros"), {"escopo": "inativos"})
+        self.assertNotContains(inativos, "PDV Ana")
+        editar = self.client.get(reverse("parceiro_editar", args=[self.pdv_ana.pk]))
+        self.assertContains(editar, "Inativar PDV")
+        self.pdv_ana.ativo = False
+        self.pdv_ana.save(update_fields=["ativo"])
+        editar_inativo = self.client.get(reverse("parceiro_editar", args=[self.pdv_ana.pk]))
+        self.assertContains(editar_inativo, "Reativar PDV")
 
     def test_staff_de_outro_sistema_nao_e_gestor_nem_loga(self):
         User = get_user_model()
@@ -2157,6 +2226,7 @@ class LoginUnificadoTests(TestCase):
         self.assertEqual(negado.status_code, 404)
         ina = self.client.post(reverse("parceiro_inativar", args=[self.pdv.pk]))
         self.assertEqual(ina.status_code, 302)
+        self.assertIn("escopo=inativos", ina["Location"])
         self.pdv.refresh_from_db()
         self.user_pdv.refresh_from_db()
         self.assertFalse(self.pdv.ativo)

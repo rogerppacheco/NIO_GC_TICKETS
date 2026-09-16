@@ -1125,7 +1125,7 @@ body.page-fila .app-frame { height: 100vh; min-height: 0; overflow: hidden; }
 .table-parceiros { min-width: 1100px; font-size: 0.88rem; }
 .table-parceiros th,
 .table-parceiros td { padding: 0.45rem 0.55rem; vertical-align: middle; }
-.table-parceiros tr.is-inactive { opacity: 0.65; }
+.table-parceiros tr.is-inactive td:not(.col-acoes) { opacity: 0.72; }
 .table-parceiros .col-cod { width: 5.5rem; }
 .table-parceiros .col-cred { width: 6.5rem; }
 .table-parceiros .col-ger { width: 2.5rem; text-align: center; }
@@ -1134,7 +1134,7 @@ body.page-fila .app-frame { height: 100vh; min-height: 0; overflow: hidden; }
 .table-parceiros .col-esp { max-width: 6rem; overflow: hidden; text-overflow: ellipsis; }
 .table-parceiros .col-razao { max-width: 11rem; }
 .table-parceiros .col-emp { max-width: 13rem; font-size: 0.82rem; }
-.table-parceiros .col-acoes { width: 9rem; }
+.table-parceiros .col-acoes { width: 14rem; }
 .table-parceiros thead th {
   position: sticky;
   top: 0;

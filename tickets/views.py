@@ -20,9 +20,11 @@ from .acesso import (
     eh_gestor,
     eh_gerencia,
     escopo_gestao,
+    escopo_parceiros,
     gestor_required,
     parceiro_de,
     parceiros_da_fila,
+    parceiros_inativos_cadastro,
     parceiros_para_cadastro,
     parceiros_visiveis,
     pode_importar_bases,
@@ -971,13 +973,17 @@ def ticket_detalhe(request: HttpRequest, protocolo: str) -> HttpResponse:
     )
 
 
+def _url_parceiros(escopo: str = "meus") -> str:
+    return f"{reverse('parceiros')}?escopo={escopo}"
+
+
 @login_required
 def parceiros_lista(request: HttpRequest) -> HttpResponse:
-    escopo = escopo_gestao(request)
+    escopo = escopo_parceiros(request)
     if request.method == "POST" and request.POST.get("action") == "importar_carteira":
         if not pode_importar_bases(request.user):
             messages.error(request, "Sem permissão para importar a carteira.")
-            return redirect(f"{reverse('parceiros')}?escopo={escopo}")
+            return redirect(_url_parceiros(escopo))
         from gestao.forms import UploadBaseForm
         from gestao.pipelines.carteira import processar_carteira
 
@@ -1002,11 +1008,15 @@ def parceiros_lista(request: HttpRequest) -> HttpResponse:
                 messages.error(request, f"Falha ao importar carteira: {exc}")
         else:
             messages.error(request, "Selecione a Carteira PP (.xlsx).")
-        return redirect(f"{reverse('parceiros')}?escopo={escopo}")
+        return redirect(_url_parceiros(escopo))
 
+    base = (
+        parceiros_inativos_cadastro(request.user)
+        if escopo == "inativos"
+        else parceiros_para_cadastro(request.user, escopo)
+    )
     parceiros = (
-        parceiros_para_cadastro(request.user, escopo)
-        .select_related("especialista", "especialista__perfil_staff")
+        base.select_related("especialista", "especialista__perfil_staff")
         .prefetch_related("contatos")
         .annotate(qtd_tickets=Count("tickets"))
         .order_by("nome")
@@ -1025,9 +1035,10 @@ def parceiros_lista(request: HttpRequest) -> HttpResponse:
         "tickets/parceiros.html",
         {
             "parceiros": parceiros,
-            "gestao_escopo": escopo,
+            "parceiros_escopo": escopo,
             "gestao_qtd_meus": parceiros_para_cadastro(request.user, "meus").count(),
             "gestao_qtd_outros": parceiros_para_cadastro(request.user, "outros").count(),
+            "gestao_qtd_inativos": parceiros_inativos_cadastro(request.user).count(),
             "pode_importar_carteira": pode_importar_bases(request.user),
         },
     )
@@ -1171,7 +1182,7 @@ def parceiro_inativar(request: HttpRequest, pk: int) -> HttpResponse:
         f"Parceiro {parceiro.codigo_pdv} — {parceiro.nome} inativado. "
         "Demandas antigas permanecem; login e novas aberturas ficam bloqueados.",
     )
-    return redirect("parceiros")
+    return redirect(_url_parceiros("inativos"))
 
 
 @login_required
@@ -1194,7 +1205,8 @@ def parceiro_reativar(request: HttpRequest, pk: int) -> HttpResponse:
             detalhe=parceiro.codigo_pdv,
         )
     messages.success(request, f"Parceiro {parceiro.codigo_pdv} — {parceiro.nome} reativado.")
-    return redirect("parceiros")
+    dest = "meus" if parceiro.especialista_id == request.user.id else "outros"
+    return redirect(_url_parceiros(dest))
 
 
 @login_required

@@ -28,15 +28,20 @@
         {% endfor %}
         <div class="full" style="display:flex;gap:0.5rem;flex-wrap:wrap">
           <button class="btn btn-primary" type="submit">Salvar PDV</button>
-          <a class="btn btn-secondary" href="{% url 'parceiros' %}">Voltar</a>
+          <a class="btn btn-secondary" href="{% url 'parceiros' %}{% if parceiro and not parceiro.ativo %}?escopo=inativos{% endif %}">Voltar</a>
           {% if parceiro and parceiro.ativo %}
             <button formaction="{% url 'parceiro_inativar' parceiro.pk %}" formmethod="post" class="btn btn-secondary" type="submit"
                     onclick="return confirm('Inativar este PDV? O login também será desligado.');">Inativar PDV</button>
-          {% elif parceiro %}
-            <button formaction="{% url 'parceiro_reativar' parceiro.pk %}" formmethod="post" class="btn btn-secondary" type="submit">Reativar PDV</button>
           {% endif %}
         </div>
       </form>
+      {% if parceiro and not parceiro.ativo %}
+      <form method="post" action="{% url 'parceiro_reativar' parceiro.pk %}" style="margin-top:0.75rem"
+            onsubmit="return confirm('Reativar este PDV? O login volta a funcionar.');">
+        {% csrf_token %}
+        <button class="btn btn-primary" type="submit">Reativar PDV</button>
+      </form>
+      {% endif %}
     </div>
   </div>
 

@@ -4,11 +4,15 @@
 {% block body_class %}page-parceiros{% endblock %}
 {% block main_class %}wrap wrap-parceiros{% endblock %}
 {% block content %}
-{% with escopo=gestao_escopo|default:"meus" %}
+{% with escopo=parceiros_escopo|default:"meus" %}
 <div class="gestao-escopo" role="tablist" aria-label="Parceiros">
   <a href="?escopo=meus" class="{% if escopo == 'meus' %}is-on{% endif %}">Meus parceiros <span class="help">({{ gestao_qtd_meus|default:0 }})</span></a>
   <a href="?escopo=outros" class="{% if escopo == 'outros' %}is-on{% endif %}">Outros especialistas <span class="help">({{ gestao_qtd_outros|default:0 }})</span></a>
+  <a href="?escopo=inativos" class="{% if escopo == 'inativos' %}is-on{% endif %}">Inativos <span class="help">({{ gestao_qtd_inativos|default:0 }})</span></a>
 </div>
+{% if escopo == "inativos" %}
+  <p class="help" style="margin:-0.4rem 0 1rem">PDVs inativados. Login e novas demandas ficam bloqueados; o histórico permanece. Use <strong>Reativar</strong> para devolver o parceiro à lista.</p>
+{% endif %}
 {% endwith %}
 <div class="hero hero-parceiros">
   <div>
@@ -22,6 +26,7 @@
       <form method="post" enctype="multipart/form-data" class="import-carteira-form">
         {% csrf_token %}
         <input type="hidden" name="action" value="importar_carteira">
+        <input type="hidden" name="escopo" value="{{ parceiros_escopo|default:'meus' }}">
         <input type="file" name="arquivo" accept=".xlsx,.xlsb,.xls" required>
         <p class="help">Aba <code>Planilha1</code> · colunas <code>NM_PARCEIRO_2</code> e <code>DT_CREDENC</code>.</p>
         <button class="btn btn-primary" type="submit">Atualizar credenciamento</button>
@@ -87,18 +92,20 @@
           </td>
           <td class="col-acoes">
             <div class="parceiro-acoes">
-              <a class="btn btn-secondary btn-sm" href="{% url 'parceiro_editar' p.pk %}">Editar</a>
               {% if p.ativo %}
+                <a class="btn btn-secondary btn-sm" href="{% url 'parceiro_editar' p.pk %}">Editar</a>
                 <form method="post" action="{% url 'parceiro_inativar' p.pk %}"
                       onsubmit="return confirm('Inativar {{ p.nome }}?');">
                   {% csrf_token %}
                   <button type="submit" class="btn btn-secondary btn-sm">Inativar</button>
                 </form>
               {% else %}
-                <form method="post" action="{% url 'parceiro_reativar' p.pk %}">
+                <form method="post" action="{% url 'parceiro_reativar' p.pk %}"
+                      onsubmit="return confirm('Reativar {{ p.nome }}? O login do PDV volta a funcionar.');">
                   {% csrf_token %}
                   <button type="submit" class="btn btn-primary btn-sm">Reativar</button>
                 </form>
+                <a class="btn btn-secondary btn-sm" href="{% url 'parceiro_editar' p.pk %}">Editar</a>
               {% endif %}
               {% if p.qtd_tickets == 0 %}
                 <form method="post" action="{% url 'parceiro_excluir' p.pk %}"
@@ -111,7 +118,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="11">Nenhum parceiro neste escopo.</td></tr>
+        <tr><td colspan="11">{% if parceiros_escopo == "inativos" %}Nenhum parceiro inativo.{% else %}Nenhum parceiro neste escopo.{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>

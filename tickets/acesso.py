@@ -177,6 +177,12 @@ def escopo_gestao(request) -> str:
     return valor if valor in {"meus", "outros", "todos"} else "meus"
 
 
+def escopo_parceiros(request) -> str:
+    src = request.POST if getattr(request, "method", "") == "POST" else getattr(request, "GET", {})
+    valor = (src.get("escopo") or "meus").strip().lower()
+    return valor if valor in {"meus", "outros", "inativos"} else "meus"
+
+
 GERENCIA_SESSAO = "gestao_gerencia"
 GERENCIA_TODAS = "__todas__"
 
@@ -303,6 +309,21 @@ def parceiros_para_cadastro(user, escopo: str = "meus"):
             return qs.exclude(especialista=user).order_by("nome")
         return qs.filter(especialista=user).order_by("nome")
     return parceiros_gestao(user, escopo)
+
+
+def parceiros_inativos_cadastro(user):
+    """Aba Inativos da tela Parceiros — mesmo recorte de visibilidade, só PDVs inativos."""
+    qs = Parceiro.objects.filter(ativo=False).select_related(
+        "especialista", "especialista__perfil_staff"
+    )
+    if eh_admin(user):
+        return qs.order_by("nome")
+    gerencia = gerencia_de(user)
+    if gerencia:
+        return qs.filter(pk__in=ids_parceiros_da_gerencia(gerencia).values("id")).order_by(
+            "nome"
+        )
+    return qs.filter(especialista=user).order_by("nome")
 
 
 def pode_ver_ticket(user, ticket: Ticket) -> bool:
