@@ -1033,6 +1033,16 @@ class CheckinRotaDiaria(models.Model):
         default=0,
         help_text="Planejamento absoluto de VBs do dia.",
     )
+    horario_inicio = models.TimeField(
+        null=True,
+        blank=True,
+        help_text="Horário de começo da rota.",
+    )
+    horario_fim = models.TimeField(
+        null=True,
+        blank=True,
+        help_text="Horário final da rota.",
+    )
     uf = models.CharField(max_length=2, blank=True)
     cidade = models.CharField(max_length=120, blank=True)
     bairro = models.CharField(max_length=120, blank=True)
@@ -1077,6 +1087,91 @@ class CheckinRotaDiaria(models.Model):
 
     def __str__(self) -> str:
         return f"{self.parceiro.codigo_pdv} · {self.data} · {self.tipo_rota}"
+
+
+class SolicitacaoVertical(models.Model):
+    class Status(models.TextChoices):
+        SEM_TRATAMENTO = "SEM_TRATAMENTO", "Sem tratamento"
+        EM_CADASTRO = "EM_CADASTRO", "Em cadastro"
+        EM_PROJETO = "EM_PROJETO", "Em Projeto"
+        EM_EXECUCAO = "EM_EXECUCAO", "Em Execução"
+        CONCLUIDA = "CONCLUIDA", "Concluída"
+        CANCELADA = "CANCELADA", "Cancelada"
+        ARQUIVADA = "ARQUIVADA", "Arquivada"
+
+    class Infraestrutura(models.TextChoices):
+        SUBTERRANEA = "SUBTERRANEA", "Subterrânea"
+        AEREA = "AEREA", "Aérea (Poste)"
+        MISTA = "MISTA", "Mista"
+
+    nome_condominio = models.CharField(max_length=255)
+    nome_sindico = models.CharField(max_length=255)
+    contato_sindico = models.CharField(max_length=20)
+    cep = models.CharField(max_length=9)
+    logradouro = models.CharField(max_length=255, blank=True)
+    numero = models.CharField(max_length=20)
+    bairro = models.CharField(max_length=100, blank=True)
+    cidade = models.CharField(max_length=100, blank=True)
+    uf = models.CharField(max_length=2, blank=True)
+    latitude = models.CharField(max_length=50, blank=True)
+    longitude = models.CharField(max_length=50, blank=True)
+    infraestrutura_tipo = models.CharField(
+        max_length=50, choices=Infraestrutura.choices, default=Infraestrutura.SUBTERRANEA
+    )
+    possui_shaft_dg = models.BooleanField(default=False)
+    total_hps = models.IntegerField(default=0)
+    pre_venda_minima = models.IntegerField(default=0)
+    arquivo_carta = models.FileField(
+        upload_to="vertical/carta/%Y/%m/", blank=True
+    )
+    arquivo_fachada = models.FileField(
+        upload_to="vertical/fachada/%Y/%m/", blank=True
+    )
+    destinatarios_resumo = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=50, choices=Status.choices, default=Status.SEM_TRATAMENTO, db_index=True
+    )
+    observacao = models.TextField(blank=True)
+    parceiro = models.ForeignKey(
+        Parceiro,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="solicitacoes_vertical",
+    )
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="solicitacoes_vertical",
+    )
+    data_criacao = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-data_criacao"]
+        verbose_name = "Solicitação Projeto Vertical"
+        verbose_name_plural = "Solicitações Projeto Vertical"
+
+    def __str__(self) -> str:
+        return f"{self.nome_condominio} ({self.status})"
+
+
+class BlocoVertical(models.Model):
+    solicitacao = models.ForeignKey(
+        SolicitacaoVertical, on_delete=models.CASCADE, related_name="blocos"
+    )
+    nome_bloco = models.CharField(max_length=100)
+    andares = models.IntegerField()
+    unidades_por_andar = models.IntegerField()
+    total_hps_bloco = models.IntegerField()
+
+    class Meta:
+        ordering = ["nome_bloco"]
+        verbose_name = "Bloco (Projeto Vertical)"
+        verbose_name_plural = "Blocos (Projeto Vertical)"
+
+    def __str__(self) -> str:
+        return f"{self.nome_bloco} · {self.total_hps_bloco} HPs"
 
 
 from tickets.consultas.vtal_models import (  # noqa: E402, F401

@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Projeto Vertical{% endblock %}
+{% block main_class %}wrap wrap-wide{% endblock %}
+{% block body_class %}page-vertical{% endblock %}
+{% block content %}
+<div class="hero hero-compact">
+  <div>
+    <h1>Projeto Vertical</h1>
+    <p>Solicitações e acionamentos para condomínios.</p>
+  </div>
+  <a class="btn btn-secondary" href="{% if visao_equipe %}{% url 'portal_inicio' %}{% else %}{% url 'portal_parceiro' %}{% endif %}">Portal</a>
+</div>
+
+<div
+  id="vertical-app"
+  class="vertical-app"
+  data-dashboard-url="{% url 'vertical_api_dashboard' %}"
+  data-list-url="{% url 'vertical_api_solicitacoes' %}"
+  data-item-url="{% url 'vertical_api_solicitacao' 0 %}"
+  data-viacep-url="{% url 'vertical_api_viacep' 'CEP' %}"
+  data-nominatim-url="{% url 'vertical_api_nominatim' %}"
+  data-config-url="{% url 'vertical_api_config' %}"
+  data-usuarios-url="{% url 'vertical_api_usuarios' %}"
+  data-can-config="{% if can_config %}1{% else %}0{% endif %}"
+  data-visao-equipe="{% if visao_equipe %}1{% else %}0{% endif %}"
+>
+  <nav class="tabs" role="tablist" aria-label="Projeto Vertical">
+    <button type="button" class="tab is-active" data-tab="dashboard">Dashboard</button>
+    <button type="button" class="tab" data-tab="nova"><span id="tab-nova-label">Nova solicitação</span></button>
+    {% if can_config %}
+    <button type="button" class="tab" data-tab="config">Configuração</button>
+    {% endif %}
+    <button type="button" class="tab" data-tab="lista">Meus acionamentos</button>
+    <button type="button" class="tab" data-tab="cnpj">CNPJ por cidade/bairro</button>
+  </nav>
+
+  <section class="panel vertical-panel" data-panel="dashboard">
+    <div class="panel-h">
+      <h2>Dashboard Projeto Vertical</h2>
+      <button type="button" class="btn btn-secondary" id="btn-dash-refresh">Atualizar</button>
+    </div>
+    <div class="panel-b">
+      <div class="vertical-kpis" id="vertical-kpis">
+        <div class="vertical-kpi kpi-blue"><span class="label">Acionamentos</span><strong id="kpi-acionamentos">0</strong></div>
+        <div class="vertical-kpi kpi-green"><span class="label">HPs total</span><strong id="kpi-hps">0</strong></div>
+        <div class="vertical-kpi kpi-orange"><span class="label">Pré-venda</span><strong id="kpi-prevenda">0</strong></div>
+        <div class="vertical-kpi kpi-purple"><span class="label">Vendas (CEP + fachada)</span><strong id="kpi-vendas">0</strong></div>
+      </div>
+      <div class="table-scroll" style="margin-top:1rem">
+        <table class="table">
+          <thead><tr><th>Status</th><th>Quantidade</th></tr></thead>
+          <tbody id="tbody-status"><tr><td colspan="2" class="help">Carregando…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  {% if can_config %}
+  <section class="panel vertical-panel" data-panel="config" hidden>
+    <div class="panel-h"><h2>Configuração de resumo (WhatsApp)</h2></div>
+    <div class="panel-b">
+      <label class="help">Destinatários padrão do resumo</label>
+      <input type="text" id="cfg-destinatarios" class="inp" placeholder="Ex: 31999999999, 31988888888">
+      <p class="help">Números com DDD, separados por vírgula.</p>
+      <label class="help" style="display:flex;gap:0.5rem;align-items:center;margin-top:0.7rem">
+        <input type="checkbox" id="cfg-ativo" checked>
+        Ativar envio para destinatários padrão
+      </label>
+      <button type="button" class="btn btn-primary" id="btn-cfg-salvar" style="margin-top:0.8rem">Salvar configuração</button>
+      <p class="help" id="cfg-feedback"></p>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="panel vertical-panel" data-panel="nova" hidden>
+    <div class="panel-h">
+      <h2 id="form-titulo">Dados do condomínio</h2>
+      <button type="button" class="btn btn-secondary" id="btn-cancelar-edicao" hidden>Cancelar edição</button>
+    </div>
+    <div class="panel-b">
+      <form id="form-vertical" novalidate>
+        {% csrf_token %}
+        <input type="hidden" id="edit_mode_id" value="">
+        <input type="hidden" name="total_hps_final" id="input_total_hps" value="0">
+        <input type="hidden" name="prevenda_final" id="input_prevenda" value="0">
+        <input type="hidden" name="dados_blocos_json" id="input_blocos_json" value="[]">
+
+        <div id="div-criado-por" class="vertical-grid" hidden>
+          <label>Acionado por
+            <select name="criado_por_id" id="inp_criado_por" class="inp">
+              <option value="">Carregando…</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="vertical-grid">
+          <label>Nome do condomínio *
+            <input type="text" name="nome_condominio" id="inp_nome" class="inp" required>
+          </label>
+          <label>Nome do síndico *
+            <input type="text" name="nome_sindico" id="inp_sindico" class="inp" required>
+          </label>
+          <label>Contato (WhatsApp) *
+            <input type="text" name="contato" id="inp_contato" class="inp" required>
+          </label>
+        </div>
+
+        <div class="vertical-grid">
+          <label>CEP *
+            <input type="text" name="cep" id="inp_cep" class="inp" required maxlength="9">
+          </label>
+          <label>Cidade/UF
+            <input type="text" id="cidade_uf" class="inp" readonly>
+            <input type="hidden" name="cidade" id="cidade">
+            <input type="hidden" name="uf" id="uf">
+          </label>
+          <label>Logradouro
+            <input type="text" name="logradouro" id="logradouro" class="inp">
+          </label>
+          <label>Número *
+            <input type="text" name="numero" id="inp_numero" class="inp" required>
+          </label>
+          <label>Bairro
+            <input type="text" name="bairro" id="bairro" class="inp">
+          </label>
+        </div>
+
+        <div class="vertical-grid">
+          <label>Latitude
+            <input type="text" name="latitude" id="inp_lat" class="inp">
+          </label>
+          <label>Longitude
+            <input type="text" name="longitude" id="inp_long" class="inp">
+          </label>
+          <div>
+            <button type="button" class="btn btn-secondary" id="btn-coords">Gerar coordenadas pelo endereço</button>
+            <p class="help">Preencha CEP, logradouro, número e cidade antes.</p>
+          </div>
+        </div>
+
+        <div class="vertical-grid">
+          <label>Carta síndico (autorização) *
+            <input type="file" name="arquivo_carta" id="input-arquivo-carta" class="inp" accept=".pdf,.jpg,.jpeg,.png">
+            <p class="help" id="preview-carta" hidden><a href="#" target="_blank" rel="noopener">Ver arquivo atual</a></p>
+          </label>
+          <label>Fotos fachada *
+            <input type="file" name="arquivo_fachada" id="input-arquivo-fachada" class="inp" accept="image/*">
+            <p class="help" id="preview-fachada" hidden><a href="#" target="_blank" rel="noopener">Ver foto atual</a></p>
+          </label>
+        </div>
+
+        <div class="vertical-grid">
+          <label>Infraestrutura
+            <select name="infraestrutura" id="inp_infra" class="inp">
+              <option value="SUBTERRANEA">Subterrânea</option>
+              <option value="AEREA">Aérea (Poste)</option>
+              <option value="MISTA">Mista</option>
+            </select>
+          </label>
+          <label class="help" style="display:flex;gap:0.5rem;align-items:center;margin-top:1.6rem">
+            <input type="checkbox" name="possui_shaft" id="inp_shaft">
+            Possui Shaft / DG?
+          </label>
+        </div>
+
+        <div class="panel" style="margin:1rem 0;box-shadow:none">
+          <div class="panel-h"><h2>Estrutura de blocos</h2></div>
+          <div class="panel-b">
+            <div class="vertical-grid">
+              <input type="text" id="temp_bloco" class="inp" placeholder="Nome bloco">
+              <input type="number" id="temp_andares" class="inp" placeholder="Andares" min="1">
+              <input type="number" id="temp_aptos" class="inp" placeholder="Aptos/andar" min="0">
+              <button type="button" class="btn btn-secondary" id="btn-add-bloco">Adicionar</button>
+            </div>
+            <div class="table-scroll" style="margin-top:0.7rem">
+              <table class="table">
+                <thead><tr><th>Bloco</th><th>Andares</th><th>Aptos/andar</th><th>Total HPs</th><th></th></tr></thead>
+                <tbody id="lista-blocos"></tbody>
+                <tfoot>
+                  <tr><td colspan="3">Total geral</td><td id="total-hps-geral">0</td><td></td></tr>
+                  <tr><td colspan="3">Pré-venda (10%)</td><td id="prevenda-calc">0</td><td></td></tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="resumoEnvio" class="help" hidden>
+          <strong>Resumo enviado:</strong>
+          <pre id="resumoEnvioTexto" class="mono" style="white-space:pre-wrap"></pre>
+        </div>
+        <button type="button" class="btn btn-primary" id="btn-submit">Enviar solicitação</button>
+        <p class="help" id="form-feedback"></p>
+      </form>
+    </div>
+  </section>
+
+  <section class="panel vertical-panel" data-panel="lista" hidden>
+    <div class="panel-h">
+      <h2>Histórico</h2>
+      <button type="button" class="btn btn-secondary" id="btn-lista-refresh">Atualizar</button>
+    </div>
+    <div class="table-scroll table-scroll-wide">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th><th>Condomínio</th><th>Endereço</th><th>Síndico</th><th>Telefone</th>
+            <th>HPs</th><th>Pré-vendas</th><th>Fotos</th><th>Status</th><th>Acionado por</th><th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-acionamentos"><tr><td colspan="11" class="help">Carregando…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel vertical-panel" data-panel="cnpj" hidden>
+    <div class="panel-h"><h2>CNPJ por cidade e bairro</h2></div>
+    <div class="panel-b">
+      <p class="help">A base CNPJ da Receita Federal ainda não está disponível neste portal. A consulta por cidade/bairro entra na próxima onda.</p>
+    </div>
+  </section>
+</div>
+
+<div id="vertical-modal-status" class="vertical-modal" hidden>
+  <div class="vertical-modal-card">
+    <h2>Atualizar status</h2>
+    <input type="hidden" id="st-id">
+    <label>Novo status
+      <select id="st-val" class="inp">
+        <option value="SEM_TRATAMENTO">Sem tratamento</option>
+        <option value="EM_CADASTRO">Em cadastro</option>
+        <option value="EM_PROJETO">Em Projeto</option>
+        <option value="EM_EXECUCAO">Em Execução</option>
+        <option value="CONCLUIDA">Concluída</option>
+        <option value="CANCELADA">Cancelada</option>
+        <option value="ARQUIVADA">Arquivada</option>
+      </select>
+    </label>
+    <label>Observação
+      <textarea id="st-obs" class="inp" rows="3"></textarea>
+    </label>
+    <div style="display:flex;gap:0.5rem;margin-top:0.8rem">
+      <button type="button" class="btn btn-primary" id="btn-st-salvar">Salvar</button>
+      <button type="button" class="btn btn-secondary" id="btn-st-fechar">Fechar</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/vertical.js' %}" defer></script>
+{% endblock %}

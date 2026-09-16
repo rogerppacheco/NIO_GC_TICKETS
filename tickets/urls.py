@@ -1,6 +1,6 @@
 from django.urls import include, path
 
-from . import acessos_views, repositorio_views, rota_views, tradehub_views, views
+from . import acessos_views, repositorio_views, rota_views, tradehub_views, vertical_views, views
 
 urlpatterns = [
     path("", views.home, name="home"),
@@ -94,6 +94,42 @@ urlpatterns = [
     ),
     path("abrir/rota/api/agendas/", rota_views.rota_api_agendas, name="rota_api_agendas"),
     path("abrir/rota/api/checkin/", rota_views.rota_api_checkin, name="rota_api_checkin"),
+    path("abrir/vertical/", vertical_views.vertical_portal, name="vertical_portal"),
+    path(
+        "abrir/vertical/api/dashboard/",
+        vertical_views.vertical_api_dashboard,
+        name="vertical_api_dashboard",
+    ),
+    path(
+        "abrir/vertical/api/solicitacoes/",
+        vertical_views.vertical_api_solicitacoes,
+        name="vertical_api_solicitacoes",
+    ),
+    path(
+        "abrir/vertical/api/solicitacoes/<int:pk>/",
+        vertical_views.vertical_api_solicitacao,
+        name="vertical_api_solicitacao",
+    ),
+    path(
+        "abrir/vertical/api/viacep/<str:cep>/",
+        vertical_views.vertical_api_viacep,
+        name="vertical_api_viacep",
+    ),
+    path(
+        "abrir/vertical/api/nominatim/",
+        vertical_views.vertical_api_nominatim,
+        name="vertical_api_nominatim",
+    ),
+    path(
+        "abrir/vertical/api/config/",
+        vertical_views.vertical_api_config,
+        name="vertical_api_config",
+    ),
+    path(
+        "abrir/vertical/api/usuarios/",
+        vertical_views.vertical_api_usuarios,
+        name="vertical_api_usuarios",
+    ),
     path("abrir/minhas/", views.minhas_demandas, name="minhas_demandas"),
     path("abrir/sair/", views.portal_sair, name="portal_sair"),
     path("consulta/", views.consulta_busca, name="consulta_busca"),

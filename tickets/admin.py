@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from .models import (
     Anexo,
+    BlocoVertical,
     CheckinRotaDiaria,
     ContatoParceiro,
     Encaminhamento,
@@ -14,6 +15,7 @@ from .models import (
     ProcessoAnexo,
     ProcessoLink,
     ProcessoRepositorio,
+    SolicitacaoVertical,
     Ticket,
     ConfigRespostaTipo,
 )
@@ -175,4 +177,26 @@ class PlanejamentoSemanalRotaAdmin(admin.ModelAdmin):
     list_filter = ("status_alerta",)
     search_fields = ("parceiro__codigo_pdv", "parceiro__nome")
     date_hierarchy = "semana_inicio"
+
+
+class BlocoVerticalInline(admin.TabularInline):
+    model = BlocoVertical
+    extra = 0
+
+
+@admin.register(SolicitacaoVertical)
+class SolicitacaoVerticalAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "nome_condominio",
+        "cidade",
+        "uf",
+        "status",
+        "total_hps",
+        "criado_por",
+        "data_criacao",
+    )
+    list_filter = ("status", "uf")
+    search_fields = ("nome_condominio", "nome_sindico", "cep", "cidade")
+    inlines = [BlocoVerticalInline]
 

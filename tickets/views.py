@@ -341,6 +341,7 @@ def ticket_criar(request: HttpRequest) -> HttpResponse:
 
 _DESTINO_APOS_CONTATO = {
     "rota": "rota_portal",
+    "vertical": "vertical_portal",
     "formulario": "abrir_demanda_form",
     "demanda": "abrir_demanda_form",
     "minhas": "minhas_demandas",
@@ -351,6 +352,7 @@ _URL_PARA_NEXT = {
     "abrir_demanda": "formulario",
     "minhas_demandas": "minhas",
     "rota_portal": "rota",
+    "vertical_portal": "vertical",
     "consulta_busca": "consulta",
 }
 

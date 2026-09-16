@@ -19,12 +19,24 @@
     <p>Semana atual: local, equipes em campo, contratação e desligamento.</p>
     <span class="consulta-tag">Agendas dos PDVs</span>
   </a>
+  <a class="consulta-card" href="{% url 'vertical_portal' %}">
+    <span class="consulta-ico">🏢</span>
+    <h2>Projeto Vertical</h2>
+    <p>Solicitações e acionamentos para condomínios.</p>
+    <span class="consulta-tag">CDOI</span>
+  </a>
   {% else %}
   <a class="consulta-card" href="{% if portal_parceiro and portal_contato %}{% url 'rota_portal' %}{% else %}{% url 'portal_contato' %}?next=rota{% endif %}">
     <span class="consulta-ico">🗺️</span>
     <h2>Rota</h2>
     <p>Check-in da semana: local, equipes em campo e movimento de time.</p>
     <span class="consulta-tag">Operação do dia</span>
+  </a>
+  <a class="consulta-card" href="{% if portal_parceiro and portal_contato %}{% url 'vertical_portal' %}{% else %}{% url 'portal_contato' %}?next=vertical{% endif %}">
+    <span class="consulta-ico">🏢</span>
+    <h2>Projeto Vertical</h2>
+    <p>Solicitações e acionamentos para condomínios.</p>
+    <span class="consulta-tag">CDOI</span>
   </a>
   <a class="consulta-card" href="{% url 'abrir_demanda_form' %}">
     <span class="consulta-ico">🎫</span>
