@@ -927,7 +927,7 @@ class FilaFiltroForm(forms.Form):
     especialista = forms.ModelChoiceField(
         required=False,
         queryset=get_user_model().objects.none(),
-        empty_label="Todos especialistas",
+        empty_label="Meus parceiros",
         label="Especialista",
         widget=forms.Select(attrs={"class": "fila-pick", "aria-label": "Especialista"}),
     )
@@ -947,6 +947,10 @@ class FilaFiltroForm(forms.Form):
             from .acesso import qs_equipe
 
             self.fields["especialista"].queryset = qs_equipe()
+        campo = self.fields["especialista"]
+        campo.label_from_instance = lambda u: (
+            (u.get_full_name() or u.first_name or u.username).strip()
+        )
         if situacoes_osab is None:
             from gestao.models import VendaOSAB
 

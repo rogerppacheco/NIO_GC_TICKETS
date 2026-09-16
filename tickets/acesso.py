@@ -89,6 +89,51 @@ def ids_parceiros_da_gerencia(gerencia: str):
     )
 
 
+def qs_equipe_da_gerencia(user):
+    """Equipe da gerência selecionada (admin) ou da gerência do perfil."""
+    qs = qs_equipe()
+    gerencia = gerencia_de(user)
+    if not gerencia:
+        return qs if eh_admin(user) else qs.none()
+    ids_perfil = qs.filter(perfil_staff__gerencia__iexact=gerencia).values("pk")
+    ids_pdv = (
+        ids_parceiros_da_gerencia(gerencia)
+        .exclude(especialista_id=None)
+        .values("especialista_id")
+    )
+    return qs.filter(Q(pk__in=ids_perfil) | Q(pk__in=ids_pdv)).distinct()
+
+
+def especialista_alvo_fila(user, especialista=None):
+    """Quem está sendo coberto na fila. Sem seleção válida, o próprio usuário."""
+    if especialista is None or getattr(especialista, "pk", None) == getattr(user, "pk", None):
+        return user
+    if not getattr(user, "is_authenticated", False) or not tem_acesso_interno(user):
+        return user
+    if qs_equipe_da_gerencia(user).filter(pk=especialista.pk).exists():
+        return especialista
+    return user
+
+
+def parceiros_da_fila(user, especialista=None):
+    alvo = especialista_alvo_fila(user, especialista)
+    return Parceiro.objects.filter(especialista=alvo, ativo=True)
+
+
+def tickets_da_fila(user, especialista=None):
+    """Fila padrão: só os PDVs do usuário. Com especialista, os PDVs dele (mesma gerência)."""
+    qs = Ticket.objects.select_related(
+        "parceiro",
+        "atendente",
+        "parceiro__especialista",
+        "parceiro__especialista__perfil_staff",
+    )
+    if not getattr(user, "is_authenticated", False) or not tem_acesso_interno(user):
+        return qs.none()
+    alvo = especialista_alvo_fila(user, especialista)
+    return qs.filter(parceiro__especialista=alvo)
+
+
 def tickets_visiveis(user):
     qs = Ticket.objects.select_related(
         "parceiro",
@@ -261,7 +306,14 @@ def parceiros_para_cadastro(user, escopo: str = "meus"):
 
 
 def pode_ver_ticket(user, ticket: Ticket) -> bool:
-    return tickets_visiveis(user).filter(pk=ticket.pk).exists()
+    if tickets_visiveis(user).filter(pk=ticket.pk).exists():
+        return True
+    if not tem_acesso_interno(user) or not ticket or not getattr(ticket, "parceiro", None):
+        return False
+    spec_id = ticket.parceiro.especialista_id
+    if not spec_id:
+        return False
+    return qs_equipe_da_gerencia(user).filter(pk=spec_id).exists()
 
 
 def ticket_para_usuario(user, protocolo: str) -> Ticket:

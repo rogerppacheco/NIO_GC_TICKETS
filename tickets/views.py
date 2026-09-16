@@ -22,12 +22,15 @@ from .acesso import (
     escopo_gestao,
     gestor_required,
     parceiro_de,
+    parceiros_da_fila,
     parceiros_para_cadastro,
     parceiros_visiveis,
     pode_importar_bases,
     qs_equipe,
+    qs_equipe_da_gerencia,
     tem_acesso_interno,
     ticket_para_usuario,
+    tickets_da_fila,
     tickets_visiveis,
     destino_pos_login,
 )
@@ -70,6 +73,7 @@ from .models import (
 )
 from .services import (
     enviar_mascara_whatsapp,
+    notificar_demanda_com_anexo,
     notificar_mascaras_por_email,
     notificar_mascaras_por_whatsapp,
     render_mascara,
@@ -225,17 +229,26 @@ def _anexar_osab_fila(tickets: list) -> None:
 
 @login_required
 def fila(request: HttpRequest) -> HttpResponse:
-    parceiros_qs = parceiros_visiveis(request.user).filter(ativo=True)
-    especialistas_qs = qs_equipe()
+    especialistas_qs = qs_equipe_da_gerencia(request.user)
+    get_data = request.GET.copy()
+    spec_sel = None
+    raw_spec = (get_data.get("especialista") or "").strip()
+    if raw_spec.isdigit():
+        spec_sel = especialistas_qs.filter(pk=int(raw_spec)).first()
+        if not spec_sel:
+            get_data.pop("especialista", None)
+
+    parceiros_qs = parceiros_da_fila(request.user, spec_sel)
+    raw_pdv = (get_data.get("parceiro") or "").strip()
+    if raw_pdv.isdigit() and not parceiros_qs.filter(pk=int(raw_pdv)).exists():
+        get_data.pop("parceiro", None)
+
     form = FilaFiltroForm(
-        request.GET or None,
+        get_data or None,
         parceiros_qs=parceiros_qs,
         especialistas_qs=especialistas_qs,
     )
-    if not (eh_admin(request.user) or eh_gerencia(request.user)):
-        form.fields.pop("especialista", None)
-
-    qs = tickets_visiveis(request.user)
+    qs = tickets_da_fila(request.user, spec_sel)
 
     if form.is_valid():
         q = form.cleaned_data.get("q") or ""
@@ -253,8 +266,6 @@ def fila(request: HttpRequest) -> HttpResponse:
             qs = qs.filter(tipo=form.cleaned_data["tipo"])
         if form.cleaned_data.get("parceiro"):
             qs = qs.filter(parceiro=form.cleaned_data["parceiro"])
-        if (eh_admin(request.user) or eh_gerencia(request.user)) and form.cleaned_data.get("especialista"):
-            qs = qs.filter(parceiro__especialista=form.cleaned_data["especialista"])
         sit_osab = form.cleaned_data.get("situacao_osab")
         if sit_osab:
             from gestao.models import VendaOSAB
@@ -286,7 +297,7 @@ def fila(request: HttpRequest) -> HttpResponse:
             "form": form,
             "tickets": tickets,
             "abertos_count": abertos.count(),
-            "mostrar_filtro_especialista": eh_admin(request.user) or eh_gerencia(request.user),
+            "mostrar_filtro_especialista": True,
             "filtros_ativos": filtros_ativos,
         },
     )
@@ -311,6 +322,7 @@ def ticket_criar(request: HttpRequest) -> HttpResponse:
             _salvar_anexos(request, ticket)
             notificar_mascaras_por_email(ticket)
             notificar_mascaras_por_whatsapp(ticket)
+            notificar_demanda_com_anexo(ticket, ator=request.user)
             messages.success(request, f"Ticket {ticket.protocolo} criado.")
             return redirect("ticket_detalhe", protocolo=ticket.protocolo)
     else:
@@ -504,6 +516,7 @@ def abrir_demanda_form(request: HttpRequest) -> HttpResponse:
             _salvar_anexos(request, ticket)
             notificar_mascaras_por_email(ticket)
             notificar_mascaras_por_whatsapp(ticket)
+            notificar_demanda_com_anexo(ticket, ator=request.user)
             messages.success(
                 request,
                 f"Demanda registrada! Protocolo {ticket.protocolo}. Guarde este número.",

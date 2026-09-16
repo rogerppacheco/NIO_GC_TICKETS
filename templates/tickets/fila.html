@@ -18,10 +18,10 @@
   {% if form.situacao_osab %}
     {{ form.situacao_osab }}
   {% endif %}
-  {{ form.parceiro }}
-  {% if mostrar_filtro_especialista and form.especialista %}
+  {% if form.especialista %}
     {{ form.especialista }}
   {% endif %}
+  {{ form.parceiro }}
   {% if filtros_ativos %}
     <a class="btn btn-ghost fila-clear" href="{% url 'fila' %}">Limpar</a>
   {% endif %}

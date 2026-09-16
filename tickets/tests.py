@@ -80,6 +80,132 @@ class TicketCreateEvidenciasTests(SimpleTestCase):
         self.assertEqual(len(form.cleaned_data.get("evidencias") or []), 1)
 
 
+@override_settings(STORAGES=STORAGES_TESTE)
+class DemandaComAnexoNotificacaoTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.spec = User.objects.create_user(
+            "spec_anexo",
+            "spec.anexo@x.com",
+            "x",
+            is_staff=True,
+            first_name="Ana Anexo",
+        )
+        PerfilStaff.objects.create(
+            user=self.spec,
+            papel=PerfilStaff.Papel.ESPECIALISTA,
+            whatsapp="5531999990000",
+        )
+        self.pdv = Parceiro.objects.create(
+            codigo_pdv="ANX1", nome="PDV Anexo", especialista=self.spec
+        )
+        self.ticket = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.ACESSO_APP,
+            documento_cliente="12345678901",
+            descricao="Erro ao abrir o app",
+        )
+
+    def _anexo(self, nome="print.jpeg"):
+        return Anexo.objects.create(
+            ticket=self.ticket,
+            arquivo=SimpleUploadedFile(nome, b"conteudo-img", content_type="image/jpeg"),
+            nome_original=nome,
+        )
+
+    def test_resumo_traz_campos_preenchidos_pelo_parceiro(self):
+        from tickets.services import resumo_demanda_parceiro
+
+        self._anexo()
+        texto = resumo_demanda_parceiro(self.ticket)
+        self.assertIn("Demanda com anexo", texto)
+        self.assertIn(self.ticket.protocolo, texto)
+        self.assertIn("PDV Anexo", texto)
+        self.assertIn("12345678901", texto)
+        self.assertIn("Erro ao abrir o app", texto)
+        self.assertIn("print.jpeg", texto)
+        self.assertNotIn("Pedido / OS", texto)
+
+    def test_sem_anexo_nao_envia(self):
+        from tickets.services import notificar_demanda_com_anexo
+
+        self.assertEqual(notificar_demanda_com_anexo(self.ticket), 0)
+
+    def test_envia_resumo_e_arquivo_ao_especialista(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.syncwa import SyncWAResult
+        from tickets.services import notificar_demanda_com_anexo
+
+        self._anexo("evidencia.png")
+        fake = SyncWAResult(ok=True)
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), \
+             patch("gestao.messaging.syncwa.enviar_texto", return_value=fake) as mock_txt, \
+             patch("gestao.messaging.syncwa.enviar_documento", return_value=fake) as mock_doc:
+            n = notificar_demanda_com_anexo(self.ticket)
+        self.assertGreaterEqual(n, 2)
+        mock_txt.assert_called_once()
+        jid, texto = mock_txt.call_args.args
+        self.assertEqual(jid, "5531999990000")
+        self.assertIn(self.ticket.protocolo, texto)
+        self.assertIn("12345678901", texto)
+        mock_doc.assert_called_once()
+        self.assertEqual(mock_doc.call_args.args[0], "5531999990000")
+        self.assertEqual(mock_doc.call_args.kwargs["file_name"], "evidencia.png")
+        self.assertEqual(mock_doc.call_args.kwargs["conteudo"], b"conteudo-img")
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, StatusTicket.NOVO)
+        self.assertTrue(
+            self.ticket.mensagens.filter(interno=True, corpo__contains="anexo").exists()
+        )
+
+    def test_especialista_nao_recebe_quando_ele_mesmo_abre(self):
+        from unittest.mock import patch
+
+        from tickets.services import notificar_demanda_com_anexo
+
+        self._anexo()
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), \
+             patch("gestao.messaging.syncwa.enviar_texto") as mock_txt:
+            n = notificar_demanda_com_anexo(self.ticket, ator=self.spec)
+        self.assertEqual(n, 0)
+        mock_txt.assert_not_called()
+
+    def test_portal_com_evidencia_dispara_envio(self):
+        from unittest.mock import patch
+
+        from tickets.models import ContatoParceiro
+        from tickets.seguranca import garantir_conta_parceiro
+
+        contato = ContatoParceiro.objects.create(
+            parceiro=self.pdv, nome="Empresário Loja", cargo="Empresário"
+        )
+        user_pdv, _, _ = garantir_conta_parceiro(self.pdv, senha="token-anx", must_change=False)
+        self.client.force_login(user_pdv)
+        session = self.client.session
+        session["contato_id"] = contato.id
+        session.save()
+        with patch("tickets.views.notificar_demanda_com_anexo") as mock_n, \
+             patch("tickets.views.notificar_mascaras_por_email", return_value=0), \
+             patch("tickets.views.notificar_mascaras_por_whatsapp", return_value=0):
+            r = self.client.post(
+                reverse("abrir_demanda_form"),
+                {
+                    "tipo": TipoDemanda.ACESSO_APP,
+                    "documento_cliente": "99988877766",
+                    "descricao": "Tela travou",
+                    "evidencias": SimpleUploadedFile(
+                        "erro.jpeg", b"img", content_type="image/jpeg"
+                    ),
+                },
+            )
+        self.assertEqual(r.status_code, 302)
+        mock_n.assert_called_once()
+        ticket = mock_n.call_args.kwargs.get("ticket") or mock_n.call_args.args[0]
+        self.assertTrue(ticket.anexos.exists())
+        self.assertEqual(ticket.documento_cliente, "99988877766")
+
+
 class PrioridadeEliteDemandaTests(TestCase):
     def setUp(self):
         self.pdv = Parceiro.objects.create(codigo_pdv="1069399", nome="CONNECTX")
@@ -1115,7 +1241,9 @@ class FilaOsabTests(TestCase):
         User = get_user_model()
         self.gestor = User.objects.create_superuser("gestor", "g@x.com", "x")
         PerfilStaff.objects.create(user=self.gestor, papel=PerfilStaff.Papel.GESTOR)
-        self.pdv = Parceiro.objects.create(codigo_pdv="100", nome="PDV")
+        self.pdv = Parceiro.objects.create(
+            codigo_pdv="100", nome="PDV", especialista=self.gestor
+        )
         self.ticket = Ticket.objects.create(
             parceiro=self.pdv,
             tipo=TipoDemanda.STATUS_PEDIDO,
@@ -1199,6 +1327,143 @@ class FilaOsabTests(TestCase):
         self.assertContains(r, "data-next=")
         self.assertContains(r, "tipo=status_pedido")
         self.assertContains(r, "situacao_osab=__sem__")
+
+
+@override_settings(STORAGES=STORAGES_TESTE)
+class FilaCoberturaTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            "admin_fila", "adm@x.com", "x", is_staff=True, first_name="Admin"
+        )
+        self.ana = User.objects.create_user(
+            "ana_fila", "ana@x.com", "x", is_staff=True, first_name="Ana"
+        )
+        self.bruno = User.objects.create_user(
+            "bruno_fila", "bruno@x.com", "x", is_staff=True, first_name="Bruno"
+        )
+        self.carla = User.objects.create_user(
+            "carla_fila", "carla@x.com", "x", is_staff=True, first_name="Carla"
+        )
+        self.ger = User.objects.create_user(
+            "ger_fila", "ger@x.com", "x", is_staff=True, first_name="Gerencia"
+        )
+        PerfilStaff.objects.create(user=self.admin, papel=PerfilStaff.Papel.GESTOR)
+        PerfilStaff.objects.create(
+            user=self.ana, papel=PerfilStaff.Papel.ESPECIALISTA, gerencia="MG INTERIOR"
+        )
+        PerfilStaff.objects.create(
+            user=self.bruno, papel=PerfilStaff.Papel.ESPECIALISTA, gerencia="MG INTERIOR"
+        )
+        PerfilStaff.objects.create(
+            user=self.carla, papel=PerfilStaff.Papel.ESPECIALISTA, gerencia="SP METRO"
+        )
+        PerfilStaff.objects.create(
+            user=self.ger, papel=PerfilStaff.Papel.GERENCIA, gerencia="MG INTERIOR"
+        )
+        self.pdv_admin = Parceiro.objects.create(
+            codigo_pdv="A1", nome="PDV Admin", especialista=self.admin
+        )
+        self.pdv_ana = Parceiro.objects.create(
+            codigo_pdv="A2", nome="PDV Ana", especialista=self.ana
+        )
+        self.pdv_bruno = Parceiro.objects.create(
+            codigo_pdv="A3", nome="PDV Bruno", especialista=self.bruno
+        )
+        self.pdv_carla = Parceiro.objects.create(
+            codigo_pdv="A4", nome="PDV Carla", especialista=self.carla
+        )
+        self.ticket_admin = Ticket.objects.create(
+            parceiro=self.pdv_admin, tipo=TipoDemanda.RESET_SENHA, tt="TTA"
+        )
+        self.ticket_ana = Ticket.objects.create(
+            parceiro=self.pdv_ana, tipo=TipoDemanda.RESET_SENHA, tt="TTN"
+        )
+        self.ticket_bruno = Ticket.objects.create(
+            parceiro=self.pdv_bruno, tipo=TipoDemanda.STATUS_PEDIDO, pedido="88"
+        )
+        self.ticket_carla = Ticket.objects.create(
+            parceiro=self.pdv_carla, tipo=TipoDemanda.RESET_SENHA, tt="TTC"
+        )
+
+    def _protocolos(self, response):
+        return [t.protocolo for t in response.context["tickets"]]
+
+    def test_admin_fila_padrao_so_os_seus(self):
+        self.client.force_login(self.admin)
+        r = self.client.get(reverse("fila"))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self._protocolos(r), [self.ticket_admin.protocolo])
+        self.assertContains(r, "Meus parceiros")
+        self.assertContains(r, "Ana")
+        self.assertContains(r, "Bruno")
+        self.assertContains(r, "Carla")
+
+    def test_admin_escolhe_especialista_da_gerencia(self):
+        self.client.force_login(self.admin)
+        session = self.client.session
+        session["gestao_gerencia"] = "MG INTERIOR"
+        session.save()
+        r = self.client.get(reverse("fila"), {"especialista": self.ana.pk})
+        self.assertEqual(self._protocolos(r), [self.ticket_ana.protocolo])
+        html = r.content.decode()
+        self.assertIn(f'value="{self.ana.pk}"', html)
+        self.assertIn(f'value="{self.bruno.pk}"', html)
+        self.assertNotIn(f'value="{self.carla.pk}"', html)
+
+    def test_especialista_ve_filtro_e_so_os_seus_por_padrao(self):
+        self.client.force_login(self.ana)
+        r = self.client.get(reverse("fila"))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self._protocolos(r), [self.ticket_ana.protocolo])
+        self.assertContains(r, "Meus parceiros")
+        self.assertContains(r, "Bruno")
+        self.assertNotContains(r, "Carla")
+        parceiros = list(r.context["form"].fields["parceiro"].queryset.values_list("nome", flat=True))
+        self.assertEqual(parceiros, ["PDV Ana"])
+
+    def test_especialista_cobre_colega_da_mesma_gerencia(self):
+        self.client.force_login(self.ana)
+        r = self.client.get(reverse("fila"), {"especialista": self.bruno.pk})
+        self.assertEqual(self._protocolos(r), [self.ticket_bruno.protocolo])
+        parceiros = list(r.context["form"].fields["parceiro"].queryset.values_list("nome", flat=True))
+        self.assertEqual(parceiros, ["PDV Bruno"])
+        r2 = self.client.get(
+            reverse("fila"),
+            {"especialista": self.bruno.pk, "parceiro": self.pdv_ana.pk},
+        )
+        self.assertEqual(self._protocolos(r2), [self.ticket_bruno.protocolo])
+
+    def test_especialista_nao_cobre_outra_gerencia_pelo_filtro(self):
+        self.client.force_login(self.ana)
+        r = self.client.get(reverse("fila"), {"especialista": self.carla.pk})
+        self.assertEqual(self._protocolos(r), [self.ticket_ana.protocolo])
+
+    def test_especialista_responde_na_ausencia_do_colega(self):
+        self.client.force_login(self.ana)
+        detalhe = self.client.get(
+            reverse("ticket_detalhe", args=[self.ticket_bruno.protocolo])
+        )
+        self.assertEqual(detalhe.status_code, 200)
+        abrir = self.client.post(
+            reverse("ticket_responder", args=[self.ticket_bruno.protocolo]),
+            {"action": "abrir"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(abrir.status_code, 200)
+        self.assertContains(abrir, "Selecione a situação")
+
+    def test_especialista_nao_abre_ticket_de_outra_gerencia(self):
+        self.client.force_login(self.ana)
+        r = self.client.get(reverse("ticket_detalhe", args=[self.ticket_carla.protocolo]))
+        self.assertEqual(r.status_code, 404)
+
+    def test_gerencia_fila_padrao_so_os_seus(self):
+        self.client.force_login(self.ger)
+        r = self.client.get(reverse("fila"))
+        self.assertEqual(self._protocolos(r), [])
+        r = self.client.get(reverse("fila"), {"especialista": self.ana.pk})
+        self.assertEqual(self._protocolos(r), [self.ticket_ana.protocolo])
 
 
 class SeedNioParceirosTests(TestCase):

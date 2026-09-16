@@ -6,6 +6,7 @@ from .acesso import (
     escopo_gestao,
     parceiro_de,
     tem_acesso_interno,
+    tickets_da_fila,
     tickets_visiveis,
 )
 from .models import ContatoParceiro, StatusTicket
@@ -21,7 +22,9 @@ def nav_counts(request):
     }
     user = getattr(request, "user", None)
     if user and user.is_authenticated:
-        visiveis = tickets_visiveis(user)
+        visiveis = (
+            tickets_da_fila(user) if tem_acesso_interno(user) else tickets_visiveis(user)
+        )
         ctx["eh_gestor"] = eh_gestor(user)
         ctx["eh_admin"] = eh_admin(user)
         ctx["eh_gerencia"] = eh_gerencia(user)

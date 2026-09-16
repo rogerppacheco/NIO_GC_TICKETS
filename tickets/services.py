@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import mimetypes
 import re
+from pathlib import Path
 from typing import Any
 
 from django.utils.formats import date_format
 
-from .models import Mascara, Ticket
+from .models import Anexo, Mascara, Mensagem, Ticket
 
 
 def _fmt_date(value) -> str:
@@ -278,4 +280,167 @@ def notificar_mascaras_por_whatsapp(ticket: Ticket) -> int:
         )
         if ok:
             enviados += 1
+    return enviados
+
+
+def _destino_whatsapp_especialista(ticket: Ticket) -> tuple[str, str] | None:
+    if not ticket.parceiro:
+        return None
+    spec = ticket.parceiro.especialista
+    if not spec:
+        return None
+    from gestao.messaging.envio import whatsapp_do_usuario
+
+    perfil = getattr(spec, "perfil_staff", None)
+    info_dest = perfil.obter_destino_mascara() if perfil else {}
+    dest_jid = (info_dest.get("jid") or whatsapp_do_usuario(spec) or "").strip()
+    if not dest_jid:
+        return None
+    dest_nome = (
+        info_dest.get("nome")
+        or f"Especialista {(spec.get_full_name() or spec.username).strip()}"
+    )
+    return dest_jid, dest_nome
+
+
+def resumo_demanda_parceiro(ticket: Ticket) -> str:
+    """Máscara-resumo com os campos preenchidos na abertura da demanda."""
+    from .demanda_campos import labels_para_ticket, schema_tipo, valor_campo_ticket
+
+    parceiro = ticket.parceiro
+    linhas = [
+        "*Demanda com anexo*",
+        f"*Protocolo:* {ticket.protocolo}",
+        f"*Parceiro:* {parceiro.codigo_pdv} — {parceiro.nome}" if parceiro else "*Parceiro:* —",
+        f"*Tipo:* {ticket.get_tipo_display()}",
+    ]
+    if ticket.contato_id and ticket.contato:
+        linhas.append(f"*Aberto por:* {ticket.contato.nome}")
+
+    labels = labels_para_ticket(ticket)
+    campos = list(schema_tipo(ticket.tipo).get("campos") or [])
+    for extra in ("solicitante_nome", "solicitante_contato"):
+        if extra not in campos:
+            campos.append(extra)
+
+    vistos: set[str] = set()
+    for name in campos:
+        if name == "evidencias" or name in vistos:
+            continue
+        vistos.add(name)
+        valor = (valor_campo_ticket(ticket, name) or "").strip()
+        if not valor or valor == "—":
+            continue
+        label = labels.get(name, name)
+        linhas.append(f"*{label}:* {valor}")
+
+    anexos = list(ticket.anexos.all())
+    if anexos:
+        nomes = ", ".join(
+            (a.nome_original or Path(getattr(a.arquivo, "name", "") or "anexo").name)
+            for a in anexos
+        )
+        linhas.append(f"*Anexos ({len(anexos)}):* {nomes}")
+    return "\n".join(linhas)
+
+
+def _conteudo_anexo(anexo: Anexo) -> tuple[bytes, str, str]:
+    nome = anexo.nome_original or Path(getattr(anexo.arquivo, "name", "") or "anexo").name
+    mime = mimetypes.guess_type(nome)[0] or "application/octet-stream"
+    with anexo.arquivo.open("rb") as fh:
+        dados = fh.read()
+    return dados, nome, mime
+
+
+def notificar_demanda_com_anexo(ticket: Ticket, ator=None) -> int:
+    """Se a demanda tem anexo, envia resumo + arquivos ao especialista do PDV."""
+    anexos = list(ticket.anexos.all())
+    if not anexos or not ticket.parceiro:
+        return 0
+    spec = ticket.parceiro.especialista
+    if not spec:
+        return 0
+    if ator and getattr(ator, "is_authenticated", False) and ator.pk == spec.pk:
+        return 0
+
+    resumo = resumo_demanda_parceiro(ticket)
+    enviados = 0
+    destino = _destino_whatsapp_especialista(ticket)
+    from gestao.messaging.syncwa import (
+        SyncWAResult,
+        enviar_documento,
+        enviar_texto,
+        syncwa_configurado,
+    )
+
+    if destino and syncwa_configurado():
+        jid, nome = destino
+        resp_txt = enviar_texto(jid, resumo)
+        if resp_txt.ok:
+            enviados += 1
+        for anexo in anexos:
+            try:
+                dados, nome_arq, _mime = _conteudo_anexo(anexo)
+            except Exception:
+                continue
+            caption = f"{ticket.protocolo} · {nome_arq}"
+            resp_doc = enviar_documento(
+                jid, conteudo=dados, file_name=nome_arq, caption=caption
+            )
+            if isinstance(resp_doc, SyncWAResult) and resp_doc.ok:
+                enviados += 1
+        if enviados:
+            try:
+                from gestao.models import EnvioWhatsApp
+
+                EnvioWhatsApp.objects.create(
+                    tipo=EnvioWhatsApp.Tipo.MASCARA,
+                    status=EnvioWhatsApp.Status.ENVIADO,
+                    parceiro=ticket.parceiro,
+                    destino_jid=jid,
+                    destino_nome=nome,
+                    mensagem=resumo,
+                )
+            except Exception:
+                pass
+
+    from gestao.messaging.email_smtp import enviar_email_com_anexos, smtp_configurado
+
+    email_spec = (spec.email or "").strip()
+    if email_spec and smtp_configurado():
+        arquivos: list[tuple[str, bytes, str]] = []
+        for anexo in anexos:
+            try:
+                dados, nome_arq, mime = _conteudo_anexo(anexo)
+            except Exception:
+                continue
+            if dados:
+                arquivos.append((nome_arq, dados, mime))
+        ok, _erro = enviar_email_com_anexos(
+            [email_spec],
+            assunto=(
+                f"[NIO ESPECIALISTA] Demanda com anexo · {ticket.protocolo} · "
+                f"{ticket.parceiro.nome}"
+            ),
+            corpo_texto=resumo.replace("*", ""),
+            anexos=arquivos,
+        )
+        if ok:
+            enviados += 1
+
+    if enviados:
+        Mensagem.objects.create(
+            ticket=ticket,
+            autor=ator if (ator and getattr(ator, "is_authenticated", False)) else None,
+            autor_nome=(
+                (ator.get_full_name() or ator.get_username()).strip()
+                if (ator and getattr(ator, "is_authenticated", False))
+                else "Sistema"
+            ),
+            corpo=(
+                f"Resumo da demanda e {len(anexos)} anexo(s) enviados ao especialista "
+                f"{(spec.get_full_name() or spec.username).strip()}."
+            ),
+            interno=True,
+        )
     return enviados
