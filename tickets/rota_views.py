@@ -9,6 +9,7 @@ from typing import Any
 from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_GET, require_http_methods
 
 from tickets.consultas.dfv_powerbi_service import (
@@ -87,7 +88,7 @@ def rota_portal(request: HttpRequest) -> HttpResponse:
     """Página do check-in diário de rota."""
     parceiro, contato = _portal_sessao(request)
     if not parceiro or not contato:
-        return redirect("portal_contato")
+        return redirect(f"{reverse('portal_contato')}?next=rota")
     return render(
         request,
         "tickets/rota_portal.html",

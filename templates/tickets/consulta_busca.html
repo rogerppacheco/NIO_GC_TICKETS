@@ -21,7 +21,7 @@
         </div>
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
           <button class="btn btn-primary" type="submit">Consultar</button>
-          <a class="btn btn-secondary" href="{% url 'abrir_demanda' %}">Abrir nova demanda</a>
+          <a class="btn btn-secondary" href="{% url 'abrir_demanda_form' %}">Abrir nova demanda</a>
         </div>
       </form>
     </div>
@@ -48,8 +48,8 @@
           <a class="btn btn-primary" href="{% url 'portal_parceiro' %}">Portal</a>
         </div>
       {% else %}
-        <p class="help" style="margin-top:0">Identifique o PDV (token) e o contato para listar todas as demandas do parceiro.</p>
-        <a class="btn btn-primary" href="{% url 'abrir_demanda' %}">Identificar PDV</a>
+        <p class="help" style="margin-top:0">Escolha quem está operando no PDV para listar as demandas.</p>
+        <a class="btn btn-primary" href="{% url 'portal_contato' %}?next=minhas">Escolher contato</a>
       {% endif %}
     </div>
   </div>

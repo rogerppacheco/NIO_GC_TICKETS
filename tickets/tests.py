@@ -1919,6 +1919,37 @@ class LoginUnificadoTests(TestCase):
         self.assertEqual(self.client.get(reverse("mascaras")).status_code, 404)
         self.assertEqual(self.client.get(reverse("especialistas")).status_code, 404)
 
+    def test_contato_escolhe_uma_vez_e_abre_formulario(self):
+        from .models import ContatoParceiro
+
+        ContatoParceiro.objects.create(
+            parceiro=self.pdv, nome="Backoffice Loja", cargo="Backoffice"
+        )
+        self.client.force_login(self.user_pdv)
+        picker = self.client.get(reverse("abrir_demanda_form"))
+        self.assertEqual(picker.status_code, 302)
+        self.assertIn("/abrir/contato/", picker["Location"])
+        self.assertIn("next=formulario", picker["Location"])
+        escolha = self.client.post(
+            reverse("portal_contato") + "?next=formulario",
+            {"contato": str(self.contato.pk), "next": "formulario"},
+        )
+        self.assertEqual(escolha.status_code, 302)
+        self.assertIn("/abrir/formulario/", escolha["Location"])
+        form = self.client.get(reverse("abrir_demanda_form"))
+        self.assertEqual(form.status_code, 200)
+        self.assertContains(form, "Nova demanda")
+        self.assertContains(form, "Empresário Loja")
+        self.assertNotContains(form, "Quem está operando")
+        lista = self.client.get(reverse("minhas_demandas"))
+        self.assertEqual(lista.status_code, 200)
+        de_novo = self.client.get(reverse("abrir_demanda"))
+        self.assertEqual(de_novo.status_code, 302)
+        self.assertIn("/abrir/formulario/", de_novo["Location"])
+        picker_de_novo = self.client.get(reverse("portal_contato"))
+        self.assertEqual(picker_de_novo.status_code, 302)
+        self.assertIn("/abrir/inicio/", picker_de_novo["Location"])
+
     def test_command_migra_token(self):
         from django.core.management import call_command
 

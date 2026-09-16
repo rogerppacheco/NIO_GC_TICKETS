@@ -7,7 +7,7 @@
     <h1>Olá, {{ contato.nome }}</h1>
     <p>PDV {{ parceiro.codigo_pdv }} — {{ parceiro.nome }}</p>
   </div>
-  <a class="btn btn-secondary" href="{% url 'portal_contato' %}">Trocar contato</a>
+  <a class="btn btn-secondary" href="{% url 'portal_contato' %}?trocar=1">Trocar contato</a>
   <a class="btn btn-secondary" href="{% url 'portal_sair' %}">Sair</a>
 </div>
 

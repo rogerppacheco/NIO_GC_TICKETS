@@ -327,9 +327,36 @@ def ticket_criar(request: HttpRequest) -> HttpResponse:
     )
 
 
+_DESTINO_APOS_CONTATO = {
+    "rota": "rota_portal",
+    "formulario": "abrir_demanda_form",
+    "demanda": "abrir_demanda_form",
+    "minhas": "minhas_demandas",
+    "consulta": "consulta_busca",
+}
+_URL_PARA_NEXT = {
+    "abrir_demanda_form": "formulario",
+    "abrir_demanda": "formulario",
+    "minhas_demandas": "minhas",
+    "rota_portal": "rota",
+    "consulta_busca": "consulta",
+}
+
+
+def _gravar_contato_sessao(request: HttpRequest, contato_id: int) -> None:
+    request.session["contato_id"] = contato_id
+    request.session.modified = True
+
+
+def _redirect_apos_contato(next_destino: str) -> HttpResponse:
+    nome = _DESTINO_APOS_CONTATO.get((next_destino or "").strip().lower(), "portal_parceiro")
+    return redirect(nome)
+
+
+@login_required
 def abrir_demanda(request: HttpRequest) -> HttpResponse:
-    """Parceiro logado: escolhe o contato (quem está operando) e segue."""
-    return redirect("portal_contato")
+    """Atalho antigo do card: vai ao formulário (pede contato só se ainda não escolheu)."""
+    return redirect("abrir_demanda_form")
 
 
 @login_required
@@ -342,22 +369,22 @@ def portal_contato(request: HttpRequest) -> HttpResponse:
     if not pdv.ativo:
         messages.error(request, "Este PDV está inativo.")
         return redirect("login")
+    next_destino = (request.POST.get("next") or request.GET.get("next") or "").strip()
+    trocar = (request.GET.get("trocar") or request.POST.get("trocar") or "").strip() == "1"
+    _pdv, contato_atual = _portal_sessao(request)
+    if request.method != "POST" and contato_atual and not trocar:
+        return _redirect_apos_contato(next_destino)
+
     contatos = pdv.contatos.filter(ativo=True)
     if request.method == "POST":
         contato = get_object_or_404(
             ContatoParceiro, pk=request.POST.get("contato"), parceiro=pdv, ativo=True
         )
-        request.session["contato_id"] = contato.id
-        next_destino = (request.POST.get("next") or request.GET.get("next") or "").strip()
-        if next_destino == "rota":
-            return redirect("rota_portal")
-        return redirect("portal_parceiro")
+        _gravar_contato_sessao(request, contato.id)
+        return _redirect_apos_contato(next_destino)
     if contatos.count() == 1:
-        request.session["contato_id"] = contatos.first().id
-        next_destino = (request.GET.get("next") or "").strip()
-        if next_destino == "rota":
-            return redirect("rota_portal")
-        return redirect("portal_parceiro")
+        _gravar_contato_sessao(request, contatos.first().id)
+        return _redirect_apos_contato(next_destino)
     if not contatos.exists():
         messages.error(
             request,
@@ -370,7 +397,7 @@ def portal_contato(request: HttpRequest) -> HttpResponse:
             "parceiro": pdv,
             "contatos": contatos,
             "passo": "contato",
-            "next": (request.GET.get("next") or "").strip(),
+            "next": next_destino,
         },
     )
 
@@ -436,7 +463,7 @@ def _portal_sessao(request: HttpRequest):
     return pdv, contato
 
 
-def _exigir_contato_portal(request: HttpRequest):
+def _exigir_contato_portal(request: HttpRequest, next_destino: str = ""):
     pdv, contato = _portal_sessao(request)
     if not pdv:
         if tem_acesso_interno(request.user):
@@ -444,7 +471,14 @@ def _exigir_contato_portal(request: HttpRequest):
         return None, None, redirect("login")
     if contato:
         return pdv, contato, None
-    return pdv, None, redirect("portal_contato")
+    nxt = next_destino
+    if not nxt:
+        match = getattr(request, "resolver_match", None)
+        nxt = _URL_PARA_NEXT.get(getattr(match, "url_name", "") or "", "")
+    url = reverse("portal_contato")
+    if nxt:
+        url = f"{url}?next={nxt}"
+    return pdv, None, redirect(url)
 
 
 @login_required

@@ -72,7 +72,7 @@
             <a href="{% url 'consultas_hub' %}">DFV</a>
             <a href="{% url 'repositorio_lista' %}">Processos</a>
             <a href="{% url 'tradehub' %}">Trade Hub</a>
-            <a href="{% url 'portal_contato' %}">Trocar contato</a>
+            <a href="{% url 'portal_contato' %}?trocar=1">Trocar contato</a>
           <div class="nav-account">
             <a class="nav-user" href="{% url 'meu_perfil' %}" title="{{ user.get_full_name|default:user.username }} — Meu perfil">{{ nav_primeiro_nome|default:user.username }}</a>
             <div class="nav-account-menu">
