@@ -2227,8 +2227,12 @@ button.rota-ag-dot.is-empty { background: #eef1f4; }
 .vertical-modal {
   position: fixed; inset: 0; z-index: 80;
   background: rgba(15, 23, 42, 0.45);
-  display: flex; align-items: center; justify-content: center;
+  display: none;
+  align-items: center; justify-content: center;
   padding: 1rem;
+}
+.vertical-modal:not([hidden]) {
+  display: flex;
 }
 .vertical-modal-card {
   background: #fff; border-radius: 12px; padding: 1.1rem 1.2rem;
