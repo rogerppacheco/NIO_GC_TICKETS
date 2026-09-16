@@ -3,6 +3,7 @@ from __future__ import annotations
 import mimetypes
 
 from django.conf import settings
+from django.contrib.auth.decorators import login_required
 from django.http import FileResponse, Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_http_methods
@@ -14,6 +15,7 @@ def _prefixo_categoria(slug: str) -> str:
     return f"materiais/{slug}/"
 
 
+@login_required
 @require_GET
 def tradehub_inicio(request: HttpRequest) -> HttpResponse:
     dados = catalogo.conteudo()
@@ -28,6 +30,7 @@ def tradehub_inicio(request: HttpRequest) -> HttpResponse:
     )
 
 
+@login_required
 @require_GET
 def tradehub_secao(request: HttpRequest, slug: str, pasta: str = "") -> HttpResponse:
     cat = catalogo.categoria(slug)
@@ -84,6 +87,7 @@ def tradehub_secao(request: HttpRequest, slug: str, pasta: str = "") -> HttpResp
     )
 
 
+@login_required
 @require_http_methods(["GET", "HEAD"])
 def tradehub_arquivo(request: HttpRequest, rel: str) -> HttpResponse:
     rel = catalogo._norm(rel)

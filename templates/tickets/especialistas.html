@@ -37,12 +37,14 @@
         {% for u in especialistas %}
         <tr class="spec-row{% if not u.is_active %} is-inactive{% endif %}"
             data-id="{{ u.pk }}"
-            data-busca="{{ u.get_full_name }} {{ u.username }} {{ u.email }} {{ u.perfil_staff.whatsapp }} {{ u.perfil_staff.gerencia }} {% if u.perfil_staff.papel == 'gestor' %}admin gestor{% else %}especialista{% endif %}">
+            data-busca="{{ u.get_full_name }} {{ u.username }} {{ u.email }} {{ u.perfil_staff.whatsapp }} {{ u.perfil_staff.gerencia }} {{ u.perfil_staff.get_papel_display }}">
           <td>{{ u.get_full_name|default:"—" }}</td>
           <td class="mono">{{ u.username }}</td>
           <td>
             {% if u.perfil_staff.papel == "gestor" %}
               <span class="pill resolvido">Admin</span>
+            {% elif u.perfil_staff.papel == "gerencia" %}
+              <span class="pill">Gerência</span>
             {% else %}
               Especialista
             {% endif %}
@@ -88,7 +90,7 @@
   {% for u in especialistas %}
   <article class="spec-card spec-row{% if not u.is_active %} is-inactive{% endif %}"
            data-id="{{ u.pk }}"
-           data-busca="{{ u.get_full_name }} {{ u.username }} {{ u.email }} {{ u.perfil_staff.whatsapp }} {{ u.perfil_staff.gerencia }} {% if u.perfil_staff.papel == 'gestor' %}admin gestor{% else %}especialista{% endif %}">
+           data-busca="{{ u.get_full_name }} {{ u.username }} {{ u.email }} {{ u.perfil_staff.whatsapp }} {{ u.perfil_staff.gerencia }} {{ u.perfil_staff.get_papel_display }}">
     <header class="spec-card-h">
       <div>
         <strong>{{ u.get_full_name|default:u.username }}</strong>
@@ -97,6 +99,8 @@
       <div class="parceiro-acoes">
         {% if u.perfil_staff.papel == "gestor" %}
           <span class="pill resolvido">Admin</span>
+        {% elif u.perfil_staff.papel == "gerencia" %}
+          <span class="pill">Gerência</span>
         {% endif %}
         {% if u.is_active %}
           <span class="pill resolvido">Ativo</span>

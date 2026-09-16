@@ -24,12 +24,9 @@
         Menu
       </button>
       <nav class="nav" id="site-nav" aria-label="Principal">
-        {% if user.is_authenticated %}
+        {% if tem_acesso_interno %}
           <a href="{% url 'fila' %}" {% if request.resolver_match.url_name == 'fila' %}class="is-on"{% endif %}>Fila {% if nav_novos %}<span class="badge">{{ nav_novos }}</span>{% endif %}</a>
           <a href="{% url 'ticket_criar' %}" {% if request.resolver_match.url_name == 'ticket_criar' %}class="is-on"{% endif %}>Nova demanda</a>
-          {% if not tem_acesso_interno %}
-          <a href="{% url 'dashboard' %}">Dashboard</a>
-          {% endif %}
           <details class="nav-more">
             <summary>Mais</summary>
             <div class="nav-more-panel">
@@ -37,11 +34,14 @@
               {% if eh_gestor %}
                 <a href="{% url 'especialistas' %}">Especialistas</a>
               {% endif %}
+              <a href="{% url 'acessos' %}">Acessos e senhas</a>
               <a href="{% url 'consultas_hub' %}">DFV</a>
               <a href="{% url 'repositorio_lista' %}">Processos</a>
               <a href="{% url 'tradehub' %}">Trade Hub</a>
-              <a href="{% url 'mascaras' %}">Máscaras</a>
-              <a href="{% url 'config_resposta_lista' %}">Campos resposta</a>
+              {% if eh_gestor %}
+                <a href="{% url 'mascaras' %}">Máscaras</a>
+                <a href="{% url 'config_resposta_lista' %}">Campos resposta</a>
+              {% endif %}
             </div>
           </details>
           {% if eh_gestor %}
@@ -56,29 +56,33 @@
             <a class="nav-user" href="{% url 'meu_perfil' %}" title="{{ user.get_full_name|default:user.username }} — Meu perfil">{{ nav_primeiro_nome|default:user.username }}</a>
             <div class="nav-account-menu">
               <a href="{% url 'meu_perfil' %}">Meu perfil</a>
+              <a href="{% url 'senha_trocar' %}">Trocar senha</a>
               <form method="post" action="{% url 'logout' %}">
                 {% csrf_token %}
                 <button type="submit">Sair</button>
               </form>
             </div>
           </div>
-        {% else %}
-          {% if portal_contato %}
+        {% elif user.is_authenticated %}
             <a href="{% url 'portal_parceiro' %}">Portal</a>
             <a href="{% url 'minhas_demandas' %}">Demandas do PDV</a>
             <a href="{% url 'abrir_demanda_form' %}">Nova demanda</a>
             <a href="{% url 'consulta_busca' %}">Consultar</a>
             <a href="{% url 'rota_portal' %}">Rota</a>
-            <a href="{% url 'tradehub' %}">Trade Hub</a>
-            <a href="{% url 'portal_sair' %}">Trocar PDV</a>
-          {% else %}
-            <a href="{% url 'portal_inicio' %}">Início</a>
-            <a href="{% url 'abrir_demanda' %}">Abrir demanda</a>
+            <a href="{% url 'consultas_hub' %}">DFV</a>
             <a href="{% url 'repositorio_lista' %}">Processos</a>
             <a href="{% url 'tradehub' %}">Trade Hub</a>
-            <a href="{% url 'consulta_busca' %}">Consultar protocolo</a>
-            <a href="{% url 'login' %}">Área interna</a>
-          {% endif %}
+            <a href="{% url 'portal_contato' %}">Trocar contato</a>
+          <div class="nav-account">
+            <a class="nav-user" href="{% url 'meu_perfil' %}" title="{{ user.get_full_name|default:user.username }} — Meu perfil">{{ nav_primeiro_nome|default:user.username }}</a>
+            <div class="nav-account-menu">
+              <a href="{% url 'meu_perfil' %}">Meu perfil</a>
+              <a href="{% url 'senha_trocar' %}">Trocar senha</a>
+              <a href="{% url 'portal_sair' %}">Sair</a>
+            </div>
+          </div>
+        {% else %}
+            <a href="{% url 'login' %}">Entrar</a>
         {% endif %}
       </nav>
     </div>

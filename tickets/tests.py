@@ -33,6 +33,14 @@ from .models import (
 )
 
 
+STORAGES_TESTE = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+    },
+}
+
+
 class MultipleFileFieldTests(SimpleTestCase):
     def test_aceita_lista_de_arquivos(self):
         campo = MultipleFileField(required=False)
@@ -1294,6 +1302,7 @@ class MascaraEmailTests(TestCase):
         send.assert_not_called()
 
 
+@override_settings(STORAGES=STORAGES_TESTE)
 class MascaraWhatsAppTests(TestCase):
     def setUp(self):
         from unittest.mock import patch
@@ -1524,6 +1533,7 @@ class VtalPortalCardTests(SimpleTestCase):
         self.assertIn("vtal_ultima_importacao", ctx)
 
 
+@override_settings(STORAGES=STORAGES_TESTE)
 class EspecialistaDestinoMascaraTests(TestCase):
     def setUp(self):
         User = get_user_model()
@@ -1729,6 +1739,200 @@ class EspecialistaDestinoMascaraTests(TestCase):
         resp_perfil = self.client.get(reverse("meu_perfil"))
         self.assertEqual(resp_perfil.status_code, 200)
         self.assertContains(resp_perfil, "Destino das Máscaras (WhatsApp)")
+
+
+@override_settings(STORAGES=STORAGES_TESTE)
+class LoginUnificadoTests(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        from .models import ContaAcesso, ContatoParceiro, RegistroAcesso
+        from .seguranca import garantir_conta_parceiro
+
+        cache.clear()
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            "admin_nio", "a@x.com", "senha-admin-ok", first_name="Admin", is_staff=True
+        )
+        self.spec = User.objects.create_user(
+            "spec_nio", "s@x.com", "senha-spec-ok1", first_name="Spec", is_staff=True
+        )
+        self.ger = User.objects.create_user(
+            "ger_nio", "g@x.com", "senha-ger-ok01", first_name="Ger", is_staff=True
+        )
+        PerfilStaff.objects.create(user=self.admin, papel=PerfilStaff.Papel.GESTOR)
+        PerfilStaff.objects.create(
+            user=self.spec, papel=PerfilStaff.Papel.ESPECIALISTA, gerencia="MG INTERIOR"
+        )
+        PerfilStaff.objects.create(
+            user=self.ger, papel=PerfilStaff.Papel.GERENCIA, gerencia="MG INTERIOR"
+        )
+        self.pdv = Parceiro.objects.create(
+            codigo_pdv="9001",
+            nome="PDV Login",
+            especialista=self.spec,
+            token_acesso="token-legado",
+        )
+        self.pdv_outro = Parceiro.objects.create(
+            codigo_pdv="9002", nome="PDV Alheio", token_acesso="outro-token"
+        )
+        self.contato = ContatoParceiro.objects.create(
+            parceiro=self.pdv, nome="Empresário Loja", cargo="Empresário"
+        )
+        self.user_pdv, _, _ = garantir_conta_parceiro(
+            self.pdv, senha="token-legado", must_change=False
+        )
+        self.user_outro, _, _ = garantir_conta_parceiro(
+            self.pdv_outro, senha="outro-token", must_change=False
+        )
+        self.ticket_pdv = Ticket.objects.create(
+            parceiro=self.pdv, tipo=TipoDemanda.RESET_SENHA, tt="TT9"
+        )
+        self.ticket_outro = Ticket.objects.create(
+            parceiro=self.pdv_outro, tipo=TipoDemanda.STATUS_PEDIDO, pedido="1"
+        )
+        self.RegistroAcesso = RegistroAcesso
+        self.ContaAcesso = ContaAcesso
+
+    def test_visitante_nao_ve_lista_de_pdvs(self):
+        r = self.client.get(reverse("abrir_demanda"))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/login/", r["Location"])
+        login = self.client.get(reverse("login"))
+        self.assertEqual(login.status_code, 200)
+        self.assertNotContains(login, "PDV Login")
+        self.assertNotContains(login, "token-legado")
+        self.assertContains(login, "Código PDV ou usuário")
+
+    def test_dfv_e_consulta_exigem_login(self):
+        for nome in ("consulta_dfv", "consulta_busca", "repositorio_lista", "tradehub"):
+            r = self.client.get(reverse(nome))
+            self.assertEqual(r.status_code, 302, nome)
+            self.assertIn("/login/", r["Location"])
+
+    def test_parceiro_loga_com_codigo_e_token(self):
+        r = self.client.post(
+            reverse("login"),
+            {"username": "9001", "password": "token-legado"},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(r["Location"].endswith("/abrir/inicio/") or "/abrir/" in r["Location"])
+
+    def test_login_invalido_e_generico(self):
+        r = self.client.post(
+            reverse("login"),
+            {"username": "9001", "password": "errada-demais"},
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Usuário ou senha inválidos")
+        self.assertNotContains(r, "9001 não existe")
+
+    def test_pdv_inativo_nao_loga(self):
+        self.pdv.ativo = False
+        self.pdv.save(update_fields=["ativo"])
+        self.user_pdv.is_active = False
+        self.user_pdv.save(update_fields=["is_active"])
+        r = self.client.post(
+            reverse("login"),
+            {"username": "9001", "password": "token-legado"},
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Usuário ou senha inválidos")
+
+    def test_troca_obrigatoria_prende_na_senha(self):
+        self.ContaAcesso.objects.update_or_create(
+            user=self.user_pdv, defaults={"must_change_password": True}
+        )
+        self.client.force_login(self.user_pdv)
+        r = self.client.get(reverse("portal_parceiro"))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/senha/trocar/", r["Location"])
+
+    def test_protocolo_so_do_proprio_pdv(self):
+        self.client.force_login(self.user_pdv)
+        ok = self.client.get(reverse("consulta_protocolo", args=[self.ticket_pdv.protocolo]))
+        self.assertEqual(ok.status_code, 200)
+        outro = self.client.get(
+            reverse("consulta_protocolo", args=[self.ticket_outro.protocolo])
+        )
+        self.assertEqual(outro.status_code, 404)
+
+    def test_parceiro_nao_entra_na_fila(self):
+        self.client.force_login(self.user_pdv)
+        r = self.client.get(reverse("fila"))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/abrir/", r["Location"])
+
+    def test_gerencia_ve_pdv_da_gerencia(self):
+        from .acesso import tickets_visiveis
+
+        visiveis = list(tickets_visiveis(self.ger).values_list("id", flat=True))
+        self.assertIn(self.ticket_pdv.id, visiveis)
+        self.assertNotIn(self.ticket_outro.id, visiveis)
+
+    def test_reset_hierarquico(self):
+        from .acesso import pode_resetar_senha
+
+        self.assertTrue(pode_resetar_senha(self.admin, self.user_pdv))
+        self.assertTrue(pode_resetar_senha(self.admin, self.spec))
+        self.assertTrue(pode_resetar_senha(self.ger, self.spec))
+        self.assertTrue(pode_resetar_senha(self.ger, self.user_pdv))
+        self.assertFalse(pode_resetar_senha(self.ger, self.admin))
+        self.assertFalse(pode_resetar_senha(self.spec, self.ger))
+        self.assertTrue(pode_resetar_senha(self.spec, self.user_pdv))
+        self.assertFalse(pode_resetar_senha(self.spec, self.user_outro))
+
+    def test_especialista_reseta_pdv_e_inativa(self):
+        self.client.force_login(self.spec)
+        r = self.client.post(reverse("acesso_resetar", args=[self.user_pdv.pk]))
+        self.assertEqual(r.status_code, 302)
+        self.user_pdv.refresh_from_db()
+        self.assertTrue(self.ContaAcesso.objects.get(user=self.user_pdv).must_change_password)
+        negado = self.client.post(reverse("acesso_resetar", args=[self.user_outro.pk]))
+        self.assertEqual(negado.status_code, 404)
+        ina = self.client.post(reverse("parceiro_inativar", args=[self.pdv.pk]))
+        self.assertEqual(ina.status_code, 302)
+        self.pdv.refresh_from_db()
+        self.user_pdv.refresh_from_db()
+        self.assertFalse(self.pdv.ativo)
+        self.assertFalse(self.user_pdv.is_active)
+
+    def test_lockout_apos_falhas(self):
+        from .seguranca import FALHAS_LIMITE
+
+        for _ in range(FALHAS_LIMITE):
+            self.client.post(
+                reverse("login"),
+                {"username": "9001", "password": "nao-e-essa"},
+            )
+        r = self.client.post(
+            reverse("login"),
+            {"username": "9001", "password": "token-legado"},
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Usuário ou senha inválidos")
+
+    def test_gerencia_acessa_fila_e_acessos(self):
+        self.client.force_login(self.ger)
+        self.assertEqual(self.client.get(reverse("fila")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("acessos")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("mascaras")).status_code, 404)
+        self.assertEqual(self.client.get(reverse("especialistas")).status_code, 404)
+
+    def test_command_migra_token(self):
+        from django.core.management import call_command
+
+        pdv = Parceiro.objects.create(
+            codigo_pdv="9099", nome="Migrar", token_acesso="segredo-tok"
+        )
+        call_command("migrar_acessos_parceiro")
+        pdv.refresh_from_db()
+        self.assertIsNotNone(pdv.usuario_id)
+        self.assertTrue(pdv.usuario.check_password("segredo-tok"))
+        self.assertFalse(
+            self.ContaAcesso.objects.get(user=pdv.usuario).must_change_password
+        )
+
 
 
 

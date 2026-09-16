@@ -52,19 +52,32 @@ class MultipleFileField(forms.FileField):
 
 
 class LoginForm(AuthenticationForm):
-    username = forms.CharField(label="Usuário", widget=forms.TextInput(attrs={"autofocus": True}))
-    password = forms.CharField(label="Senha", widget=forms.PasswordInput)
+    username = forms.CharField(
+        label="Código PDV ou usuário",
+        widget=forms.TextInput(attrs={"autofocus": True, "autocomplete": "username"}),
+    )
+    password = forms.CharField(
+        label="Senha",
+        widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}),
+    )
+    error_messages = {
+        "invalid_login": "Usuário ou senha inválidos.",
+        "inactive": "Usuário ou senha inválidos.",
+    }
 
     def confirm_login_allowed(self, user):
         super().confirm_login_allowed(user)
-        from .acesso import tem_acesso_interno
+        from .acesso import parceiro_de, tem_acesso_interno
 
-        if not tem_acesso_interno(user):
-            raise forms.ValidationError(
-                "Este login não tem acesso ao NIO ESPECIALISTA Tickets. "
-                "Use um usuário criado em Especialistas ou Meu perfil.",
-                code="sem_acesso",
-            )
+        if tem_acesso_interno(user):
+            return
+        pdv = parceiro_de(user)
+        if pdv and pdv.ativo:
+            return
+        raise forms.ValidationError(
+            self.error_messages["invalid_login"],
+            code="sem_acesso",
+        )
 
 
 class ParceiroForm(forms.ModelForm):
@@ -79,14 +92,12 @@ class ParceiroForm(forms.ModelForm):
             "emails_empresario",
             "ativo",
             "especialista",
-            "token_acesso",
         ]
         help_texts = {
             "razao_social": (
                 "Igual à coluna Razão Social do Sysmap/Supply e do comissionamento. "
                 "Usada para vincular terceiros e filtrar o ciclo de comissões."
             ),
-            "token_acesso": "Um único token para todos os contatos deste PDV (opcional).",
             "especialista": "Quem trata as demandas deste PDV.",
             "data_credenciamento": (
                 "Define Regular (>6 meses) ou Iniciante (≤6 meses) no ranking de VB."
@@ -94,13 +105,6 @@ class ParceiroForm(forms.ModelForm):
             "emails_empresario": "Separe vários e-mails com vírgula ou uma linha por endereço.",
         }
         widgets = {
-            "token_acesso": forms.TextInput(
-                attrs={
-                    "placeholder": "Digite ou escolha uma sugestão",
-                    "autocomplete": "off",
-                    "class": "mono",
-                }
-            ),
             "endereco": forms.Textarea(attrs={"rows": 3}),
             "emails_empresario": forms.Textarea(attrs={"rows": 2, "placeholder": "a@loja.com, b@loja.com"}),
             "data_credenciamento": forms.DateInput(attrs={"type": "date"}),
@@ -143,13 +147,20 @@ class EspecialistaForm(forms.Form):
         widget=forms.NumberInput(attrs={"step": "0.01", "min": "0.01", "max": "9.99"}),
     )
     is_active = forms.BooleanField(label="Ativo", required=False, initial=True)
+    papel = forms.ChoiceField(
+        label="Papel",
+        choices=PerfilStaff.Papel.choices,
+        initial=PerfilStaff.Papel.ESPECIALISTA,
+        required=False,
+        help_text=(
+            "Admin vê tudo. Gerência vê a própria gerência e reseta senhas dela. "
+            "Especialista vê só os PDVs em que é o responsável."
+        ),
+    )
     eh_admin = forms.BooleanField(
         label="Admin — vê todos os tickets",
         required=False,
-        help_text=(
-            "Se marcado, esta pessoa vê a fila inteira, todos os parceiros e a equipe. "
-            "Se desmarcado, vê só os PDVs em que é o especialista."
-        ),
+        help_text="Legado do formulário; o campo Papel prevalece.",
     )
     whatsapp = forms.CharField(
         label="WhatsApp do especialista",
@@ -216,6 +227,7 @@ class EspecialistaForm(forms.Form):
                 "username": instance.username,
                 "email": instance.email,
                 "is_active": instance.is_active,
+                "papel": getattr(perfil, "papel", None) or PerfilStaff.Papel.ESPECIALISTA,
                 "eh_admin": bool(
                     perfil and perfil.papel == PerfilStaff.Papel.GESTOR
                 ),
@@ -257,6 +269,12 @@ class EspecialistaForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
+        papel = cleaned.get("papel") or (
+            PerfilStaff.Papel.GESTOR if cleaned.get("eh_admin") else PerfilStaff.Papel.ESPECIALISTA
+        )
+        cleaned["papel"] = papel
+        if papel == PerfilStaff.Papel.GERENCIA and not (cleaned.get("gerencia") or "").strip():
+            self.add_error("gerencia", "Informe a gerência deste perfil.")
         if not self.instance:
             return cleaned
 
@@ -268,7 +286,11 @@ class EspecialistaForm(forms.Form):
         ).exclude(user_id=self.instance.pk)
         if outros_admins.exists():
             return cleaned
-        if not cleaned.get("eh_admin"):
+        if papel != PerfilStaff.Papel.GESTOR:
+            self.add_error(
+                "papel",
+                "Não é possível remover o último admin. Marque outra pessoa como admin antes.",
+            )
             self.add_error(
                 "eh_admin",
                 "Não é possível remover o último admin. Marque outra pessoa como admin antes.",
@@ -284,10 +306,8 @@ class EspecialistaForm(forms.Form):
         User = get_user_model()
 
         dados = self.cleaned_data
-        papel = (
-            PerfilStaff.Papel.GESTOR
-            if dados.get("eh_admin")
-            else PerfilStaff.Papel.ESPECIALISTA
+        papel = dados.get("papel") or (
+            PerfilStaff.Papel.GESTOR if dados.get("eh_admin") else PerfilStaff.Papel.ESPECIALISTA
         )
         if self.instance:
             user = self.instance
@@ -989,3 +1009,63 @@ class DashboardFiltroForm(forms.Form):
         campo.label_from_instance = lambda u: (
             (u.first_name or u.get_full_name() or u.username).split()[0]
         )
+
+
+class TrocaSenhaForm(forms.Form):
+    senha_atual = forms.CharField(
+        label="Senha atual",
+        widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}),
+        required=False,
+    )
+    senha_nova = forms.CharField(
+        label="Nova senha",
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+        min_length=10,
+        help_text="Mínimo de 10 caracteres. Não use o código do PDV nem a senha antiga.",
+    )
+    senha_nova2 = forms.CharField(
+        label="Confirmar nova senha",
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+    )
+
+    def __init__(self, *args, user=None, exigir_atual=True, **kwargs):
+        self.user = user
+        self.exigir_atual = exigir_atual
+        super().__init__(*args, **kwargs)
+        if exigir_atual:
+            self.fields["senha_atual"].required = True
+        else:
+            self.fields.pop("senha_atual", None)
+
+    def clean_senha_atual(self):
+        atual = self.cleaned_data.get("senha_atual") or ""
+        if self.exigir_atual and self.user and not self.user.check_password(atual):
+            raise forms.ValidationError("Senha atual incorreta.")
+        return atual
+
+    def clean_senha_nova(self):
+        senha = self.cleaned_data.get("senha_nova") or ""
+        if self.user:
+            from django.contrib.auth.password_validation import validate_password
+
+            validate_password(senha, self.user)
+            if senha and senha.casefold() == (self.user.username or "").casefold():
+                raise forms.ValidationError("A senha não pode ser igual ao login.")
+            pdv = getattr(self.user, "parceiro_conta", None)
+            try:
+                token = (pdv.token_acesso or "") if pdv else ""
+            except Exception:
+                token = ""
+            if token and senha == token:
+                raise forms.ValidationError("Escolha uma senha diferente do token antigo.")
+        return senha
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("senha_nova") and cleaned.get("senha_nova") != cleaned.get("senha_nova2"):
+            self.add_error("senha_nova2", "As senhas não coincidem.")
+        atual = cleaned.get("senha_atual")
+        if atual and cleaned.get("senha_nova") == atual:
+            self.add_error("senha_nova", "A nova senha precisa ser diferente da atual.")
+        return cleaned
+

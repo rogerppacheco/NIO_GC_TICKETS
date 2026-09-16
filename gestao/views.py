@@ -787,7 +787,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
     form = ParcialResultadoForm(
         request.POST or None,
         request.FILES or None,
-        parceiros=Parceiro.objects.filter(pk__in=[p.pk for p in visiveis]),
+        parceiros=Parceiro.objects.filter(pk__in=[p.pk for p in visiveis], ativo=True),
         grupos=Destinatario.objects.filter(pk__in=[g.pk for g in grupos_parcial]),
         initial={"turno": str(turno_parcial()[0])},
     )
@@ -850,7 +850,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             form = ParcialResultadoForm(
                 request.POST,
                 request.FILES,
-                parceiros=Parceiro.objects.filter(pk__in=[p.pk for p in visiveis]),
+                parceiros=Parceiro.objects.filter(pk__in=[p.pk for p in visiveis], ativo=True),
                 grupos=Destinatario.objects.filter(pk__in=[g.pk for g in grupos_parcial]),
             )
             if form.is_valid():
@@ -978,7 +978,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                 )
             else:
                 parceiro = get_object_or_404(
-                    Parceiro.objects.filter(pk__in=[p.pk for p in visiveis]),
+                    Parceiro.objects.filter(pk__in=[p.pk for p in visiveis], ativo=True),
                     pk=request.POST.get("parceiro"),
                 )
                 _flash_resumo(

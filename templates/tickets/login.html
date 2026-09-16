@@ -3,9 +3,9 @@
 {% block content %}
 <div class="auth-wrap" style="padding:0;min-height:auto">
   <div class="panel auth-card">
-    <div class="panel-h"><h2>Área interna</h2></div>
+    <div class="panel-h"><h2>Entrar</h2></div>
     <div class="panel-b">
-      <p class="help" style="margin-top:0">Login para tratar e responder demandas.</p>
+      <p class="help" style="margin-top:0">Use o código do PDV ou o usuário da equipe, e a senha.</p>
       <form method="post">
         {% csrf_token %}
         {% for field in form %}
@@ -15,8 +15,12 @@
             {% if field.errors %}<div class="help" style="color:var(--danger)">{{ field.errors|striptags }}</div>{% endif %}
           </div>
         {% endfor %}
+        {% if form.non_field_errors %}
+          <div class="help" style="color:var(--danger);margin-bottom:0.85rem">{{ form.non_field_errors|striptags }}</div>
+        {% endif %}
         <button class="btn btn-primary" type="submit" style="width:100%">Entrar</button>
       </form>
+      <p class="help" style="margin-bottom:0">Esqueceu a senha? Peça reset ao especialista ou à gerência do PDV.</p>
     </div>
   </div>
 </div>

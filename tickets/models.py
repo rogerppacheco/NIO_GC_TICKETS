@@ -39,10 +39,19 @@ class Parceiro(models.Model):
         verbose_name="Especialista",
         help_text="Responsável NIO por este PDV. Vê e trata as demandas deste parceiro.",
     )
+    usuario = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="parceiro_conta",
+        verbose_name="Conta de login",
+        help_text="Usuário Django deste PDV. O login é o código do PDV.",
+    )
     token_acesso = models.CharField(
         max_length=64,
         blank=True,
-        help_text="Um único token para todos os contatos deste PDV (opcional).",
+        help_text="Legado. Na migração vira senha hasheada; não use mais no portal.",
     )
     data_credenciamento = models.DateField(
         "Data credenciamento",
@@ -547,6 +556,7 @@ class ConfigRespostaTipo(models.Model):
 class PerfilStaff(models.Model):
     class Papel(models.TextChoices):
         GESTOR = "gestor", "Admin"
+        GERENCIA = "gerencia", "Gerência"
         ESPECIALISTA = "especialista", "Especialista"
 
     user = models.OneToOneField(
@@ -678,6 +688,69 @@ class PerfilStaff(models.Model):
             "rotulo": f"Especialista {nome} ({jid})" if jid else f"Especialista {nome} (sem WhatsApp)",
             "configurado": bool(jid),
         }
+
+
+class ContaAcesso(models.Model):
+    """Flags de senha/MFA compartilhadas por equipe e PDV."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="conta_acesso",
+    )
+    must_change_password = models.BooleanField(default=False)
+    password_alterado_em = models.DateTimeField(null=True, blank=True)
+    mfa_obrigatorio = models.BooleanField(
+        default=False,
+        help_text="Reservado: TOTP para Admin/Gerência (não ativo nesta entrega).",
+    )
+
+    class Meta:
+        verbose_name = "Conta de acesso"
+        verbose_name_plural = "Contas de acesso"
+
+    def __str__(self) -> str:
+        return f"acesso:{self.user_id}"
+
+
+class RegistroAcesso(models.Model):
+    class Tipo(models.TextChoices):
+        LOGIN_OK = "login_ok", "Login"
+        LOGIN_FALHA = "login_falha", "Falha de login"
+        RESET = "reset", "Reset de senha"
+        TROCA = "troca", "Troca de senha"
+        TROCA_OBRIGATORIA = "troca_obrigatoria", "Troca obrigatória"
+        INATIVACAO = "inativacao", "Inativação"
+        REATIVACAO = "reativacao", "Reativação"
+        BLOQUEIO = "bloqueio", "Bloqueio por tentativas"
+
+    tipo = models.CharField(max_length=32, choices=Tipo.choices, db_index=True)
+    ator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="registros_acesso_feitos",
+    )
+    alvo = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="registros_acesso_recebidos",
+    )
+    username_tentativa = models.CharField(max_length=150, blank=True)
+    ip = models.GenericIPAddressField(null=True, blank=True)
+    detalhe = models.CharField(max_length=250, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-criado_em"]
+        verbose_name = "Registro de acesso"
+        verbose_name_plural = "Registros de acesso"
+
+    def __str__(self) -> str:
+        return f"{self.tipo} {self.criado_em:%d/%m %H:%M}"
 
 
 def formatar_duracao(segundos: int | None) -> str:

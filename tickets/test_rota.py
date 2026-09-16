@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -75,15 +76,22 @@ class RotaApiTests(TestCase):
             mes=timezone.localdate().month,
             meta_vl=100,
         )
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username=self.pdv.codigo_pdv, password="senha-pdv-ok1", first_name="Rota"
+        )
+        self.pdv.usuario = self.user
+        self.pdv.save(update_fields=["usuario"])
+        self.client.force_login(self.user)
         session = self.client.session
-        session["parceiro_id"] = self.pdv.id
         session["contato_id"] = self.contato.id
         session.save()
 
     def test_hoje_requer_sessao(self):
         c = Client()
         r = c.get(reverse("rota_api_hoje"))
-        self.assertEqual(r.status_code, 401)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/login/", r["Location"])
 
     def test_hoje_ok(self):
         r = self.client.get(reverse("rota_api_hoje"))

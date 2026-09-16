@@ -6,6 +6,7 @@ import json
 import logging
 from typing import Any
 
+from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_http_methods
@@ -81,11 +82,12 @@ def _parse_json(request: HttpRequest) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+@login_required
 def rota_portal(request: HttpRequest) -> HttpResponse:
     """Página do check-in diário de rota."""
     parceiro, contato = _portal_sessao(request)
     if not parceiro or not contato:
-        return redirect("abrir_demanda")
+        return redirect("portal_contato")
     return render(
         request,
         "tickets/rota_portal.html",
@@ -96,6 +98,7 @@ def rota_portal(request: HttpRequest) -> HttpResponse:
     )
 
 
+@login_required
 @require_GET
 def rota_api_hoje(request: HttpRequest) -> JsonResponse:
     parceiro, contato, err = _exige_portal(request)
@@ -130,6 +133,7 @@ def rota_api_hoje(request: HttpRequest) -> JsonResponse:
     )
 
 
+@login_required
 @require_GET
 def rota_api_ufs(request: HttpRequest) -> JsonResponse:
     parceiro, _contato, err = _exige_portal(request)
@@ -138,6 +142,7 @@ def rota_api_ufs(request: HttpRequest) -> JsonResponse:
     return _json_ok({"items": listar_ufs(parceiro)})
 
 
+@login_required
 @require_GET
 def rota_api_cidades(request: HttpRequest) -> JsonResponse:
     parceiro, _contato, err = _exige_portal(request)
@@ -149,6 +154,7 @@ def rota_api_cidades(request: HttpRequest) -> JsonResponse:
     return _json_ok({"uf": uf, "items": listar_cidades(parceiro, uf)})
 
 
+@login_required
 @require_GET
 def rota_api_bairros(request: HttpRequest) -> JsonResponse:
     parceiro, _contato, err = _exige_portal(request)
@@ -196,6 +202,7 @@ def rota_api_bairros(request: HttpRequest) -> JsonResponse:
     )
 
 
+@login_required
 @require_GET
 def rota_api_dfv_resumo(request: HttpRequest) -> JsonResponse:
     _parceiro, _contato, err = _exige_portal(request)
@@ -238,6 +245,7 @@ def rota_api_dfv_resumo(request: HttpRequest) -> JsonResponse:
     return _json_ok(resumo)
 
 
+@login_required
 @require_http_methods(["POST"])
 def rota_api_planejamento_validar(request: HttpRequest) -> JsonResponse:
     parceiro, _contato, err = _exige_portal(request)
@@ -274,6 +282,7 @@ def rota_api_planejamento_validar(request: HttpRequest) -> JsonResponse:
     )
 
 
+@login_required
 @require_http_methods(["POST", "PUT"])
 def rota_api_checkin(request: HttpRequest) -> JsonResponse:
     parceiro, contato, err = _exige_portal(request)

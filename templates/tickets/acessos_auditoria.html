@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Auditoria de acesso · NIO ESPECIALISTA Tickets{% endblock %}
+{% block main_class %}wrap wrap-wide{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Auditoria de acesso</h1>
+    <p>Logins, falhas, resets, inativações e trocas de senha.</p>
+  </div>
+  <a class="btn btn-secondary" href="{% url 'acessos' %}">Voltar</a>
+</div>
+<div class="panel">
+  <div class="table-scroll">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Quando</th>
+          <th>Tipo</th>
+          <th>Quem</th>
+          <th>Alvo</th>
+          <th>IP</th>
+          <th>Detalhe</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in registros %}
+        <tr>
+          <td>{{ r.criado_em|date:"d/m/Y H:i" }}</td>
+          <td>{{ r.get_tipo_display }}</td>
+          <td>{% if r.ator %}{{ r.ator.get_username }}{% else %}{{ r.username_tentativa|default:"—" }}{% endif %}</td>
+          <td>{% if r.alvo %}{{ r.alvo.get_username }}{% else %}—{% endif %}</td>
+          <td class="mono">{{ r.ip|default:"—" }}</td>
+          <td>{{ r.detalhe|default:"" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6">Nenhum evento ainda.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

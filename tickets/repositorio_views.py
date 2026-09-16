@@ -25,6 +25,7 @@ def _pode_gerir(user) -> bool:
     return tem_acesso_interno(user)
 
 
+@login_required
 @require_GET
 def repositorio_lista(request: HttpRequest) -> HttpResponse:
     q = (request.GET.get("q") or "").strip()
@@ -52,6 +53,7 @@ def repositorio_lista(request: HttpRequest) -> HttpResponse:
     )
 
 
+@login_required
 @require_GET
 def repositorio_detalhe(request: HttpRequest, slug: str) -> HttpResponse:
     parceiro, contato = _portal_sessao(request)

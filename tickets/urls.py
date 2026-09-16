@@ -1,12 +1,17 @@
 from django.urls import include, path
 
-from . import repositorio_views, rota_views, tradehub_views, views
+from . import acessos_views, repositorio_views, rota_views, tradehub_views, views
 
 urlpatterns = [
     path("", views.home, name="home"),
     path("login/", views.StaffLoginView.as_view(), name="login"),
     path("logout/", views.StaffLogoutView.as_view(), name="logout"),
     path("perfil/", views.meu_perfil, name="meu_perfil"),
+    path("senha/trocar/", acessos_views.senha_trocar, name="senha_trocar"),
+    path("senha/sessoes/encerrar/", acessos_views.logout_todas_sessoes, name="logout_todas_sessoes"),
+    path("acessos/", acessos_views.acessos_lista, name="acessos"),
+    path("acessos/auditoria/", acessos_views.acessos_auditoria, name="acessos_auditoria"),
+    path("acessos/<int:pk>/resetar/", acessos_views.acesso_resetar, name="acesso_resetar"),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("fila/", views.fila, name="fila"),
     path("tickets/novo/", views.ticket_criar, name="ticket_criar"),
@@ -63,6 +68,7 @@ urlpatterns = [
     path("repositorio/<slug:slug>/", repositorio_views.repositorio_detalhe, name="repositorio_detalhe"),
     path("abrir/formulario/", views.abrir_demanda_form, name="abrir_demanda_form"),
     path("abrir/inicio/", views.portal_parceiro, name="portal_parceiro"),
+    path("abrir/contato/", views.portal_contato, name="portal_contato"),
     path("abrir/rota/", rota_views.rota_portal, name="rota_portal"),
     path("abrir/rota/api/hoje/", rota_views.rota_api_hoje, name="rota_api_hoje"),
     path("abrir/rota/api/localidades/ufs/", rota_views.rota_api_ufs, name="rota_api_ufs"),
@@ -101,6 +107,7 @@ urlpatterns = [
     path("parceiros/<int:pk>/", views.parceiro_form, name="parceiro_editar"),
     path("parceiros/<int:pk>/inativar/", views.parceiro_inativar, name="parceiro_inativar"),
     path("parceiros/<int:pk>/reativar/", views.parceiro_reativar, name="parceiro_reativar"),
+    path("parceiros/<int:pk>/gerar-senha/", acessos_views.acesso_gerar_parceiro, name="acesso_gerar_parceiro"),
     path("parceiros/<int:pk>/excluir/", views.parceiro_excluir, name="parceiro_excluir"),
     path("contatos/<int:pk>/toggle/", views.contato_toggle, name="contato_toggle"),
     path("contatos/<int:pk>/excluir/", views.contato_excluir, name="contato_excluir"),

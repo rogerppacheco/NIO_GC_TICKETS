@@ -4,11 +4,11 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib import messages
-from django.contrib.auth import get_user_model, update_session_auth_hash
+from django.contrib.auth import get_user_model, logout as auth_logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView, LogoutView
 from django.db.models import Count, Q, Sum
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -16,15 +16,20 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
 from .acesso import (
+    eh_admin,
     eh_gestor,
+    eh_gerencia,
     escopo_gestao,
     gestor_required,
+    parceiro_de,
     parceiros_para_cadastro,
     parceiros_visiveis,
     pode_importar_bases,
     qs_equipe,
+    tem_acesso_interno,
     ticket_para_usuario,
     tickets_visiveis,
+    destino_pos_login,
 )
 from .demanda_campos import (
     catalogo_campos_resposta,
@@ -75,6 +80,72 @@ from gestao.messaging.syncwa import syncwa_configurado
 class StaffLoginView(LoginView):
     template_name = "tickets/login.html"
     authentication_form = LoginForm
+    redirect_authenticated_user = True
+
+    def post(self, request, *args, **kwargs):
+        from .seguranca import esta_bloqueado, ip_de, registrar_evento
+        from .models import RegistroAcesso
+
+        username = (request.POST.get("username") or "").strip()
+        ip = ip_de(request)
+        if esta_bloqueado(username, ip):
+            registrar_evento(
+                RegistroAcesso.Tipo.BLOQUEIO,
+                username_tentativa=username,
+                ip=ip,
+            )
+            form = self.get_form()
+            form.add_error(None, "Usuário ou senha inválidos.")
+            return self.render_to_response(self.get_context_data(form=form))
+        return super().post(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        from .seguranca import ip_de, limpar_falhas_login, registrar_evento, tocar_atividade
+        from .models import RegistroAcesso
+
+        response = super().form_valid(form)
+        username = form.cleaned_data.get("username") or ""
+        ip = ip_de(self.request)
+        limpar_falhas_login(username, ip)
+        registrar_evento(RegistroAcesso.Tipo.LOGIN_OK, ator=self.request.user, ip=ip)
+        tocar_atividade(self.request)
+        return response
+
+    def form_invalid(self, form):
+        from .seguranca import (
+            esta_bloqueado,
+            ip_de,
+            registrar_evento,
+            registrar_falha_login,
+        )
+        from .models import RegistroAcesso
+
+        username = (self.request.POST.get("username") or "").strip()
+        ip = ip_de(self.request)
+        bloqueou = registrar_falha_login(username, ip)
+        registrar_evento(
+            RegistroAcesso.Tipo.LOGIN_FALHA,
+            username_tentativa=username,
+            ip=ip,
+        )
+        if bloqueou or esta_bloqueado(username, ip):
+            registrar_evento(
+                RegistroAcesso.Tipo.BLOQUEIO,
+                username_tentativa=username,
+                ip=ip,
+            )
+        return super().form_invalid(form)
+
+    def get_success_url(self):
+        from .seguranca import deve_trocar_senha
+
+        user = self.request.user
+        if deve_trocar_senha(user):
+            return reverse("senha_trocar")
+        proximo = self.get_redirect_url()
+        if proximo:
+            return proximo
+        return destino_pos_login(user)
 
 
 class StaffLogoutView(LogoutView):
@@ -83,6 +154,12 @@ class StaffLogoutView(LogoutView):
 
 @login_required
 def meu_perfil(request: HttpRequest) -> HttpResponse:
+    if parceiro_de(request.user):
+        return render(
+            request,
+            "tickets/perfil_parceiro.html",
+            {"parceiro": parceiro_de(request.user)},
+        )
     form = StaffPerfilForm(instance=request.user)
     if request.method == "POST":
         form = StaffPerfilForm(request.POST, instance=request.user)
@@ -100,13 +177,22 @@ def meu_perfil(request: HttpRequest) -> HttpResponse:
 
 def home(request: HttpRequest) -> HttpResponse:
     if request.user.is_authenticated:
-        return redirect("fila")
-    return redirect("portal_inicio")
+        from .seguranca import deve_trocar_senha
+
+        if deve_trocar_senha(request.user):
+            return redirect("senha_trocar")
+        return redirect(destino_pos_login(request.user))
+    return redirect("login")
 
 
+@login_required
 def portal_inicio(request: HttpRequest) -> HttpResponse:
-    """Landing pública com cards rápidos (demanda, DFV, viabilidade, repositório)."""
-    return render(request, "tickets/portal_inicio.html")
+    pdv = parceiro_de(request.user)
+    if pdv:
+        return redirect("portal_parceiro")
+    if tem_acesso_interno(request.user):
+        return redirect("fila")
+    return redirect("login")
 
 
 def _chave_pedido(pedido: str | None) -> str:
@@ -146,7 +232,7 @@ def fila(request: HttpRequest) -> HttpResponse:
         parceiros_qs=parceiros_qs,
         especialistas_qs=especialistas_qs,
     )
-    if not eh_gestor(request.user):
+    if not (eh_admin(request.user) or eh_gerencia(request.user)):
         form.fields.pop("especialista", None)
 
     qs = tickets_visiveis(request.user)
@@ -167,7 +253,7 @@ def fila(request: HttpRequest) -> HttpResponse:
             qs = qs.filter(tipo=form.cleaned_data["tipo"])
         if form.cleaned_data.get("parceiro"):
             qs = qs.filter(parceiro=form.cleaned_data["parceiro"])
-        if eh_gestor(request.user) and form.cleaned_data.get("especialista"):
+        if (eh_admin(request.user) or eh_gerencia(request.user)) and form.cleaned_data.get("especialista"):
             qs = qs.filter(parceiro__especialista=form.cleaned_data["especialista"])
         sit_osab = form.cleaned_data.get("situacao_osab")
         if sit_osab:
@@ -200,7 +286,7 @@ def fila(request: HttpRequest) -> HttpResponse:
             "form": form,
             "tickets": tickets,
             "abertos_count": abertos.count(),
-            "mostrar_filtro_especialista": eh_gestor(request.user),
+            "mostrar_filtro_especialista": eh_admin(request.user) or eh_gerencia(request.user),
             "filtros_ativos": filtros_ativos,
         },
     )
@@ -242,68 +328,59 @@ def ticket_criar(request: HttpRequest) -> HttpResponse:
 
 
 def abrir_demanda(request: HttpRequest) -> HttpResponse:
-    """Portal: PDV → contato autorizado → formulário."""
-    parceiros = Parceiro.objects.filter(ativo=True).prefetch_related("contatos")
-    passo = request.GET.get("passo") or request.POST.get("passo") or "parceiro"
-    parceiro = None
-    contatos = ContatoParceiro.objects.none()
+    """Parceiro logado: escolhe o contato (quem está operando) e segue."""
+    return redirect("portal_contato")
 
-    parceiro_id = request.POST.get("parceiro") or request.session.get("parceiro_id")
-    if parceiro_id:
-        parceiro = Parceiro.objects.filter(pk=parceiro_id, ativo=True).first()
-        if parceiro:
-            contatos = parceiro.contatos.filter(ativo=True)
 
+@login_required
+def portal_contato(request: HttpRequest) -> HttpResponse:
+    pdv = parceiro_de(request.user)
+    if not pdv:
+        if tem_acesso_interno(request.user):
+            return redirect("fila")
+        return redirect("login")
+    if not pdv.ativo:
+        messages.error(request, "Este PDV está inativo.")
+        return redirect("login")
+    contatos = pdv.contatos.filter(ativo=True)
     if request.method == "POST":
-        if passo == "parceiro":
-            parceiro = get_object_or_404(Parceiro, pk=request.POST.get("parceiro"), ativo=True)
-            token_pdv = (request.POST.get("token_pdv") or "").strip()
-            if parceiro.token_acesso and parceiro.token_acesso != token_pdv:
-                messages.error(request, "Token do PDV inválido.")
-                return redirect("abrir_demanda")
-            request.session["parceiro_id"] = parceiro.id
-            request.session.pop("contato_id", None)
-            if not parceiro.contatos.filter(ativo=True).exists():
-                messages.error(
-                    request,
-                    "Este PDV ainda não tem contatos cadastrados. Peça ao gestor NIO para cadastrar.",
-                )
-                return redirect("abrir_demanda")
-            next_destino = (request.POST.get("next") or "").strip()
-            if next_destino:
-                return redirect(f"{reverse('abrir_demanda')}?passo=contato&next={next_destino}")
-            return redirect(f"{reverse('abrir_demanda')}?passo=contato")
-
-        if passo == "contato":
-            if not parceiro:
-                return redirect("abrir_demanda")
-            contato = get_object_or_404(
-                ContatoParceiro, pk=request.POST.get("contato"), parceiro=parceiro, ativo=True
-            )
-            request.session["contato_id"] = contato.id
-            next_destino = (request.POST.get("next") or request.GET.get("next") or "").strip()
-            if next_destino == "rota":
-                return redirect("rota_portal")
-            return redirect("portal_parceiro")
-
+        contato = get_object_or_404(
+            ContatoParceiro, pk=request.POST.get("contato"), parceiro=pdv, ativo=True
+        )
+        request.session["contato_id"] = contato.id
+        next_destino = (request.POST.get("next") or request.GET.get("next") or "").strip()
+        if next_destino == "rota":
+            return redirect("rota_portal")
+        return redirect("portal_parceiro")
+    if contatos.count() == 1:
+        request.session["contato_id"] = contatos.first().id
+        next_destino = (request.GET.get("next") or "").strip()
+        if next_destino == "rota":
+            return redirect("rota_portal")
+        return redirect("portal_parceiro")
+    if not contatos.exists():
+        messages.error(
+            request,
+            "Este PDV ainda não tem contato ativo. Peça ao especialista para cadastrar Empresário ou Backoffice.",
+        )
     return render(
         request,
         "tickets/parceiro_gate.html",
         {
-            "parceiros": parceiros,
-            "parceiro": parceiro if passo == "contato" else None,
+            "parceiro": pdv,
             "contatos": contatos,
-            "passo": passo if (passo == "contato" and parceiro) else "parceiro",
-            "next": (request.GET.get("next") or request.POST.get("next") or "").strip(),
+            "passo": "contato",
+            "next": (request.GET.get("next") or "").strip(),
         },
     )
 
 
+@login_required
 def portal_parceiro(request: HttpRequest) -> HttpResponse:
     """Hub do contato identificado: abrir nova ou ver histórico do PDV."""
-    parceiro, contato = _portal_sessao(request)
-    if not parceiro or not contato:
-        return redirect("abrir_demanda")
+    parceiro, contato, redirecionar = _exigir_contato_portal(request)
+    if redirecionar:
+        return redirecionar
     recentes = (
         Ticket.objects.filter(parceiro=parceiro)
         .select_related("parceiro", "contato")
@@ -320,15 +397,11 @@ def portal_parceiro(request: HttpRequest) -> HttpResponse:
     )
 
 
+@login_required
 def minhas_demandas(request: HttpRequest) -> HttpResponse:
-    """Lista todas as demandas do PDV (qualquer contato com token do parceiro)."""
-    parceiro, contato = _portal_sessao(request)
-    if not parceiro or not contato:
-        messages.info(
-            request,
-            "Identifique o PDV e o seu contato para ver as demandas do parceiro.",
-        )
-        return redirect("abrir_demanda")
+    parceiro, contato, redirecionar = _exigir_contato_portal(request)
+    if redirecionar:
+        return redirecionar
     tickets = (
         Ticket.objects.filter(parceiro=parceiro)
         .select_related("parceiro", "contato")
@@ -346,30 +419,39 @@ def minhas_demandas(request: HttpRequest) -> HttpResponse:
 
 
 def portal_sair(request: HttpRequest) -> HttpResponse:
-    request.session.pop("parceiro_id", None)
-    request.session.pop("contato_id", None)
-    messages.success(request, "Sessão do PDV encerrada.")
-    return redirect("abrir_demanda")
+    auth_logout(request)
+    return redirect("login")
 
 
 def _portal_sessao(request: HttpRequest):
-    parceiro_id = request.session.get("parceiro_id")
+    pdv = parceiro_de(request.user) if getattr(request.user, "is_authenticated", False) else None
+    if not pdv or not pdv.ativo:
+        return None, None
     contato_id = request.session.get("contato_id")
-    if not parceiro_id or not contato_id:
-        return None, None
-    parceiro = Parceiro.objects.filter(pk=parceiro_id, ativo=True).first()
-    if not parceiro:
-        return None, None
-    contato = ContatoParceiro.objects.filter(
-        pk=contato_id, parceiro=parceiro, ativo=True
-    ).first()
-    return parceiro, contato
+    contato = None
+    if contato_id:
+        contato = ContatoParceiro.objects.filter(
+            pk=contato_id, parceiro=pdv, ativo=True
+        ).first()
+    return pdv, contato
 
 
+def _exigir_contato_portal(request: HttpRequest):
+    pdv, contato = _portal_sessao(request)
+    if not pdv:
+        if tem_acesso_interno(request.user):
+            return None, None, redirect("fila")
+        return None, None, redirect("login")
+    if contato:
+        return pdv, contato, None
+    return pdv, None, redirect("portal_contato")
+
+
+@login_required
 def abrir_demanda_form(request: HttpRequest) -> HttpResponse:
-    parceiro, contato = _portal_sessao(request)
-    if not parceiro or not contato:
-        return redirect("abrir_demanda")
+    parceiro, contato, redirecionar = _exigir_contato_portal(request)
+    if redirecionar:
+        return redirecionar
 
     if request.method == "POST":
         form = TicketPublicCreateForm(request.POST, request.FILES)
@@ -409,6 +491,7 @@ def abrir_demanda_form(request: HttpRequest) -> HttpResponse:
     )
 
 
+@login_required
 def consulta_busca(request: HttpRequest) -> HttpResponse:
     """Parceiro informa o protocolo para ver STATUS / RETORNO."""
     if request.method == "POST":
@@ -416,8 +499,11 @@ def consulta_busca(request: HttpRequest) -> HttpResponse:
         if not protocolo:
             messages.error(request, "Informe o número do protocolo.")
             return redirect("consulta_busca")
-        if not Ticket.objects.filter(protocolo=protocolo).exists():
-            messages.error(request, f"Protocolo {protocolo} não encontrado.")
+        ticket = Ticket.objects.filter(protocolo=protocolo).first()
+        from .acesso import pode_ver_ticket
+
+        if not ticket or not pode_ver_ticket(request.user, ticket):
+            messages.error(request, "Protocolo não encontrado.")
             return redirect("consulta_busca")
         return redirect("consulta_protocolo", protocolo=protocolo)
 
@@ -429,6 +515,8 @@ def consulta_busca(request: HttpRequest) -> HttpResponse:
             .select_related("parceiro", "contato")
             .order_by("-criado_em")[:10]
         )
+    elif tem_acesso_interno(request.user):
+        minhas = tickets_visiveis(request.user)[:10]
     return render(
         request,
         "tickets/consulta_busca.html",
@@ -436,10 +524,13 @@ def consulta_busca(request: HttpRequest) -> HttpResponse:
     )
 
 
+@login_required
 def consulta_protocolo(request: HttpRequest, protocolo: str) -> HttpResponse:
-    ticket = get_object_or_404(
-        Ticket.objects.select_related("parceiro"), protocolo=protocolo.upper()
-    )
+    from .acesso import pode_ver_ticket
+
+    ticket = Ticket.objects.select_related("parceiro").filter(protocolo=protocolo.upper()).first()
+    if not ticket or not pode_ver_ticket(request.user, ticket):
+        raise Http404("Ticket não encontrado.")
     msgs = ticket.mensagens.filter(interno=False)
     return render(
         request,
@@ -910,6 +1001,9 @@ def parceiro_form(request: HttpRequest, pk: int | None = None) -> HttpResponse:
                 if not eh_gestor(request.user):
                     parceiro.especialista = request.user
                 parceiro.save()
+                if parceiro.usuario_id and parceiro.usuario.is_active != parceiro.ativo:
+                    parceiro.usuario.is_active = parceiro.ativo
+                    parceiro.usuario.save(update_fields=["is_active"])
                 messages.success(request, "Parceiro salvo.")
                 return redirect("parceiro_editar", pk=parceiro.pk)
         elif action == "add_contato" and instance:
@@ -931,15 +1025,6 @@ def parceiro_form(request: HttpRequest, pk: int | None = None) -> HttpResponse:
                 return redirect("parceiro_editar", pk=instance.pk)
             messages.error(request, "Não foi possível salvar o contato. Verifique os campos.")
 
-    codigo = (instance.codigo_pdv if instance else "pdv") or "pdv"
-    codigo_slug = "".join(ch for ch in codigo.lower() if ch.isalnum())[:6] or "pdv"
-    sugestoes_token = [
-        f"nio{codigo_slug}",
-        f"{codigo_slug}2026",
-        "parceiro",
-        "abertura",
-        "demanda",
-    ]
     return render(
         request,
         "tickets/parceiro_form.html",
@@ -951,7 +1036,6 @@ def parceiro_form(request: HttpRequest, pk: int | None = None) -> HttpResponse:
             "parceiro": instance,
             "qtd_tickets": qtd_tickets,
             "pode_excluir": bool(instance) and qtd_tickets == 0,
-            "sugestoes_token": sugestoes_token,
             "cargos_contato": ContatoParceiro.Cargo.choices,
             "cargos_contato_valores": {c.value for c in ContatoParceiro.Cargo},
         },
@@ -998,28 +1082,41 @@ def contato_excluir(request: HttpRequest, pk: int) -> HttpResponse:
 @login_required
 @require_POST
 def contato_gerar_token(request: HttpRequest, pk: int) -> HttpResponse:
-    import secrets
-
     contato = get_object_or_404(
         ContatoParceiro.objects.filter(parceiro__in=parceiros_visiveis(request.user)),
         pk=pk,
     )
-    contato.token_acesso = secrets.token_urlsafe(6)
-    contato.save(update_fields=["token_acesso", "atualizado_em"])
-    messages.success(request, f"Token aleatório de {contato.nome}: {contato.token_acesso}")
+    messages.info(
+        request,
+        "O portal agora usa login e senha do PDV (código). Use “Gerar senha de acesso” nesta tela.",
+    )
     return redirect("parceiro_editar", pk=contato.parceiro_id)
 
 
 @login_required
 @require_POST
 def parceiro_inativar(request: HttpRequest, pk: int) -> HttpResponse:
+    from .models import RegistroAcesso
+    from .seguranca import invalidar_sessoes, ip_de, registrar_evento
+
     parceiro = get_object_or_404(parceiros_visiveis(request.user), pk=pk)
     parceiro.ativo = False
     parceiro.save(update_fields=["ativo", "atualizado_em"])
+    if parceiro.usuario_id:
+        parceiro.usuario.is_active = False
+        parceiro.usuario.save(update_fields=["is_active"])
+        invalidar_sessoes(parceiro.usuario)
+        registrar_evento(
+            RegistroAcesso.Tipo.INATIVACAO,
+            ator=request.user,
+            alvo=parceiro.usuario,
+            ip=ip_de(request),
+            detalhe=parceiro.codigo_pdv,
+        )
     messages.success(
         request,
         f"Parceiro {parceiro.codigo_pdv} — {parceiro.nome} inativado. "
-        "Demandas antigas permanecem; novas aberturas ficam bloqueadas.",
+        "Demandas antigas permanecem; login e novas aberturas ficam bloqueados.",
     )
     return redirect("parceiros")
 
@@ -1027,9 +1124,22 @@ def parceiro_inativar(request: HttpRequest, pk: int) -> HttpResponse:
 @login_required
 @require_POST
 def parceiro_reativar(request: HttpRequest, pk: int) -> HttpResponse:
+    from .models import RegistroAcesso
+    from .seguranca import ip_de, registrar_evento
+
     parceiro = get_object_or_404(parceiros_visiveis(request.user), pk=pk)
     parceiro.ativo = True
     parceiro.save(update_fields=["ativo", "atualizado_em"])
+    if parceiro.usuario_id:
+        parceiro.usuario.is_active = True
+        parceiro.usuario.save(update_fields=["is_active"])
+        registrar_evento(
+            RegistroAcesso.Tipo.REATIVACAO,
+            ator=request.user,
+            alvo=parceiro.usuario,
+            ip=ip_de(request),
+            detalhe=parceiro.codigo_pdv,
+        )
     messages.success(request, f"Parceiro {parceiro.codigo_pdv} — {parceiro.nome} reativado.")
     return redirect("parceiros")
 
@@ -1052,7 +1162,7 @@ def parceiro_excluir(request: HttpRequest, pk: int) -> HttpResponse:
     return redirect("parceiros")
 
 
-@login_required
+@gestor_required
 def mascaras_lista(request: HttpRequest) -> HttpResponse:
     return render(
         request,
@@ -1061,7 +1171,7 @@ def mascaras_lista(request: HttpRequest) -> HttpResponse:
     )
 
 
-@login_required
+@gestor_required
 def mascara_form(request: HttpRequest, pk: int | None = None) -> HttpResponse:
     from .management.commands.seed_nio import MASCARAS as PADROES_SEED
 
@@ -1254,7 +1364,7 @@ def dashboard(request: HttpRequest) -> HttpResponse:
         parceiros_qs=parceiros_qs,
         especialistas_qs=especialistas_qs,
     )
-    gestor = eh_gestor(request.user)
+    gestor = eh_admin(request.user) or eh_gerencia(request.user)
     if not gestor:
         form.fields.pop("especialista", None)
     cleaned = form.cleaned_data if form.is_valid() else {}
@@ -1474,7 +1584,7 @@ def ticket_enviar_mascara_api(request: HttpRequest, protocolo: str) -> HttpRespo
         }, status=400)
 
 
-@login_required
+@gestor_required
 def config_resposta_lista(request: HttpRequest) -> HttpResponse:
     garantir_config_resposta_padrao()
     configs = {c.tipo: c for c in ConfigRespostaTipo.objects.all()}
@@ -1498,7 +1608,7 @@ def config_resposta_lista(request: HttpRequest) -> HttpResponse:
     )
 
 
-@login_required
+@gestor_required
 def config_resposta_editar(request: HttpRequest, tipo: str) -> HttpResponse:
     from .demanda_campos import CAMPOS_RESPOSTA_POR_TIPO
 

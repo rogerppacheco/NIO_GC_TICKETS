@@ -5,9 +5,9 @@
   <div>
     <h1>{{ titulo }}</h1>
     {% if parceiro %}
-      <p>Defina o token do PDV (vale para todos os contatos) e cadastre quem pode abrir demandas.</p>
+      <p>O login do portal é o código do PDV. Cadastre os contatos (Empresário/Backoffice) para atribuir quem está operando.</p>
     {% else %}
-      <p>Salve o PDV primeiro; depois adicione os contatos.</p>
+      <p>Salve o PDV primeiro; depois adicione os contatos e, se ainda não houver senha, gere o acesso.</p>
     {% endif %}
   </div>
 </div>
@@ -20,35 +20,18 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="salvar_parceiro">
         {% for field in form %}
-          {% if field.name == "token_acesso" %}
-            <div class="full">
-              <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-              <div class="token-picker">
-                {{ field }}
-                <div class="token-suggestions" data-target="{{ field.id_for_label }}">
-                  <span class="help">Sugestões:</span>
-                  {% for s in sugestoes_token %}
-                    <button type="button" class="chip" data-token="{{ s }}">{{ s }}</button>
-                  {% endfor %}
-                  <button type="button" class="chip" data-token="">sem token</button>
-                </div>
-                {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
-              </div>
-            </div>
-            {% else %}
             <div class="{% if field.name == 'nome' or field.name == 'razao_social' or field.name == 'endereco' or field.name == 'emails_empresario' %}full{% endif %}">
               <label for="{{ field.id_for_label }}">{{ field.label }}</label>
               {{ field }}
               {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
             </div>
-          {% endif %}
         {% endfor %}
         <div class="full" style="display:flex;gap:0.5rem;flex-wrap:wrap">
           <button class="btn btn-primary" type="submit">Salvar PDV</button>
           <a class="btn btn-secondary" href="{% url 'parceiros' %}">Voltar</a>
           {% if parceiro and parceiro.ativo %}
             <button formaction="{% url 'parceiro_inativar' parceiro.pk %}" formmethod="post" class="btn btn-secondary" type="submit"
-                    onclick="return confirm('Inativar este PDV?');">Inativar PDV</button>
+                    onclick="return confirm('Inativar este PDV? O login também será desligado.');">Inativar PDV</button>
           {% elif parceiro %}
             <button formaction="{% url 'parceiro_reativar' parceiro.pk %}" formmethod="post" class="btn btn-secondary" type="submit">Reativar PDV</button>
           {% endif %}
@@ -56,6 +39,29 @@
       </form>
     </div>
   </div>
+
+  {% if parceiro %}
+  <div class="panel">
+    <div class="panel-h"><h2>Acesso do portal</h2></div>
+    <div class="panel-b">
+      <p class="help" style="margin-top:0">
+        Login = código do PDV (<strong class="mono">{{ parceiro.codigo_pdv }}</strong>).
+        {% if parceiro.usuario %}
+          Conta {{ parceiro.usuario.is_active|yesno:"ativa,inativa" }}.
+        {% else %}
+          Ainda não há senha — gere uma temporária (mostrada uma vez).
+        {% endif %}
+      </p>
+      <form method="post" action="{% url 'acesso_gerar_parceiro' parceiro.pk %}">
+        {% csrf_token %}
+        <button class="btn btn-secondary" type="submit"
+                onclick="return confirm('Gerar senha temporária? O parceiro precisará trocar no próximo login.');">
+          {% if parceiro.usuario %}Resetar senha do PDV{% else %}Gerar senha de acesso{% endif %}
+        </button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
 
   {% if parceiro %}
   <div class="panel">
@@ -137,31 +143,4 @@
   </div>
   {% endif %}
 </div>
-{% endblock %}
-{% block extra_js %}
-<script>
-function markSelected(box, value) {
-  box.querySelectorAll('.chip').forEach(function (btn) {
-    btn.classList.toggle('is-selected', (btn.getAttribute('data-token') || '') === value);
-  });
-}
-document.querySelectorAll('.token-suggestions').forEach(function (box) {
-  const targetId = box.getAttribute('data-target');
-  const input = document.getElementById(targetId);
-  if (input) markSelected(box, input.value);
-  box.querySelectorAll('.chip').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      if (!input) return;
-      input.value = btn.getAttribute('data-token') || '';
-      markSelected(box, input.value);
-      input.focus();
-    });
-  });
-  if (input) {
-    input.addEventListener('input', function () {
-      markSelected(box, input.value);
-    });
-  }
-});
-</script>
 {% endblock %}

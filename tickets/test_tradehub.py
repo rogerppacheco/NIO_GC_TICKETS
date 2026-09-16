@@ -1,5 +1,8 @@
-from django.test import SimpleTestCase, override_settings
+from django.contrib.auth import get_user_model
+from django.test import TestCase, override_settings
 from django.urls import reverse
+
+from tickets.models import ContatoParceiro, Parceiro
 
 STORAGES_TESTE = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
@@ -8,7 +11,29 @@ STORAGES_TESTE = {
 
 
 @override_settings(STORAGES=STORAGES_TESTE)
-class TradeHubPagesTests(SimpleTestCase):
+class TradeHubPagesTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.pdv = Parceiro.objects.create(codigo_pdv="TH1", nome="PDV Trade")
+        user = User.objects.create_user(
+            username=self.pdv.codigo_pdv, password="senha-pdv-ok1", first_name="Loja"
+        )
+        self.pdv.usuario = user
+        self.pdv.save(update_fields=["usuario"])
+        ContatoParceiro.objects.create(
+            parceiro=self.pdv, nome="Empresário TH", cargo="Empresário"
+        )
+        self.client.force_login(user)
+        session = self.client.session
+        session["contato_id"] = self.pdv.contatos.first().id
+        session.save()
+
+    def test_anonimo_vai_para_login(self):
+        self.client.logout()
+        resp = self.client.get(reverse("tradehub"))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/login/", resp["Location"])
+
     def test_home_lista_categorias_e_faq(self):
         resp = self.client.get(reverse("tradehub"))
         self.assertEqual(resp.status_code, 200)
@@ -38,10 +63,11 @@ class TradeHubPagesTests(SimpleTestCase):
 
     def test_nao_escapa_da_pasta_tradehub(self):
         resp = self.client.get("/tradehub/arquivo/../../config/settings.py")
-        self.assertIn(resp.status_code, {404, 400})
+        self.assertIn(resp.status_code, {404, 400, 302})
 
     def test_portal_tem_card(self):
-        resp = self.client.get(reverse("portal_inicio"))
+        resp = self.client.get(reverse("portal_parceiro"))
+        self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, reverse("tradehub"))
         self.assertContains(resp, "Trade Hub")
 

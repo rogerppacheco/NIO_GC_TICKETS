@@ -7,7 +7,8 @@
     <h1>Olá, {{ contato.nome }}</h1>
     <p>PDV {{ parceiro.codigo_pdv }} — {{ parceiro.nome }}</p>
   </div>
-  <a class="btn btn-secondary" href="{% url 'portal_sair' %}">Trocar contato / PDV</a>
+  <a class="btn btn-secondary" href="{% url 'portal_contato' %}">Trocar contato</a>
+  <a class="btn btn-secondary" href="{% url 'portal_sair' %}">Sair</a>
 </div>
 
 {% include "tickets/_portal_cards.html" %}

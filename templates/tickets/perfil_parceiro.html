@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Meu perfil · NIO ESPECIALISTA Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Meu perfil</h1>
+    <p>PDV {{ parceiro.codigo_pdv }} — {{ parceiro.nome }}. O login deste ponto de venda é o código do PDV.</p>
+  </div>
+</div>
+<div class="panel" style="max-width:520px">
+  <div class="panel-h"><h2>Senha e sessões</h2></div>
+  <div class="panel-b" style="display:flex;flex-direction:column;gap:0.75rem">
+    <a class="btn btn-primary" href="{% url 'senha_trocar' %}">Trocar minha senha</a>
+    <form method="post" action="{% url 'logout_todas_sessoes' %}">
+      {% csrf_token %}
+      <button class="btn btn-secondary" type="submit">Encerrar outras sessões</button>
+    </form>
+    <p class="help" style="margin:0">A senha é da loja. Se alguém que não deveria entra, peça reset ao especialista.</p>
+  </div>
+</div>
+{% endblock %}

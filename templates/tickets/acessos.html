@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Acessos e senhas · NIO ESPECIALISTA Tickets{% endblock %}
+{% block main_class %}wrap wrap-wide{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Acessos e senhas</h1>
+    <p>Reset gera senha temporária (mostrada uma vez) e obriga troca no próximo login. Ninguém reseta para cima do próprio papel.</p>
+  </div>
+  {% if pode_ver_auditoria %}
+    <a class="btn btn-secondary" href="{% url 'acessos_auditoria' %}">Auditoria</a>
+  {% endif %}
+</div>
+
+{% if sem_login %}
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-h"><h2>PDVs sem login ({{ sem_login|length }})</h2></div>
+  <div class="panel-b">
+    <p class="help" style="margin-top:0">Ainda não têm senha. Gere uma temporária; o parceiro troca no primeiro acesso.</p>
+    <div class="stack" style="gap:0.45rem">
+      {% for p in sem_login %}
+        <form method="post" action="{% url 'acesso_gerar_parceiro' p.pk %}" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+          {% csrf_token %}
+          <span class="mono">{{ p.codigo_pdv }}</span>
+          <span>{{ p.nome }}</span>
+          <button class="btn btn-secondary" type="submit">Gerar senha</button>
+        </form>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="panel">
+  <div class="panel-h"><h2>Contas</h2></div>
+  <div class="table-scroll">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Login</th>
+          <th>Nome</th>
+          <th>Tipo</th>
+          <th>Troca obrigatória</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in usuarios %}
+        <tr>
+          <td class="mono">{{ u.username }}</td>
+          <td>{{ u.get_full_name|default:u.username }}{% if u.pdv %} <span class="help">{{ u.pdv.nome }}</span>{% endif %}</td>
+          <td>
+            {% if u.pdv %}PDV
+            {% elif u.perfil_staff %}{{ u.perfil_staff.get_papel_display }}
+            {% else %}—{% endif %}
+          </td>
+          <td>{% if u.conta and u.conta.must_change_password %}Sim{% else %}Não{% endif %}</td>
+          <td>
+            {% if u.pk != user.pk %}
+            <form method="post" action="{% url 'acesso_resetar' u.pk %}"
+                  onsubmit="return confirm('Gerar senha temporária para {{ u.username }}? As sessões atuais serão encerradas.');">
+              {% csrf_token %}
+              <button class="btn btn-secondary" type="submit">Resetar senha</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">Nenhuma conta no seu recorte.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

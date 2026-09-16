@@ -1,6 +1,6 @@
 {% load static %}
 <div class="consultas-grid portal-cards">
-  <a class="consulta-card" href="{% if portal_parceiro and portal_contato %}{% url 'rota_portal' %}{% else %}{% url 'abrir_demanda' %}?next=rota{% endif %}">
+  <a class="consulta-card" href="{% if portal_parceiro and portal_contato %}{% url 'rota_portal' %}{% else %}{% url 'portal_contato' %}?next=rota{% endif %}">
     <span class="consulta-ico">🗺️</span>
     <h2>Rota</h2>
     <p>Check-in diário: tipo de rota, equipe, bairro e HPs livres (DFV).</p>

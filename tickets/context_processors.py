@@ -1,13 +1,31 @@
-from .acesso import eh_gestor, escopo_gestao, tem_acesso_interno, tickets_visiveis
-from .models import ContatoParceiro, Parceiro, StatusTicket
+from .acesso import (
+    eh_admin,
+    eh_gerencia,
+    eh_gestor,
+    eh_parceiro,
+    escopo_gestao,
+    parceiro_de,
+    tem_acesso_interno,
+    tickets_visiveis,
+)
+from .models import ContatoParceiro, StatusTicket
 
 
 def nav_counts(request):
-    ctx = {"eh_gestor": False, "tem_acesso_interno": False}
+    ctx = {
+        "eh_gestor": False,
+        "eh_admin": False,
+        "eh_gerencia": False,
+        "eh_parceiro": False,
+        "tem_acesso_interno": False,
+    }
     user = getattr(request, "user", None)
     if user and user.is_authenticated:
         visiveis = tickets_visiveis(user)
         ctx["eh_gestor"] = eh_gestor(user)
+        ctx["eh_admin"] = eh_admin(user)
+        ctx["eh_gerencia"] = eh_gerencia(user)
+        ctx["eh_parceiro"] = eh_parceiro(user)
         ctx["tem_acesso_interno"] = tem_acesso_interno(user)
         nome = (user.first_name or "").strip() or (user.get_full_name() or "").strip()
         ctx["nav_primeiro_nome"] = nome.split()[0] if nome else user.get_username()
@@ -20,22 +38,18 @@ def nav_counts(request):
             ]
         ).count()
 
-    # Portal do parceiro (PDV + contato na sessão)
-    parceiro_id = request.session.get("parceiro_id")
-    contato_id = request.session.get("contato_id")
-    if parceiro_id and contato_id:
-        contato = (
-            ContatoParceiro.objects.select_related("parceiro")
-            .filter(pk=contato_id, parceiro_id=parceiro_id, ativo=True)
-            .first()
-        )
-        if contato and contato.parceiro.ativo:
-            ctx["portal_contato"] = contato
-            ctx["portal_parceiro"] = contato.parceiro
-    elif parceiro_id:
-        parceiro = Parceiro.objects.filter(pk=parceiro_id, ativo=True).first()
-        if parceiro:
-            ctx["portal_parceiro"] = parceiro
+        pdv = parceiro_de(user)
+        if pdv:
+            ctx["portal_parceiro"] = pdv
+            contato_id = request.session.get("contato_id")
+            if contato_id:
+                contato = (
+                    ContatoParceiro.objects.select_related("parceiro")
+                    .filter(pk=contato_id, parceiro=pdv, ativo=True)
+                    .first()
+                )
+                if contato:
+                    ctx["portal_contato"] = contato
 
     ctx["gestao_escopo"] = escopo_gestao(request)
     ctx["modo_teste"] = False

@@ -98,7 +98,12 @@
       <div class="full" style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.6rem">
         <button class="btn btn-primary" type="submit">Salvar</button>
         <a class="btn btn-secondary" href="{% url 'fila' %}">Voltar</a>
+        <a class="btn btn-secondary" href="{% url 'senha_trocar' %}">Trocar senha</a>
       </div>
+    </form>
+    <form method="post" action="{% url 'logout_todas_sessoes' %}" style="margin-top:0.75rem">
+      {% csrf_token %}
+      <button class="btn btn-secondary" type="submit">Encerrar outras sessões</button>
     </form>
   </div>
 </div>
