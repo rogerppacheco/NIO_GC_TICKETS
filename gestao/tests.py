@@ -1173,6 +1173,40 @@ class FpdChurnTests(TestCase):
         self.assertIn("📉", h.mensagem)
         self.assertIn("💰", h.mensagem)
 
+    def test_churn_nao_apaga_pdv_fora_do_arquivo(self):
+        outro = Parceiro.objects.create(codigo_pdv="2", nome="OUTRO PDV")
+        HistoricoChurn.objects.create(
+            data_analise=timezone.localdate(),
+            parceiro=outro,
+            pdv_nome=outro.nome,
+            anomes_gross=int(timezone.localdate().strftime("%Y%m")),
+            gross=5,
+            churn=1,
+            taxa_churn=20,
+            remanescentes=4,
+            bonus_m10=600,
+            mensagem="churn do outro",
+        )
+        anomes = int(timezone.localdate().strftime("%Y%m"))
+        arquivo = _xlsx(
+            [["APOLO", anomes, "VOL", 0, "residencial", "preço"]],
+            [
+                "DESC_APELIDO",
+                "ANOMES_GROSS",
+                "TP_RETIRADA",
+                "FLG_MEI",
+                "NM_SEG",
+                "DS_MOTIVO_RETIRADA",
+            ],
+        )
+        processar_churn(arquivo, "c.xlsx")
+        self.assertTrue(
+            HistoricoChurn.objects.filter(
+                parceiro=outro, mensagem="churn do outro"
+            ).exists()
+        )
+        self.assertTrue(HistoricoChurn.objects.filter(parceiro=self.pdv).exists())
+
     def test_resumo_capilaridade_tem_icones(self):
         from gestao.periodo import periodo_ativo
         from gestao.relatorios import resumo_geral
@@ -1570,7 +1604,8 @@ class GestaoViewsTests(TestCase):
         self.assertContains(self.client.get(reverse("gestao_fpd")), "Importar FPD")
         self.assertContains(self.client.get(reverse("gestao_tarefas")), "Importar tarefas")
         self.assertContains(
-            self.client.get(reverse("gestao_configs")), "Importar acompanhamento semanal"
+            self.client.get(reverse("gestao_configs") + "?aba=importar"),
+            "Acompanhamento semanal",
         )
         r = self.client.post(
             reverse("gestao_hub"), {"action": "periodo", "ano": 2026, "mes": 7}
@@ -3293,6 +3328,69 @@ class GestaoEscopoTests(TestCase):
         self.assertContains(outros, "PDV Diego")
         self.assertContains(outros, "Carla")
 
+    def test_sysmap_admin_com_gerencia_ve_terceiro_sem_pdv(self):
+        self.spec.perfil_staff.gerencia = "MG INTERIOR"
+        self.spec.perfil_staff.save(update_fields=["gerencia"])
+        self.gestor.perfil_staff.gerencia = "MG INTERIOR"
+        self.gestor.perfil_staff.save(update_fields=["gerencia"])
+        CadastroTerceiro.objects.create(
+            chave_acesso="TTSEM1",
+            nome_terceiro="ANA SEM PDV",
+            razao_social="EMPRESA SEM MATCH",
+            ativo=True,
+        )
+        self.client.force_login(self.gestor)
+        meus = self.client.get(reverse("gestao_sysmap") + "?escopo=meus")
+        self.assertEqual(meus.context["total"], 1)
+        self.assertEqual(meus.context["ativos"], 1)
+        self.assertEqual(meus.context["vinculados"], 0)
+        self.assertEqual(meus.context["sem_pdv"], 1)
+        self.assertContains(meus, "ANA SEM PDV")
+        self.assertContains(meus, "TT(s) sem PDV")
+
+    def test_sysmap_especialista_nao_ve_terceiro_sem_pdv(self):
+        CadastroTerceiro.objects.create(
+            chave_acesso="TTSEM2",
+            nome_terceiro="ANA SEM PDV",
+            razao_social="EMPRESA SEM MATCH",
+            ativo=True,
+        )
+        self.client.force_login(self.spec)
+        meus = self.client.get(reverse("gestao_sysmap") + "?escopo=meus")
+        self.assertEqual(meus.context["total"], 0)
+        self.assertNotContains(meus, "ANA SEM PDV")
+
+    def test_importar_sysmap_meus_vazio_abre_todos(self):
+        self.client.force_login(self.gestor)
+        arquivo = _xlsx_sysmap_agrupado(
+            [
+                [
+                    "LUISA SERVICOS DE TELEFONIA MOVEL",
+                    "ANA",
+                    "123",
+                    "a@x.com",
+                    "TT1",
+                    "CLT",
+                    "VENDEDOR",
+                    "Ativo",
+                    "Ativo",
+                    "Alocado",
+                    "01/01/2025",
+                    "",
+                    "",
+                ]
+            ]
+        )
+        r = self.client.post(
+            reverse("gestao_sysmap"),
+            {"arquivo": arquivo, "escopo": "meus"},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("escopo=todos", r["Location"])
+        follow = self.client.get(r["Location"])
+        self.assertContains(follow, "vinculados a PDV")
+        self.assertContains(follow, "ANA")
+
     def test_especialista_nao_ve_outra_gerencia(self):
         self.spec.perfil_staff.gerencia = "MG INTERIOR"
         self.spec.perfil_staff.save(update_fields=["gerencia"])
@@ -3444,6 +3542,121 @@ class GestaoEscopoTests(TestCase):
         self.assertNotContains(tarefas, "Tarefas de todas as gerências")
         self.assertNotContains(tarefas, "Tarefas só do Diego")
 
+    def test_ultima_importacao_e_cadastro_osab_por_gerencia(self):
+        self.spec.perfil_staff.gerencia = "PP"
+        self.spec.perfil_staff.save(update_fields=["gerencia"])
+        self.outro.perfil_staff.gerencia = "P"
+        self.outro.perfil_staff.save(update_fields=["gerencia"])
+        agora = timezone.now()
+        VendaOSAB.objects.create(
+            pedido="PP1",
+            pdv_nome="PDV Carla",
+            parceiro=self.pdv_spec,
+            gerencia="PP",
+            data_abertura=agora,
+        )
+        LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.OSAB,
+            arquivo_nome="osab-pp.xlsx",
+            ok=True,
+            gerencia="PP",
+            criado_por=self.spec,
+        )
+        LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.OSAB,
+            arquivo_nome="osab-p.xlsx",
+            ok=True,
+            gerencia="P",
+            criado_por=self.outro,
+        )
+        self.client.force_login(self.gestor)
+        self.client.post(
+            reverse("gestao_gerencia"),
+            {"gerencia": "PP", "next": reverse("gestao_osab")},
+        )
+        pp = self.client.get(reverse("gestao_osab") + "?escopo=todos")
+        self.assertContains(pp, "osab-pp.xlsx")
+        self.assertNotContains(pp, "osab-p.xlsx")
+        self.assertEqual(pp.context["cadastro_osab"]["ja_ok"], ["PDV Carla"])
+        self.assertNotIn("PDV Diego", pp.context["cadastro_osab"]["ja_ok"])
+        self.client.post(
+            reverse("gestao_gerencia"),
+            {"gerencia": "P", "next": reverse("gestao_osab")},
+        )
+        p = self.client.get(reverse("gestao_osab") + "?escopo=todos")
+        self.assertContains(p, "osab-p.xlsx")
+        self.assertNotContains(p, "osab-pp.xlsx")
+        self.assertNotIn("PDV Carla", p.context["cadastro_osab"]["ja_ok"])
+        self.assertIn("PDV Diego", p.context["cadastro_osab"]["nio_sem_osab"])
+        self.client.force_login(self.spec)
+        spec_pp = self.client.get(reverse("gestao_osab") + "?escopo=todos")
+        self.assertContains(spec_pp, "osab-pp.xlsx")
+        self.assertNotContains(spec_pp, "osab-p.xlsx")
+
+    def test_importacao_osab_grava_gerencia_no_lote(self):
+        self.spec.perfil_staff.gerencia = "PP"
+        self.spec.perfil_staff.save(update_fields=["gerencia"])
+        self.client.force_login(self.spec)
+        hoje = timezone.localdate()
+        abertura = datetime(hoje.year, hoje.month, 1, 10, 0)
+        arquivo = _xlsx(
+            [
+                [
+                    "P1",
+                    abertura,
+                    "TT1",
+                    "JOAO",
+                    "PDV Carla",
+                    abertura,
+                    abertura,
+                    "Concluído",
+                    "500",
+                ]
+            ],
+            [
+                "PEDIDO",
+                "DT_REF",
+                "MATRICULA_VENDEDOR",
+                "NOME_VENDEDOR",
+                "DESCRICAO",
+                "DATA_ABERTURA",
+                "DATA_FECHAMENTO",
+                "SITUACAO",
+                "VELOCIDADE",
+            ],
+        )
+        r = self.client.post(
+            reverse("gestao_osab"), {"arquivo": arquivo, "escopo": "meus"}
+        )
+        self.assertEqual(r.status_code, 302)
+        lote = LoteImportacao.objects.get(tipo=LoteImportacao.Tipo.OSAB, ok=True)
+        self.assertEqual(lote.gerencia, "PP")
+        self.assertEqual(lote.criado_por_id, self.spec.id)
+
+    def test_osab_recalculo_nao_apaga_historico_da_outra_gerencia(self):
+        from gestao.pipelines.osab import calcular_osab
+
+        HistoricoOSAB.objects.create(
+            parceiro=self.pdv_outro,
+            descricao_pdv="PDV Diego",
+            status="Ok",
+            mensagem="relatório da P",
+        )
+        agora = timezone.now()
+        VendaOSAB.objects.create(
+            pedido="PP1",
+            pdv_nome="PDV Carla",
+            parceiro=self.pdv_spec,
+            data_abertura=agora,
+            situacao="Concluído",
+        )
+        calcular_osab(agora.year, agora.month, parceiros=[self.pdv_spec])
+        self.assertTrue(
+            HistoricoOSAB.objects.filter(
+                parceiro=self.pdv_outro, mensagem="relatório da P"
+            ).exists()
+        )
+
     def test_fila_nao_muda_com_escopo_gestao(self):
         from tickets.acesso import tickets_visiveis
 
@@ -3546,6 +3759,7 @@ class ResultadosTests(TestCase):
             tipo=LoteImportacao.Tipo.PARCIAL,
             arquivo_nome="parcial.xlsx",
             ok=True,
+            gerencia="PP",
             resumo=resumo,
         )
         self.client.force_login(spec)

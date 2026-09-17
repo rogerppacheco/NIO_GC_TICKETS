@@ -277,12 +277,25 @@ def resolver_ou_criar_especialista(nm_gc: str, cache: dict | None = None, gerenc
     return user, True
 
 
-def nomes_osab_distintos(extra: list[str] | None = None) -> list[str]:
+def nomes_osab_distintos(
+    extra: list[str] | None = None, parceiros=None, gerencia: str = ""
+) -> list[str]:
     """DESCRICAO únicos da base OSAB (e nomes extras, se houver)."""
+    from django.db.models import Q
+
     from .models import VendaOSAB
 
+    qs = VendaOSAB.objects.exclude(pdv_nome="")
+    gerencia = (gerencia or "").strip()
+    if gerencia:
+        recorte = Q(gerencia__iexact=gerencia)
+        if parceiros is not None:
+            recorte |= Q(parceiro__in=parceiros)
+        qs = qs.filter(recorte)
+    elif parceiros is not None:
+        qs = qs.filter(Q(parceiro__in=parceiros) | Q(parceiro__isnull=True))
     vistos: dict[str, str] = {}
-    for bruto in VendaOSAB.objects.exclude(pdv_nome="").values_list("pdv_nome", flat=True):
+    for bruto in qs.values_list("pdv_nome", flat=True):
         nome = _nome_osab_ok(bruto)
         if nome:
             vistos.setdefault(nome.casefold(), nome)
@@ -293,11 +306,14 @@ def nomes_osab_distintos(extra: list[str] | None = None) -> list[str]:
     return sorted(vistos.values(), key=str.casefold)
 
 
-def _indice_cadastro() -> tuple[dict[str, Parceiro], dict[str, Parceiro]]:
+def _indice_cadastro(cadastro=None) -> tuple[dict[str, Parceiro], dict[str, Parceiro]]:
     """Chave normalizada → parceiro. Prefere nome exatamente igual (casefold)."""
     por_norm: dict[str, Parceiro] = {}
     por_exato: dict[str, Parceiro] = {}
-    for p in Parceiro.objects.all().order_by("id"):
+    qs = Parceiro.objects.all() if cadastro is None else cadastro
+    if hasattr(qs, "order_by"):
+        qs = qs.order_by("id")
+    for p in qs:
         por_exato.setdefault(p.nome.casefold().strip(), p)
         chave = normalizar_pdv(p.nome)
         if chave:
@@ -305,10 +321,10 @@ def _indice_cadastro() -> tuple[dict[str, Parceiro], dict[str, Parceiro]]:
     return por_exato, por_norm
 
 
-def classificar_parceiros_osab(nomes: list[str] | None = None) -> dict:
+def classificar_parceiros_osab(nomes: list[str] | None = None, cadastro=None) -> dict:
     """Compara DESCRICAO da OSAB com o cadastro. Não cria nem apaga nada."""
     nomes = nomes if nomes is not None else nomes_osab_distintos()
-    por_exato, por_norm = _indice_cadastro()
+    por_exato, por_norm = _indice_cadastro(cadastro)
     ja_ok: list[str] = []
     grafia: list[dict[str, str]] = []
     faltando: list[str] = []
@@ -327,11 +343,10 @@ def classificar_parceiros_osab(nomes: list[str] | None = None) -> dict:
             continue
         faltando.append(nome)
 
-    nio_sem_osab = [
-        p.nome
-        for p in Parceiro.objects.all().order_by("nome")
-        if p.id not in usados_ids
-    ]
+    qs_cadastro = Parceiro.objects.all() if cadastro is None else cadastro
+    if hasattr(qs_cadastro, "order_by"):
+        qs_cadastro = qs_cadastro.order_by("nome")
+    nio_sem_osab = [p.nome for p in qs_cadastro if p.id not in usados_ids]
     gcs = mapa_gc_por_pdv()
     saps = mapa_sap_por_pdv()
     faltando_info = [

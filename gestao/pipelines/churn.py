@@ -55,15 +55,20 @@ def processar_churn(arquivo, nome_arquivo: str) -> dict:
     janela = [int((inicio + relativedelta(months=i)).strftime("%Y%m")) for i in range(6)]
     data_analise = timezone.localdate()
 
-    ultima = HistoricoChurn.objects.order_by("-data_analise").first()
-    if ultima:
-        HistoricoChurn.objects.filter(data_analise=ultima.data_analise).delete()
+    apelidos = sorted({str(x) for x in df[col_pdv].dropna().unique()})
+    ids_arquivo = []
+    for apelido in apelidos:
+        parceiro_id = resolver_parceiro_id(apelido, indice)
+        if parceiro_id:
+            ids_arquivo.append(parceiro_id)
+    if ids_arquivo:
+        HistoricoChurn.objects.filter(parceiro_id__in=ids_arquivo).delete()
 
     linhas = 0
     mensagens_pdv = 0
     sem_parceiro = set()
 
-    for apelido in sorted({str(x) for x in df[col_pdv].dropna().unique()}):
+    for apelido in apelidos:
         parceiro_id = resolver_parceiro_id(apelido, indice)
         if not parceiro_id:
             sem_parceiro.add(apelido)

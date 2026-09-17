@@ -13,6 +13,9 @@
   <div class="card"><div class="label">Ativos</div><div class="value">{{ ativos }}</div></div>
   <div class="card"><div class="label">Vinculados a PDV</div><div class="value">{{ vinculados }}</div></div>
 </div>
+{% if sem_pdv %}
+<p class="help" style="margin:-0.4rem 0 1rem">{{ sem_pdv }} TT(s) sem PDV — a razão social da planilha não bateu com a cadastrada em Parceiros.</p>
+{% endif %}
 {% if form %}
 <div class="panel" style="margin-bottom:1rem">
   <div class="panel-h"><h2>Importar planilha</h2></div>
@@ -52,7 +55,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="5">Importe o Relatório Executivo.</td></tr>
+        <tr><td colspan="5">{% if gestao_escopo == "meus" and not gestao_qtd_meus %}Nenhum PDV neste recorte. Abra Outros especialistas ou Todos para ver o cadastro.{% else %}Importe o Relatório Executivo.{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>

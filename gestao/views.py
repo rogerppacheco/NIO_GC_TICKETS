@@ -14,9 +14,11 @@ from django.views.decorators.http import require_POST
 from tickets.acesso import (
     GERENCIA_SESSAO,
     GERENCIA_TODAS,
+    eh_gerencia,
     eh_gestor,
     escopo_gestao,
     equipe_required,
+    gerencia_de,
     gestor_required,
     listar_gerencias,
     parceiros_gestao,
@@ -100,7 +102,11 @@ from .destinatarios_especialista import (
     qs_destinatarios_da_lista,
     sincronizar_destinatarios_especialistas,
 )
-from .parceiros import classificar_parceiros_osab, sincronizar_parceiros_osab
+from .parceiros import (
+    classificar_parceiros_osab,
+    nomes_osab_distintos,
+    sincronizar_parceiros_osab,
+)
 from .periodo import periodo_ativo, salvar_periodo
 from .pipelines.churn import processar_churn
 from .pipelines.comissionamento import mapa_pdv_razoes, processar_comissionamento
@@ -160,6 +166,16 @@ from .relatorios import montar_mascara_pdv, resumo_geral
 from .terceiros import importar_sysmap
 
 
+def _gerencia_lote(request) -> str:
+    """Gerência da sessão/perfil — vazia só no seletor 'Todas'."""
+    return (gerencia_de(getattr(request, "user", None)) or "").strip()
+
+
+def _parceiros_recorte(request):
+    """Todos os PDVs da gerência ativa (não só o escopo Meus/Outros)."""
+    return parceiros_gestao(request.user, "todos")
+
+
 def _lote(request, tipo: str, arquivo_nome: str, ok: bool, resumo: dict, erro: str = "") -> LoteImportacao:
     return LoteImportacao.objects.create(
         tipo=tipo,
@@ -168,25 +184,40 @@ def _lote(request, tipo: str, arquivo_nome: str, ok: bool, resumo: dict, erro: s
         erro=erro,
         resumo=resumo or {},
         criado_por=request.user if request.user.is_authenticated else None,
+        gerencia=_gerencia_lote(request)[:120],
     )
 
 
-def _ultimo_lote_ok(tipo: str) -> LoteImportacao | None:
-    """Última importação ok do tipo (global — gestor e especialistas veem a mesma)."""
-    return (
-        LoteImportacao.objects.filter(tipo=tipo, ok=True)
-        .select_related("criado_por")
-        .order_by("-criado_em")
-        .first()
-    )
+def _lotes_gerencia(request, tipo: str | None = None, *, ok: bool | None = True):
+    qs = LoteImportacao.da_gerencia(_gerencia_lote(request))
+    if tipo:
+        qs = qs.filter(tipo=tipo)
+    if ok is not None:
+        qs = qs.filter(ok=ok)
+    return qs
 
 
-def _ultimos_lotes_por_tipo() -> list[dict]:
-    """Uma entrada por tipo de base com a última importação ok."""
+def _ultimo_lote_ok(tipo: str, request: HttpRequest) -> LoteImportacao | None:
+    """Última importação ok do tipo na gerência ativa."""
+    return _lotes_gerencia(request, tipo).order_by("-criado_em").first()
+
+
+def _ultimos_lotes_por_tipo(request: HttpRequest) -> list[dict]:
+    """Uma entrada por tipo de base com a última importação ok da gerência."""
     return [
-        {"tipo": tipo, "rotulo": rotulo, "lote": _ultimo_lote_ok(tipo)}
+        {"tipo": tipo, "rotulo": rotulo, "lote": _ultimo_lote_ok(tipo, request)}
         for tipo, rotulo in LoteImportacao.Tipo.choices
     ]
+
+
+def _cadastro_osab_view(request) -> dict | None:
+    if not _pode_importar(request):
+        return None
+    recorte = _parceiros_recorte(request)
+    return classificar_parceiros_osab(
+        nomes_osab_distintos(parceiros=recorte, gerencia=_gerencia_lote(request)),
+        cadastro=recorte,
+    )
 
 
 def _pode_enviar(request) -> bool:
@@ -250,6 +281,23 @@ def _filtro_relatorios(request):
     if ve_relatorios_sem_pdv(request.user):
         filtro |= Q(parceiro__isnull=True)
     return visiveis, filtro
+
+
+def _filtro_cadastro_sysmap(request):
+    """Lista o cadastro Sysmap no recorte de PDVs; admin/gerência também veem TTs sem vínculo."""
+    visiveis_ids = set(_parceiros(request).values_list("id", flat=True))
+    filtro = Q(parceiro_id__in=visiveis_ids)
+    if eh_gestor(request.user) or eh_gerencia(request.user):
+        filtro |= Q(parceiro__isnull=True)
+    return visiveis_ids, filtro
+
+
+def _voltar_sysmap(request) -> HttpResponse:
+    """Importação é global: se 'Meus' está vazio, abre Todos/Outros para não parecer que falhou."""
+    escopo = escopo_gestao(request)
+    if escopo == "meus" and not parceiros_gestao(request.user, "meus").exists():
+        escopo = "todos" if eh_gestor(request.user) else "outros"
+    return redirect(f"{reverse('gestao_sysmap')}?escopo={escopo}")
 
 
 def _relatorio_escopo(request, model, pk):
@@ -361,7 +409,7 @@ def hub(request: HttpRequest) -> HttpResponse:
     ultima_churn = HistoricoChurn.objects.filter(parceiro__in=visiveis).aggregate(
         n=Count("id"), dt=Max("data_analise")
     )
-    lotes = LoteImportacao.objects.select_related("criado_por").all()[:8]
+    lotes = _lotes_gerencia(request, ok=None)[:8]
     return render(
         request,
         "gestao/hub.html",
@@ -375,7 +423,7 @@ def hub(request: HttpRequest) -> HttpResponse:
             "fpd": ultima_fpd,
             "churn": ultima_churn,
             "lotes": lotes,
-            "ultimos_por_tipo": _ultimos_lotes_por_tipo(),
+            "ultimos_por_tipo": _ultimos_lotes_por_tipo(request),
         },
     )
 
@@ -393,16 +441,19 @@ def importar_sysmap_view(request: HttpRequest) -> HttpResponse:
                 messages.success(
                     request,
                     f"Sysmap importado: {resumo['inseridos']} novos, {resumo['atualizados']} atualizados, "
-                    f"{resumo['total_ativos']} ativos.",
+                    f"{resumo['total_ativos']} ativos, {resumo['total_vinculados_pdv']} vinculados a PDV.",
                 )
-                return _voltar(request, "gestao_sysmap")
+                if not resumo["total_vinculados_pdv"]:
+                    messages.warning(
+                        request,
+                        "Nenhuma TT vinculou a um PDV. Preencha a Razão Social em Parceiros "
+                        "igual à coluna Razão Social desta planilha.",
+                    )
+                return _voltar_sysmap(request)
             except Exception as exc:
                 _lote(request, LoteImportacao.Tipo.SYSMAP, arquivo.name, False, {}, str(exc))
                 messages.error(request, f"Falha ao importar Sysmap: {exc}")
-    visiveis_ids = set(_parceiros(request).values_list("id", flat=True))
-    filtro = Q(parceiro_id__in=visiveis_ids)
-    if ve_relatorios_sem_pdv(request.user):
-        filtro |= Q(parceiro__isnull=True)
+    _, filtro = _filtro_cadastro_sysmap(request)
     terceiros = (
         CadastroTerceiro.objects.select_related("parceiro", "parceiro__especialista")
         .filter(filtro)
@@ -419,7 +470,10 @@ def importar_sysmap_view(request: HttpRequest) -> HttpResponse:
             "vinculados": CadastroTerceiro.objects.filter(
                 filtro, parceiro__isnull=False
             ).count(),
-            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.SYSMAP),
+            "sem_pdv": CadastroTerceiro.objects.filter(
+                filtro, parceiro__isnull=True
+            ).count(),
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.SYSMAP, request),
         },
     )
 
@@ -431,7 +485,7 @@ def capilaridade_view(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         action = request.POST.get("action")
         if action == "recalcular" and _pode_importar(request):
-            resumo = persistir_capilaridade(ano, mes)
+            resumo = persistir_capilaridade(ano, mes, parceiros=_parceiros_recorte(request))
             messages.success(
                 request,
                 f"Capilaridade recalculada: {resumo['linhas']} TTs, {resumo['ativos']} ativos.",
@@ -514,14 +568,17 @@ def osab_view(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         action = request.POST.get("action") or ""
         if action == "recalcular" and _pode_importar(request):
-            resumo = calcular_osab(ano, mes)
+            resumo = calcular_osab(ano, mes, parceiros=_parceiros_recorte(request))
             messages.success(request, f"OSAB recalculada: {resumo['pdvs']} PDV(s).")
             return _voltar(request, "gestao_osab")
         if action == "cadastrar_parceiros" and _pode_importar(request):
-            cad = sincronizar_parceiros_osab()
+            recorte = _parceiros_recorte(request)
+            cad = sincronizar_parceiros_osab(
+                nomes_osab_distintos(parceiros=recorte, gerencia=_gerencia_lote(request))
+            )
             novos = cad["criados"]
             if novos:
-                calcular_osab(ano, mes)
+                calcular_osab(ano, mes, parceiros=_parceiros_recorte(request))
             messages.success(
                 request,
                 _msg_cadastro_osab(cad),
@@ -539,7 +596,13 @@ def osab_view(request: HttpRequest) -> HttpResponse:
             if form.is_valid():
                 arquivo = form.cleaned_data["arquivo"]
                 try:
-                    resumo = processar_osab(arquivo, arquivo.name, ano, mes)
+                    resumo = processar_osab(
+                        arquivo,
+                        arquivo.name,
+                        ano,
+                        mes,
+                        gerencia=_gerencia_lote(request),
+                    )
                     _lote(request, LoteImportacao.Tipo.OSAB, arquivo.name, True, resumo)
                     vendas = resumo["vendas"]
                     cad = resumo.get("parceiros") or {}
@@ -565,10 +628,10 @@ def osab_view(request: HttpRequest) -> HttpResponse:
             "mes": mes,
             "total_vendas": VendaOSAB.objects.filter(parceiro__in=visiveis).count(),
             "historico": historico,
-            "cadastro_osab": classificar_parceiros_osab() if _pode_importar(request) else None,
+            "cadastro_osab": _cadastro_osab_view(request),
             "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
-            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.OSAB),
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.OSAB, request),
         },
     )
 
@@ -617,7 +680,7 @@ def _escopo_parcial(request, *, visao: str | None = None) -> str:
 
 
 def _parcial_dados(request, *, visao: str | None = None) -> dict | None:
-    lote = _ultimo_lote_ok(LoteImportacao.Tipo.PARCIAL)
+    lote = _ultimo_lote_ok(LoteImportacao.Tipo.PARCIAL, request)
     if not lote or not lote.resumo:
         return None
     parceiros = _parceiros_parcial(request, visao=visao)
@@ -1076,7 +1139,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                     l.get("pdv", "").upper(),
                 ),
             )
-    ultimo_parcial = _ultimo_lote_ok(LoteImportacao.Tipo.PARCIAL)
+    ultimo_parcial = _ultimo_lote_ok(LoteImportacao.Tipo.PARCIAL, request)
     return render(
         request,
         "gestao/resultados.html",
@@ -1105,7 +1168,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             "grupo_pp_wa": grupo_pp_wa,
             "pracas_btu": pracas_ativas,
             "pracas_btu_mg": pracas_ativas.filter(uf="MG").count(),
-            "ultimo_gdp": _ultimo_lote_ok(LoteImportacao.Tipo.GDP),
+            "ultimo_gdp": _ultimo_lote_ok(LoteImportacao.Tipo.GDP, request),
             "ultima_importacao": ultimo_parcial,
             "pode_enviar": _pode_enviar(request),
             "pode_editar": _pode_importar(request),
@@ -1348,7 +1411,7 @@ def _render_fpd(request, form):
             "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
             "pode_email": _pode_email_fpd(request),
-            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.FPD),
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.FPD, request),
         },
     )
 
@@ -1413,7 +1476,12 @@ def gross_salvar(request: HttpRequest) -> HttpResponse:
 
 def _render_churn(request, form):
     visiveis = _parceiros(request)
-    ultima = HistoricoChurn.objects.order_by("-data_analise").values_list("data_analise", flat=True).first()
+    ultima = (
+        HistoricoChurn.objects.filter(parceiro__in=visiveis)
+        .order_by("-data_analise")
+        .values_list("data_analise", flat=True)
+        .first()
+    )
     historico = HistoricoChurn.objects.select_related("parceiro__especialista").none()
     if ultima:
         historico = HistoricoChurn.objects.select_related("parceiro__especialista").filter(
@@ -1438,7 +1506,7 @@ def _render_churn(request, form):
             "gross": GrossMensal.objects.select_related("parceiro").filter(parceiro__in=visiveis).order_by("-anomes")[:40],
             "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
-            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.CHURN),
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.CHURN, request),
         },
     )
 
@@ -1567,14 +1635,15 @@ def _render_comissionamento(request, form):
 
     visiveis = _parceiros(request)
     lotes = list(
-        LoteImportacao.objects.filter(
-            tipo=LoteImportacao.Tipo.COMISSIONAMENTO, ok=True
-        ).order_by("-criado_em", "-id")[:15]
+        _lotes_gerencia(request, LoteImportacao.Tipo.COMISSIONAMENTO).order_by(
+            "-criado_em", "-id"
+        )[:15]
     )
 
     lote_req = request.GET.get("lote")
     lote_ativo_id = None
-    if lote_req and lote_req.isdigit():
+    ids_ok = {l.id for l in lotes}
+    if lote_req and lote_req.isdigit() and int(lote_req) in ids_ok:
         lote_ativo_id = int(lote_req)
     elif lotes:
         lote_ativo_id = lotes[0].id
@@ -1605,7 +1674,7 @@ def _render_comissionamento(request, form):
             "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
             "syncwa_ok": syncwa_configurado(),
-            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.COMISSIONAMENTO),
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.COMISSIONAMENTO, request),
         },
     )
 
@@ -1678,7 +1747,7 @@ def _render_tarefas(request, form):
     relatorios = RelatorioTarefa.objects.select_related("parceiro__especialista", "lote").filter(
         filtro
     )[:80]
-    lotes = LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.TAREFAS, ok=True)[:15]
+    lotes = _lotes_gerencia(request, LoteImportacao.Tipo.TAREFAS)[:15]
     return render(
         request,
         "gestao/tarefas.html",
@@ -1689,7 +1758,7 @@ def _render_tarefas(request, form):
             "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
             "syncwa_ok": syncwa_configurado(),
-            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.TAREFAS),
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.TAREFAS, request),
         },
     )
 
@@ -1757,7 +1826,7 @@ def _render_venda_indevida(request, form):
     relatorios = RelatorioVendaIndevida.objects.select_related("parceiro__especialista", "lote").filter(
         filtro
     )[:80]
-    lotes = LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.VENDA_INDEVIDA, ok=True)[:15]
+    lotes = _lotes_gerencia(request, LoteImportacao.Tipo.VENDA_INDEVIDA)[:15]
     return render(
         request,
         "gestao/venda_indevida.html",
@@ -1768,7 +1837,7 @@ def _render_venda_indevida(request, form):
             "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
             "syncwa_ok": syncwa_configurado(),
-            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.VENDA_INDEVIDA),
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.VENDA_INDEVIDA, request),
         },
     )
 
@@ -1834,7 +1903,7 @@ def _render_recompra(request, form):
     relatorios = RelatorioRecompra.objects.select_related("parceiro__especialista", "lote").filter(
         filtro
     )[:80]
-    lotes = LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.RECOMPRA, ok=True)[:15]
+    lotes = _lotes_gerencia(request, LoteImportacao.Tipo.RECOMPRA)[:15]
     return render(
         request,
         "gestao/recompra.html",
@@ -1845,7 +1914,7 @@ def _render_recompra(request, form):
             "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
             "syncwa_ok": syncwa_configurado(),
-            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.RECOMPRA),
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.RECOMPRA, request),
         },
     )
 
@@ -2075,7 +2144,7 @@ def configs_view(request: HttpRequest) -> HttpResponse:
             "feriados": feriados_do_mes(ano, mes),
             "cal_nav": nav,
             "aba": aba,
-            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.METAS),
+            "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.METAS, request),
         },
     )
 

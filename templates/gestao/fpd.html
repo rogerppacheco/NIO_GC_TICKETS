@@ -84,7 +84,7 @@
   <p class="help fpd-meta">
     {{ rotulo_indicador }} · {{ rotulo_segmento }} · MES_VENC {{ rotulo_mes }}{% if mes_venc == mes_tratar %} (vigente ~60 dias){% endif %} · {{ relatorios|length }} PDV{{ relatorios|length|pluralize }}
     {% if ultima_importacao %}
-    · última importação {{ ultima_importacao.criado_em|date:"d/m/Y H:i" }}{% if ultima_importacao.arquivo_nome %} · {{ ultima_importacao.arquivo_nome }}{% endif %}
+    · última importação{% if ultima_importacao.gerencia %} ({{ ultima_importacao.gerencia }}){% endif %} {{ ultima_importacao.criado_em|date:"d/m/Y H:i" }}{% if ultima_importacao.arquivo_nome %} · {{ ultima_importacao.arquivo_nome }}{% endif %}
     {% endif %}
   </p>
 

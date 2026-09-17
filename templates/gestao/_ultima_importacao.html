@@ -1,6 +1,6 @@
 {% if ultima_importacao %}
 <p class="help ultima-importacao" style="margin:0.55rem 0 0">
-  Última importação:
+  Última importação{% if ultima_importacao.gerencia %} ({{ ultima_importacao.gerencia }}){% endif %}:
   <strong>{{ ultima_importacao.criado_em|date:"d/m/Y H:i" }}</strong>
   {% if ultima_importacao.arquivo_nome %}
   · {{ ultima_importacao.arquivo_nome }}
@@ -10,5 +10,5 @@
   {% endif %}
 </p>
 {% else %}
-<p class="help ultima-importacao" style="margin:0.55rem 0 0">Nenhuma importação registrada ainda.</p>
+<p class="help ultima-importacao" style="margin:0.55rem 0 0">Nenhuma importação registrada nesta gerência ainda.</p>
 {% endif %}

@@ -351,12 +351,20 @@ def contar_ativos_pdv(
     return base + contar_operadores_ativos(parceiro)
 
 
-def persistir_capilaridade(ano: int, mes: int) -> dict:
+def persistir_capilaridade(ano: int, mes: int, parceiros=None) -> dict:
     data_analise = hoje()
-    AnaliseCapilaridade.objects.filter(ano_referencia=ano, mes_referencia=mes).delete()
+    qs_pdv = Parceiro.objects.filter(ativo=True)
+    if parceiros is not None:
+        ids = [getattr(p, "pk", p) for p in parceiros]
+        qs_pdv = qs_pdv.filter(pk__in=ids)
+        AnaliseCapilaridade.objects.filter(
+            ano_referencia=ano, mes_referencia=mes, parceiro_id__in=ids
+        ).delete()
+    else:
+        AnaliseCapilaridade.objects.filter(ano_referencia=ano, mes_referencia=mes).delete()
     total = 0
     ativos = 0
-    for parceiro in Parceiro.objects.filter(ativo=True):
+    for parceiro in qs_pdv:
         for linha in linhas_capilaridade_pdv(parceiro):
             AnaliseCapilaridade.objects.create(
                 data_analise=data_analise,
@@ -579,34 +587,34 @@ def _resolver_pesos(config, ano: int, mes: int) -> tuple[dict, dict, float, floa
     )
 
 
-def calcular_osab(ano: int, mes: int) -> dict:
+def calcular_osab(ano: int, mes: int, parceiros=None) -> dict:
     hoje_ref = hoje()
     agora = timezone.now()
 
-    vendas = list(
-        VendaOSAB.objects.filter(
-            data_abertura__year=ano,
-            data_abertura__month=mes,
-        ).exclude(pdv_nome="")
-    )
+    vendas_qs = VendaOSAB.objects.filter(
+        data_abertura__year=ano,
+        data_abertura__month=mes,
+    ).exclude(pdv_nome="")
+    fechamentos_qs = VendaOSAB.objects.filter(
+        data_fechamento__year=ano,
+        data_fechamento__month=mes,
+    ).exclude(pdv_nome="")
+    if parceiros is not None:
+        vendas_qs = vendas_qs.filter(parceiro__in=parceiros)
+        fechamentos_qs = fechamentos_qs.filter(parceiro__in=parceiros)
+    vendas = list(vendas_qs)
     por_pdv: dict[str, list[VendaOSAB]] = {}
     for v in vendas:
         por_pdv.setdefault(v.pdv_nome, []).append(v)
 
-    fechamentos = list(
-        VendaOSAB.objects.filter(
-            data_fechamento__year=ano,
-            data_fechamento__month=mes,
-        ).exclude(pdv_nome="")
-    )
+    fechamentos = list(fechamentos_qs)
     gross_por_pdv: dict[str, list[VendaOSAB]] = {}
     for v in fechamentos:
         gross_por_pdv.setdefault(v.pdv_nome, []).append(v)
 
     nomes = sorted(set(por_pdv) | set(gross_por_pdv), key=lambda n: -len(por_pdv.get(n, [])))
-    HistoricoOSAB.objects.filter(
-        Q(descricao_pdv__in=nomes) | Q(data_processamento__date=hoje_ref)
-    ).delete()
+    if nomes:
+        HistoricoOSAB.objects.filter(descricao_pdv__in=nomes).delete()
     indice = indice_parceiros()
     gerados = 0
     sem_parceiro = []
@@ -781,15 +789,20 @@ def calcular_osab(ano: int, mes: int) -> dict:
     return {"pdvs": gerados, "sem_parceiro": sem_parceiro}
 
 
-def processar_osab(arquivo, nome_arquivo: str, ano: int, mes: int) -> dict:
+def processar_osab(arquivo, nome_arquivo: str, ano: int, mes: int, gerencia: str = "") -> dict:
     from ..excel import ler_planilha
+    from tickets.acesso import ids_parceiros_da_gerencia
 
     df = ler_planilha(arquivo, nome_arquivo)
     for col in ("DATA_ABERTURA", "DATA_FECHAMENTO"):
         if col in df.columns:
             df[col] = converter_data_robusto(df[col])
     vendas = persistir_vendas_osab(df)
-    parceiros = sincronizar_parceiros_osab()
-    cap = persistir_capilaridade(ano, mes)
-    osab = calcular_osab(ano, mes)
-    return {"vendas": vendas, "capilaridade": cap, "osab": osab, "parceiros": parceiros}
+    cadastro = sincronizar_parceiros_osab()
+    recorte = None
+    gerencia = (gerencia or "").strip()
+    if gerencia:
+        recorte = ids_parceiros_da_gerencia(gerencia)
+    cap = persistir_capilaridade(ano, mes, parceiros=recorte)
+    osab = calcular_osab(ano, mes, parceiros=recorte)
+    return {"vendas": vendas, "capilaridade": cap, "osab": osab, "parceiros": cadastro}

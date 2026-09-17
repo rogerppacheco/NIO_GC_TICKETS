@@ -25,8 +25,8 @@ from .models import (
 
 @admin.register(LoteImportacao)
 class LoteAdmin(admin.ModelAdmin):
-    list_display = ("tipo", "arquivo_nome", "ok", "criado_em", "criado_por")
-    list_filter = ("tipo", "ok")
+    list_display = ("tipo", "gerencia", "arquivo_nome", "ok", "criado_em", "criado_por")
+    list_filter = ("tipo", "ok", "gerencia")
 
 
 @admin.register(CadastroTerceiro)

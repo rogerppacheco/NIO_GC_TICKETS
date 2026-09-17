@@ -58,12 +58,13 @@
     <div class="panel-h"><h2>Última importação por base</h2></div>
     <div class="panel-b table-clip">
     <table class="table table-importacoes">
-      <thead><tr><th>Base</th><th>Arquivo</th><th>Quando</th><th>Por</th></tr></thead>
+      <thead><tr><th>Base</th><th>Gerência</th><th>Arquivo</th><th>Quando</th><th>Por</th></tr></thead>
       <tbody>
         {% for item in ultimos_por_tipo %}
         <tr>
           <td>{{ item.rotulo }}</td>
           {% if item.lote %}
+          <td>{{ item.lote.gerencia|default:"—" }}</td>
           <td title="{{ item.lote.arquivo_nome }}">{{ item.lote.arquivo_nome }}</td>
           <td class="col-quando">{{ item.lote.criado_em|date:"d/m/Y" }}<br>{{ item.lote.criado_em|date:"H:i" }}</td>
           <td>
@@ -72,11 +73,11 @@
             {% else %}—{% endif %}
           </td>
           {% else %}
-          <td colspan="3" class="help">Sem importação ok</td>
+          <td colspan="4" class="help">Sem importação ok</td>
           {% endif %}
         </tr>
         {% empty %}
-        <tr><td colspan="4">Nenhuma importação ainda.</td></tr>
+        <tr><td colspan="5">Nenhuma importação ainda.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -87,17 +88,18 @@
 <div class="panel" style="margin-top:1rem">
   <div class="panel-h"><h2>Últimas importações (histórico)</h2></div>
   <table class="table">
-  <thead><tr><th>Tipo</th><th>Arquivo</th><th>Quando</th><th></th></tr></thead>
+  <thead><tr><th>Tipo</th><th>Gerência</th><th>Arquivo</th><th>Quando</th><th></th></tr></thead>
   <tbody>
     {% for lote in lotes %}
     <tr>
       <td>{{ lote.get_tipo_display }}</td>
+      <td>{{ lote.gerencia|default:"—" }}</td>
       <td>{{ lote.arquivo_nome }}</td>
       <td>{{ lote.criado_em|date:"d/m/Y H:i" }}</td>
       <td>{% if lote.ok %}<span class="pill resolvido">ok</span>{% else %}<span class="pill cancelado">erro</span>{% endif %}</td>
     </tr>
     {% empty %}
-    <tr><td colspan="4">Nenhuma importação ainda.</td></tr>
+    <tr><td colspan="5">Nenhuma importação ainda.</td></tr>
     {% endfor %}
   </tbody>
   </table>

@@ -42,6 +42,7 @@ class LoteImportacao(models.Model):
         on_delete=models.SET_NULL,
         related_name="lotes_gestao",
     )
+    gerencia = models.CharField("Gerência", max_length=120, blank=True, db_index=True)
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -50,7 +51,18 @@ class LoteImportacao(models.Model):
         verbose_name_plural = "Lotes de importação"
 
     def __str__(self) -> str:
+        if self.gerencia:
+            return f"{self.get_tipo_display()} · {self.gerencia} · {self.arquivo_nome}"
         return f"{self.get_tipo_display()} · {self.arquivo_nome}"
+
+    @classmethod
+    def da_gerencia(cls, gerencia: str = ""):
+        """Lotes da gerência ativa. Vazio = todas (seletor 'Todas')."""
+        qs = cls.objects.select_related("criado_por")
+        gerencia = (gerencia or "").strip()
+        if gerencia:
+            qs = qs.filter(gerencia__iexact=gerencia)
+        return qs
 
 
 class CadastroTerceiro(models.Model):

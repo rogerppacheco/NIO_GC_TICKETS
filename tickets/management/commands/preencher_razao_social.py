@@ -21,7 +21,7 @@ from gestao.terceiros import (
     _consolidar,
     _flatten_columns,
     _mapear_colunas,
-    _parece_cabecalho,
+    _promover_cabecalho,
 )
 from gestao.excel import ler_planilha
 from tickets.models import Parceiro
@@ -35,8 +35,7 @@ RAZOES_MANUAIS_CONHECIDAS = {
 def _razoes_sysmap(caminho: Path) -> list[str]:
     df = ler_planilha(caminho, str(caminho))
     df = _flatten_columns(df)
-    if len(df) > 0 and _parece_cabecalho(df.iloc[0]):
-        df = df.iloc[1:].reset_index(drop=True)
+    df = _promover_cabecalho(df)
     mapa = _mapear_colunas(df)
     df, _ = _consolidar(df, mapa)
     col = mapa["razao_social"]
