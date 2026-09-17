@@ -563,9 +563,7 @@ def osab_view(request: HttpRequest) -> HttpResponse:
 def _parcial_sub(request) -> str:
     sub = (request.GET.get("parcial_sub") or request.POST.get("parcial_sub") or "").strip().lower()
     if sub not in {"gerencia", "consolidado", "especialistas", "parceiros"}:
-        sub = "gerencia" if eh_gestor(request.user) else "especialistas"
-    if sub in {"gerencia", "consolidado"} and not eh_gestor(request.user):
-        sub = "especialistas"
+        sub = "gerencia"
     return sub
 
 
@@ -581,7 +579,11 @@ def _parceiros_parcial(request, *, visao: str | None = None) -> list[Parceiro]:
     """Gerência/consolidado e escopo todos usam todos os PDVs da gerência."""
     sub = _parcial_sub(request)
     vis = (visao or "").strip().lower()
-    if vis in {"gerencia", "consolidado"} or sub in {"gerencia", "consolidado"}:
+    if vis in {"gerencia", "consolidado", "especialista"} or sub in {
+        "gerencia",
+        "consolidado",
+        "especialistas",
+    }:
         return list(parceiros_gestao(request.user, "todos"))
     esc = escopo_gestao(request)
     if esc == "todos":
@@ -592,7 +594,11 @@ def _parceiros_parcial(request, *, visao: str | None = None) -> list[Parceiro]:
 def _escopo_parcial(request, *, visao: str | None = None) -> str:
     sub = _parcial_sub(request)
     vis = (visao or "").strip().lower()
-    if vis in {"gerencia", "consolidado"} or sub in {"gerencia", "consolidado"}:
+    if vis in {"gerencia", "consolidado", "especialista"} or sub in {
+        "gerencia",
+        "consolidado",
+        "especialistas",
+    }:
         return "todos"
     return escopo_gestao(request)
 
@@ -868,17 +874,8 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                     return _voltar(request, "gestao_resultados", extra="aba=parcial&parcial_sub=gerencia")
                 try:
                     parceiros_todos = list(parceiros_gestao(request.user, "todos"))
-                    escopo = escopo_gestao(request)
-                    parceiros_import = (
-                        parceiros_todos
-                        if eh_gestor(request.user) or escopo == "todos"
-                        else visiveis
-                    )
-                    ids_gerencia = (
-                        {p.pk for p in parceiros_todos}
-                        if eh_gestor(request.user) or escopo == "todos"
-                        else None
-                    )
+                    parceiros_import = parceiros_todos or visiveis
+                    ids_gerencia = {p.pk for p in parceiros_import} or None
                     resumo = processar_parcial_excel(
                         arquivo,
                         arquivo.name,
@@ -1010,7 +1007,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                 enviar_acumulado_todos(visiveis, request.user, ano=ano, mes=mes),
             )
             return _voltar(request, "gestao_resultados")
-        if action == "ativar_grupo_ranking_pp" and eh_gestor(request.user):
+        if action == "ativar_grupo_ranking_pp" and tem_acesso_interno(request.user):
             grupo_wa = _buscar_grupo_pp_wa()
             jid = (request.POST.get("jid") or "").strip() or (grupo_wa or {}).get("jid", "")
             nome = (request.POST.get("nome") or "").strip() or (grupo_wa or {}).get("name") or "Parceiros_PP_Nio"
@@ -1050,19 +1047,14 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
     parcial_gerencia_linhas = []
     if parcial_dados:
         todos_grupos = agrupar_por_especialista(parcial_dados.get("linhas") or [])
-        if eh_gestor(request.user):
-            parcial_especialistas = todos_grupos
-        else:
-            parcial_especialistas = [
-                g for g in todos_grupos if g.get("especialista_id") == request.user.id
-            ]
+        parcial_especialistas = todos_grupos
         ids_visiveis = {p.pk for p in visiveis}
         for linha in parcial_dados.get("linhas") or []:
             pid = linha.get("parceiro_id")
             if pid in ids_visiveis:
                 parcial_pdvs.append(linha)
         parcial_pdvs.sort(key=lambda l: l.get("pdv", "").upper())
-        if parcial_sub == "gerencia" and eh_gestor(request.user):
+        if parcial_sub == "gerencia":
             parcial_gerencia_linhas = sorted(
                 parcial_dados.get("linhas") or [],
                 key=lambda l: (

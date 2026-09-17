@@ -18,9 +18,7 @@
     {% if aba == "parcial" and parcial_dados %}
     <nav class="page-tabs page-tabs-sub" aria-label="Recorte do parcial">
       <a class="page-tab{% if parcial_sub == 'gerencia' %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=gerencia">Gerência</a>
-      {% if eh_gestor %}
       <a class="page-tab{% if parcial_sub == 'consolidado' %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=consolidado">Carteira PP</a>
-      {% endif %}
       <a class="page-tab{% if parcial_sub == 'especialistas' %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=especialistas">Especialistas</a>
       <a class="page-tab{% if parcial_sub == 'parceiros' %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&aba=parcial&parcial_sub=parceiros">Parceiros</a>
     </nav>
@@ -39,7 +37,7 @@
       <div class="parcial-workspace-main">
     {% if parcial_dados %}
 
-    {% if parcial_sub == "gerencia" and eh_gestor %}
+    {% if parcial_sub == "gerencia" %}
     <div class="parcial-card-preview parcial-card-preview-full">
       <img class="parcial-preview-img"
         src="{% url 'gestao_parcial_preview' %}?escopo={{ gestao_escopo|default:'meus' }}&visao=gerencia&_={{ ultimo_parcial.criado_em|date:'U' }}"
@@ -79,7 +77,7 @@
     {% endif %}
     {% endif %}
 
-    {% if parcial_sub == "consolidado" and eh_gestor %}
+    {% if parcial_sub == "consolidado" %}
     <div class="parcial-card-preview parcial-card-preview-full">
       <img class="parcial-preview-img"
         src="{% url 'gestao_parcial_preview' %}?escopo={{ gestao_escopo|default:'meus' }}&visao=consolidado&_={{ ultimo_parcial.criado_em|date:'U' }}"
@@ -164,7 +162,7 @@
             {% if parcial_dados.qtd_sem_plano %}
             <span class="help">{{ parcial_dados.qtd_sem_plano }} fora do ranking (sem plano ou plano &lt; 2).</span>
             {% endif %}
-            {% if parcial_sub == "gerencia" and eh_gestor and gestao_escopo != "todos" %}
+            {% if parcial_sub == "gerencia" and gestao_escopo != "todos" %}
             <span class="help">Gerência usa todos os PDVs da gerência PP.</span>
             {% endif %}
             {% if parcial_sub == "gerencia" and not parcial_dados.vendas_por_id %}
@@ -197,7 +195,7 @@
         </div>
         {% endif %}
 
-        {% if parcial_dados and parcial_sub == "gerencia" and eh_gestor and pode_enviar %}
+        {% if parcial_dados and parcial_sub == "gerencia" and pode_enviar %}
         <form method="post" class="parcial-aside-envio" data-parcial-envio>
           {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
           <input type="hidden" name="parcial_sub" value="gerencia">
@@ -214,7 +212,7 @@
         </form>
         {% endif %}
 
-        {% if parcial_dados and parcial_sub == "consolidado" and eh_gestor %}
+        {% if parcial_dados and parcial_sub == "consolidado" %}
         <div class="parcial-aside-envio">
           <p class="help" style="margin:0">Parceiro + especialista · zerados em A–Z · linha <strong>TOTAL PP</strong> no rodapé.</p>
           {% if pode_enviar %}
@@ -239,7 +237,7 @@
         </div>
         {% endif %}
 
-        {% if parcial_dados and parcial_sub == "parceiros" and pode_enviar and eh_gestor and parcial_pdvs|length > 1 %}
+        {% if parcial_dados and parcial_sub == "parceiros" and pode_enviar and parcial_pdvs|length > 1 %}
         <form method="post" class="parcial-aside-envio" data-parcial-envio>
           {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
           <input type="hidden" name="parcial_sub" value="parceiros">
@@ -373,8 +371,7 @@
 
       <div class="ranking-envio-form">
         {% if pode_enviar %}
-          {% if eh_gestor %}
-            {% if grupos_ranking %}
+          {% if grupos_ranking %}
             <form method="post" class="form-grid">
               {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
               <input type="hidden" name="action" value="enviar_ranking">
@@ -431,14 +428,6 @@
               {% endif %}
             </div>
             {% endif %}
-          {% else %}
-            <form method="post">
-              {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
-              <input type="hidden" name="action" value="enviar_ranking">
-              <p class="help" style="margin-top:0">Como especialista, o envio vai para o WhatsApp do seu perfil.</p>
-              <button class="btn btn-primary" type="submit">Enviar imagem</button>
-            </form>
-          {% endif %}
         {% else %}
         <p class="help">Configure o WhatsApp (Evolution) para enviar o ranking.</p>
         {% endif %}

@@ -3168,6 +3168,73 @@ class ResultadosTests(TestCase):
         r2 = self.client.get(reverse("gestao_resultados"), {"aba": "ranking"})
         self.assertContains(r2, "ranking-preview-img")
 
+    def test_especialista_ve_a_mesma_parcial_da_gerencia(self):
+        from tickets.acesso import parceiros_gestao
+        from gestao.pipelines.parcial_vendas import processar_parcial_excel
+
+        User = get_user_model()
+        spec = User.objects.create_user(
+            "caio", "caio@x.com", "x", is_staff=True, first_name="Caio"
+        )
+        colega = User.objects.create_user(
+            "ana", "ana@x.com", "x", is_staff=True, first_name="Ana"
+        )
+        PerfilStaff.objects.create(
+            user=spec, papel=PerfilStaff.Papel.ESPECIALISTA, gerencia="PP"
+        )
+        PerfilStaff.objects.create(
+            user=colega, papel=PerfilStaff.Papel.ESPECIALISTA, gerencia="PP"
+        )
+        PerfilStaff.objects.filter(user=self.gestor).update(gerencia="PP")
+        self.pdv.especialista = spec
+        self.pdv.save(update_fields=["especialista"])
+        Parceiro.objects.create(
+            codigo_pdv="r2", nome="ATOS TELECOM", especialista=colega
+        )
+        todos = list(parceiros_gestao(spec, "todos"))
+        arquivo = _xlsx(
+            [["INOVA MG", 11, 15], ["ATOS TELECOM", 8, 8]],
+            ["PDV", "Vendas Total", "Plano Dia"],
+        )
+        resumo = processar_parcial_excel(
+            arquivo,
+            "parcial.xlsx",
+            todos,
+            ids_gerencia={p.pk for p in todos},
+            turno=15,
+            ano=2026,
+            mes=9,
+        )
+        LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.PARCIAL,
+            arquivo_nome="parcial.xlsx",
+            ok=True,
+            resumo=resumo,
+        )
+        self.client.force_login(spec)
+        r = self.client.get(reverse("gestao_resultados"), {"escopo": "meus"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.context["parcial_sub"], "gerencia")
+        self.assertContains(r, "Carteira PP")
+        self.assertContains(r, "escopo=todos")
+        pdvs = [l["pdv"] for l in r.context["parcial_gerencia_linhas"]]
+        self.assertIn("INOVA MG", pdvs)
+        self.assertIn("ATOS TELECOM", pdvs)
+        esp = self.client.get(
+            reverse("gestao_resultados"),
+            {"escopo": "meus", "aba": "parcial", "parcial_sub": "especialistas"},
+        )
+        ids = {g["especialista_id"] for g in esp.context["parcial_especialistas"]}
+        self.assertEqual(ids, {spec.id, colega.id})
+        prev = self.client.get(
+            reverse("gestao_parcial_preview"),
+            {"visao": "gerencia", "escopo": "meus"},
+        )
+        self.assertEqual(prev.status_code, 200)
+        self.assertEqual(prev["Content-Type"], "image/png")
+        cap = self.client.get(reverse("gestao_capilaridade"))
+        self.assertNotContains(cap, "escopo=todos")
+
     def test_parcial_excel_e_imagens(self):
         from gestao.parcial_imagem import imagem_parcial_gerencia, imagem_parcial_pdv, imagem_parcial_especialistas
         from gestao.pipelines.parcial_vendas import (

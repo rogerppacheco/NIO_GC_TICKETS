@@ -1458,9 +1458,7 @@ def enviar_ranking(
     periodo_txt = fim.strftime("%m/%Y") if fim else ""
     caption = f"🏆 *Ranking VB*{f' · {periodo_txt}' if periodo_txt else ''}"
 
-    if user is not None and not eh_gestor(user):
-        destinos = destinos_para_envio(user, "envio_resultados")
-    elif destinatario_id:
+    if destinatario_id:
         from django.db.models import Q
 
         dest = (
@@ -1578,8 +1576,6 @@ def enviar_parcial_gerencia(
 
     if not dados or not dados.get("linhas"):
         return ResumoEnvio(erros=1, detalhes=["Importe a base Excel antes de enviar."])
-    if user is not None and not eh_gestor(user):
-        return ResumoEnvio(erros=1, detalhes=["Somente gestores enviam a visão de gerência."])
     if not destinatario_id:
         return ResumoEnvio(erros=1, detalhes=["Escolha o grupo de gerência."])
     destinos = _destino_grupo(destinatario_id, parceiros)
@@ -1611,8 +1607,6 @@ def enviar_parcial_consolidado(
 
     if not dados or not dados.get("linhas"):
         return ResumoEnvio(erros=1, detalhes=["Importe a base Excel antes de enviar."])
-    if user is not None and not eh_gestor(user):
-        return ResumoEnvio(erros=1, detalhes=["Somente gestores enviam a Carteira PP no grupo."])
     if not destinatario_id:
         return ResumoEnvio(erros=1, detalhes=["Grupo Parceiros_PP_Nio não encontrado nos Destinatários."])
     destinos = _destino_grupo(destinatario_id, parceiros)
@@ -1648,8 +1642,6 @@ def enviar_parcial_especialista(
     )
     if not grupo:
         return ResumoEnvio(erros=1, detalhes=["Especialista sem PDVs na base importada."])
-    if user is not None and not eh_gestor(user) and user.id != especialista_id:
-        return ResumoEnvio(erros=1, detalhes=["Sem permissão para enviar a carteira deste especialista."])
     destinos = _destino_especialista(especialista_id)
     if not destinos:
         return ResumoEnvio(erros=1, detalhes=["WhatsApp do especialista não cadastrado."])
