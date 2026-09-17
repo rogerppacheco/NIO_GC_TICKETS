@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any, Optional
 
 from django.db import transaction
@@ -96,13 +96,13 @@ def normalizar_equipes(
                 continue
             if pessoas < 1:
                 continue
-            limpos.append(
-                {
-                    "ordem": len(limpos) + 1,
-                    "atuacao": atuacao,
-                    "pessoas": min(pessoas, MAX_PESSOAS_EQUIPE),
-                }
-            )
+            item: dict[str, Any] = {
+                "ordem": len(limpos) + 1,
+                "atuacao": atuacao,
+                "pessoas": min(pessoas, MAX_PESSOAS_EQUIPE),
+            }
+            item.update(_limpo_local(raw))
+            limpos.append(item)
             if len(limpos) >= MAX_EQUIPES:
                 break
     if limpos:
@@ -130,6 +130,148 @@ def derivar_tipo_rota(equipes: list[dict[str, Any]]) -> str:
 
 def precisa_local(equipes: list[dict[str, Any]]) -> bool:
     return any(e["atuacao"] != CheckinRotaDiaria.AtuacaoEquipe.DIGITAL for e in equipes)
+
+
+def equipes_de_campo(equipes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [e for e in equipes if e.get("atuacao") != CheckinRotaDiaria.AtuacaoEquipe.DIGITAL]
+
+
+def _limpo_local(raw: dict[str, Any] | None) -> dict[str, Any]:
+    src = raw if isinstance(raw, dict) else {}
+    uf = str(src.get("uf") or "").strip().upper()[:2]
+    cidade = str(src.get("cidade") or "").strip()[:120]
+    bairro = str(src.get("bairro") or "").strip()[:120]
+    extras: list[str] = []
+    vistos = {bairro.casefold()} if bairro else set()
+    bruto = src.get("bairros")
+    if isinstance(bruto, list):
+        for item in bruto:
+            texto = str(item or "").strip()[:120]
+            chave = texto.casefold()
+            if texto and chave not in vistos:
+                vistos.add(chave)
+                extras.append(texto)
+    out: dict[str, Any] = {}
+    if len(uf) == 2:
+        out["uf"] = uf
+    if cidade:
+        out["cidade"] = cidade
+    if bairro:
+        out["bairro"] = bairro
+    if extras:
+        out["bairros"] = extras
+    return out
+
+
+def flags_arranjo(
+    equipes: list[dict[str, Any]],
+    *,
+    mesma_rota: bool,
+    dividir_bairros: bool,
+) -> tuple[bool, bool]:
+    n_campo = len(equipes_de_campo(equipes))
+    mesma = bool(mesma_rota) if n_campo > 1 else True
+    dividir = bool(dividir_bairros) if n_campo == 1 else False
+    return mesma, dividir
+
+
+def aplicar_arranjo_rotas(
+    equipes: list[dict[str, Any]],
+    *,
+    mesma_rota: bool,
+    dividir_bairros: bool,
+    uf: str = "",
+    cidade: str = "",
+    bairro: str = "",
+) -> list[dict[str, Any]]:
+    campo = equipes_de_campo(equipes)
+    if not campo:
+        for equipe in equipes:
+            for chave in ("uf", "cidade", "bairro", "bairros"):
+                equipe.pop(chave, None)
+        return equipes
+    if mesma_rota:
+        local = _limpo_local(
+            {
+                "uf": uf or campo[0].get("uf"),
+                "cidade": cidade or campo[0].get("cidade"),
+                "bairro": bairro or campo[0].get("bairro"),
+                "bairros": campo[0].get("bairros") if dividir_bairros else [],
+            }
+        )
+        if not dividir_bairros:
+            local.pop("bairros", None)
+        for equipe in equipes:
+            if equipe.get("atuacao") == CheckinRotaDiaria.AtuacaoEquipe.DIGITAL:
+                for chave in ("uf", "cidade", "bairro", "bairros"):
+                    equipe.pop(chave, None)
+            else:
+                for chave in ("uf", "cidade", "bairro", "bairros"):
+                    equipe.pop(chave, None)
+                equipe.update(local)
+    elif not dividir_bairros:
+        for equipe in equipes:
+            equipe.pop("bairros", None)
+            if equipe.get("atuacao") == CheckinRotaDiaria.AtuacaoEquipe.DIGITAL:
+                for chave in ("uf", "cidade", "bairro"):
+                    equipe.pop(chave, None)
+    return equipes
+
+
+def local_principal(
+    equipes: list[dict[str, Any]],
+    uf: str = "",
+    cidade: str = "",
+    bairro: str = "",
+) -> tuple[str, str, str]:
+    campo = equipes_de_campo(equipes)
+    if campo:
+        return (
+            str(campo[0].get("uf") or uf or "").strip().upper()[:2],
+            str(campo[0].get("cidade") or cidade or "").strip(),
+            str(campo[0].get("bairro") or bairro or "").strip(),
+        )
+    return (
+        str(uf or "").strip().upper()[:2],
+        str(cidade or "").strip(),
+        str(bairro or "").strip(),
+    )
+
+
+def validar_locais(
+    equipes: list[dict[str, Any]],
+    *,
+    mesma_rota: bool,
+    dividir_bairros: bool,
+    uf: str = "",
+    cidade: str = "",
+    bairro: str = "",
+) -> dict[str, str]:
+    if not precisa_local(equipes):
+        return {}
+    campo = equipes_de_campo(equipes)
+    fields: dict[str, str] = {}
+    if mesma_rota:
+        uf_ok, cidade_ok, bairro_ok = local_principal(equipes, uf, cidade, bairro)
+        if len(uf_ok) != 2:
+            fields["uf"] = "Obrigatório."
+        if not cidade_ok:
+            fields["cidade"] = "Obrigatório."
+        if not bairro_ok:
+            fields["bairro"] = "Obrigatório."
+        if dividir_bairros and campo:
+            extras = campo[0].get("bairros") or []
+            if not extras:
+                fields["bairros"] = "Informe pelo menos dois bairros para essa equipe."
+    else:
+        for equipe in campo:
+            loc = _limpo_local(equipe)
+            if len(str(loc.get("uf") or "")) != 2 or not loc.get("cidade") or not loc.get("bairro"):
+                fields["equipes"] = (
+                    f"Informe UF, cidade e bairro da rota da equipe {equipe.get('ordem') or ''}.".strip()
+                )
+                break
+    return fields
 
 
 def equipes_do_checkin(checkin: CheckinRotaDiaria) -> list[dict[str, Any]]:
@@ -212,6 +354,28 @@ def serializar_planejamento(plan: PlanejamentoSemanalRota | None) -> dict[str, A
     }
 
 
+def parse_hora(valor: Any) -> time | None:
+    if valor is None:
+        return None
+    if isinstance(valor, time):
+        return valor.replace(second=0, microsecond=0)
+    texto = str(valor).strip()
+    if not texto:
+        return None
+    for fmt in ("%H:%M", "%H:%M:%S"):
+        try:
+            return datetime.strptime(texto, fmt).time().replace(second=0, microsecond=0)
+        except ValueError:
+            continue
+    raise ValueError("Horário inválido. Use HH:MM.")
+
+
+def formatar_hora(valor: time | None) -> str:
+    if not valor:
+        return ""
+    return valor.strftime("%H:%M")
+
+
 def serializar_checkin(checkin: CheckinRotaDiaria | None) -> dict[str, Any] | None:
     if not checkin:
         return None
@@ -228,6 +392,10 @@ def serializar_checkin(checkin: CheckinRotaDiaria | None) -> dict[str, Any] | No
         "qtd_contratacoes": checkin.qtd_contratacoes,
         "qtd_desligamentos": checkin.qtd_desligamentos,
         "planejamento_vb_dia": checkin.planejamento_vb_dia,
+        "horario_inicio": formatar_hora(checkin.horario_inicio) or None,
+        "horario_fim": formatar_hora(checkin.horario_fim) or None,
+        "mesma_rota": bool(checkin.mesma_rota),
+        "dividir_bairros": bool(checkin.dividir_bairros),
         "local": {
             "uf": checkin.uf,
             "cidade": checkin.cidade,
@@ -330,6 +498,8 @@ def agendas_equipe(user, q: str = "", dia: date | None = None) -> dict[str, Any]
             "qtd_vendedores": ck.qtd_vendedores,
             "tipo_rota": ck.tipo_rota,
             "planejamento_vb_dia": ck.planejamento_vb_dia or 0,
+            "horario_inicio": formatar_hora(ck.horario_inicio) or None,
+            "horario_fim": formatar_hora(ck.horario_fim) or None,
         }
         _somar_checkin(totais_semana, ck)
         pdvs_semana.add(ck.parceiro_id)
@@ -547,12 +717,40 @@ def salvar_checkin(
     qtd_contratacoes: int = 0,
     qtd_desligamentos: int = 0,
     planejamento_vb_dia: int = 0,
+    horario_inicio: time | None = None,
+    horario_fim: time | None = None,
+    mesma_rota: bool = True,
+    dividir_bairros: bool = False,
 ) -> CheckinRotaDiaria:
     ref = dia or hoje_local()
     if not data_na_semana_atual(ref):
         raise ValueError("Só é possível registrar a semana atual (segunda a domingo).")
 
     equipes_ok = normalizar_equipes(equipes, qtd_vendedores, tipo_rota)
+    mesma, dividir = flags_arranjo(
+        equipes_ok,
+        mesma_rota=mesma_rota,
+        dividir_bairros=dividir_bairros,
+    )
+    equipes_ok = aplicar_arranjo_rotas(
+        equipes_ok,
+        mesma_rota=mesma,
+        dividir_bairros=dividir,
+        uf=uf,
+        cidade=cidade,
+        bairro=bairro,
+    )
+    loc_fields = validar_locais(
+        equipes_ok,
+        mesma_rota=mesma,
+        dividir_bairros=dividir,
+        uf=uf,
+        cidade=cidade,
+        bairro=bairro,
+    )
+    if loc_fields:
+        raise ValueError(next(iter(loc_fields.values())))
+    uf_limpo, cidade_txt, bairro_txt = local_principal(equipes_ok, uf, cidade, bairro)
     tipo = derivar_tipo_rota(equipes_ok)
     pessoas = sum(int(e["pessoas"]) for e in equipes_ok)
     if pessoas < 1:
@@ -561,14 +759,12 @@ def salvar_checkin(
         raise ValueError("Contratações e desligamentos não podem ser negativos.")
     if int(planejamento_vb_dia) < 0:
         raise ValueError("Planejamento de VBs do dia inválido.")
-
-    uf_limpo = (uf or "").strip().upper()[:2]
-    cidade_txt = (cidade or "").strip()
-    bairro_txt = (bairro or "").strip()
-
-    if precisa_local(equipes_ok):
-        if not uf_limpo or not cidade_txt or not bairro_txt:
-            raise ValueError("UF, cidade e bairro são obrigatórios quando há equipe PAP ou mista.")
+    inicio = parse_hora(horario_inicio)
+    fim = parse_hora(horario_fim)
+    if not inicio or not fim:
+        raise ValueError("Informe o horário de começo e o horário final da rota.")
+    if fim <= inicio:
+        raise ValueError("O horário final deve ser depois do começo.")
 
     planejamento = None
     if eh_segunda(ref):
@@ -625,6 +821,10 @@ def salvar_checkin(
         "qtd_contratacoes": int(qtd_contratacoes),
         "qtd_desligamentos": int(qtd_desligamentos),
         "planejamento_vb_dia": int(planejamento_vb_dia),
+        "horario_inicio": inicio,
+        "horario_fim": fim,
+        "mesma_rota": mesma,
+        "dividir_bairros": dividir,
         "uf": uf_limpo,
         "cidade": cidade_txt,
         "bairro": bairro_txt,

@@ -155,6 +155,8 @@ class CheckinRotaDiariaAdmin(admin.ModelAdmin):
         "data",
         "tipo_rota",
         "qtd_vendedores",
+        "mesma_rota",
+        "dividir_bairros",
         "uf",
         "cidade",
         "bairro",

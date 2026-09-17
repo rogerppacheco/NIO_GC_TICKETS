@@ -1043,6 +1043,14 @@ class CheckinRotaDiaria(models.Model):
         blank=True,
         help_text="Horário final da rota.",
     )
+    mesma_rota = models.BooleanField(
+        default=True,
+        help_text="Várias equipes PAP/mistas no mesmo UF/cidade/bairro.",
+    )
+    dividir_bairros = models.BooleanField(
+        default=False,
+        help_text="Uma equipe PAP/mista atuando em mais de um bairro no dia.",
+    )
     uf = models.CharField(max_length=2, blank=True)
     cidade = models.CharField(max_length=120, blank=True)
     bairro = models.CharField(max_length=120, blank=True)

@@ -24,24 +24,29 @@ from tickets.consultas.dfv_powerbi_service import (
 from tickets.models import CheckinRotaDiaria, PlanejamentoSemanalRota
 from tickets.rota_services import (
     agendas_equipe,
+    aplicar_arranjo_rotas,
     classificar_alerta,
     data_na_semana_atual,
     defaults_localizacao,
     dias_da_semana,
     domingo_da_semana,
     eh_segunda,
+    flags_arranjo,
     hoje_local,
     listar_bairros_parceiro,
     listar_cidades,
     listar_ufs,
+    local_principal,
     meta_semana_parceiro,
     normalizar_equipes,
+    parse_hora,
     precisa_local,
     resumo_semana,
     salvar_checkin,
     segunda_da_semana,
     serializar_checkin,
     serializar_planejamento,
+    validar_locais,
 )
 from tickets.views import _portal_sessao
 
@@ -88,6 +93,14 @@ def _int_campo(valor: Any, default: int | None = None) -> int | None:
         return int(valor)
     except (TypeError, ValueError):
         return None
+
+
+def _bool_campo(valor: Any, default: bool = True) -> bool:
+    if valor is None or valor == "":
+        return default
+    if isinstance(valor, bool):
+        return valor
+    return str(valor).strip().lower() in {"1", "true", "t", "sim", "yes", "on"}
 
 
 def _exige_rota(request: HttpRequest, *, exige_pdv: bool = True, body: dict | None = None):
@@ -432,6 +445,19 @@ def rota_api_checkin(request: HttpRequest) -> JsonResponse:
         fields["planejamento_vb_dia"] = "Informe o planejamento de VBs do dia."
         vb_dia = 0
 
+    hora_inicio = None
+    hora_fim = None
+    try:
+        hora_inicio = parse_hora(body.get("horario_inicio"))
+        hora_fim = parse_hora(body.get("horario_fim"))
+    except ValueError:
+        fields["horario_inicio"] = "Informe começo e fim no formato HH:MM."
+    else:
+        if not hora_inicio or not hora_fim:
+            fields["horario_inicio"] = "Informe o horário de começo e o horário final da rota."
+        elif hora_fim <= hora_inicio:
+            fields["horario_fim"] = "O horário final deve ser depois do começo."
+
     uf = str(body.get("uf") or "").strip().upper()[:2]
     cidade = str(body.get("cidade") or "").strip()
     bairro = str(body.get("bairro") or "").strip()
@@ -457,16 +483,30 @@ def rota_api_checkin(request: HttpRequest) -> JsonResponse:
     except ValueError as exc:
         return _json_error("validation_error", str(exc), status=422, fields={"equipes": str(exc)})
 
-    if precisa_local(equipes_ok):
-        loc_fields = {}
-        if len(uf) != 2:
-            loc_fields["uf"] = "Obrigatório."
-        if not cidade:
-            loc_fields["cidade"] = "Obrigatório."
-        if not bairro:
-            loc_fields["bairro"] = "Obrigatório."
-        if loc_fields:
-            return _json_error("validation_error", "Informe o local da rota.", status=422, fields=loc_fields)
+    mesma_rota, dividir_bairros = flags_arranjo(
+        equipes_ok,
+        mesma_rota=_bool_campo(body.get("mesma_rota"), True),
+        dividir_bairros=_bool_campo(body.get("dividir_bairros"), False),
+    )
+    equipes_ok = aplicar_arranjo_rotas(
+        equipes_ok,
+        mesma_rota=mesma_rota,
+        dividir_bairros=dividir_bairros,
+        uf=uf,
+        cidade=cidade,
+        bairro=bairro,
+    )
+    loc_fields = validar_locais(
+        equipes_ok,
+        mesma_rota=mesma_rota,
+        dividir_bairros=dividir_bairros,
+        uf=uf,
+        cidade=cidade,
+        bairro=bairro,
+    )
+    if loc_fields:
+        return _json_error("validation_error", "Informe o local da rota.", status=422, fields=loc_fields)
+    uf, cidade, bairro = local_principal(equipes_ok, uf, cidade, bairro)
 
     dfv_resumo = None
     if precisa_local(equipes_ok) and uf and cidade and bairro:
@@ -501,6 +541,10 @@ def rota_api_checkin(request: HttpRequest) -> JsonResponse:
             qtd_contratacoes=contratacoes,
             qtd_desligamentos=desligamentos,
             planejamento_vb_dia=vb_dia,
+            horario_inicio=hora_inicio,
+            horario_fim=hora_fim,
+            mesma_rota=mesma_rota,
+            dividir_bairros=dividir_bairros,
         )
     except ValueError as exc:
         return _json_error("validation_error", str(exc), status=422)

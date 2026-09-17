@@ -18,7 +18,7 @@ from tickets.models import (
     ParceiroPraca,
     PlanejamentoSemanalRota,
 )
-from tickets.rota_services import classificar_alerta, meta_semana_parceiro, salvar_checkin
+from tickets.rota_services import classificar_alerta, meta_semana_parceiro, parse_hora, salvar_checkin
 
 
 class RotaServicesTests(TestCase):
@@ -40,6 +40,41 @@ class RotaServicesTests(TestCase):
         self.assertEqual(meta["valor"], 50)
         self.assertEqual(meta["fonte"], "derivada_meta_vl")
 
+    def test_parse_hora(self):
+        self.assertEqual(parse_hora("08:00").hour, 8)
+        self.assertEqual(parse_hora("18:30:00").minute, 30)
+        self.assertIsNone(parse_hora(""))
+        with self.assertRaises(ValueError):
+            parse_hora("25:00")
+
+    def test_arranjo_rotas_mesma_ou_distinta(self):
+        from tickets.rota_services import aplicar_arranjo_rotas, flags_arranjo, validar_locais
+
+        equipes = [
+            {"ordem": 1, "atuacao": "PAP", "pessoas": 2, "uf": "MG", "cidade": "BH", "bairro": "CENTRO"},
+            {"ordem": 2, "atuacao": "PAP", "pessoas": 1, "uf": "MG", "cidade": "BH", "bairro": "SAVASSI"},
+        ]
+        mesma, dividir = flags_arranjo(equipes, mesma_rota=False, dividir_bairros=True)
+        self.assertFalse(mesma)
+        self.assertFalse(dividir)
+        uma, uma_dividir = flags_arranjo(
+            [equipes[0]], mesma_rota=False, dividir_bairros=True
+        )
+        self.assertTrue(uma)
+        self.assertTrue(uma_dividir)
+        fields = validar_locais(equipes, mesma_rota=False, dividir_bairros=False)
+        self.assertEqual(fields, {})
+        juntas = aplicar_arranjo_rotas(
+            [dict(e) for e in equipes],
+            mesma_rota=True,
+            dividir_bairros=False,
+            uf="MT",
+            cidade="CUIABA",
+            bairro="CENTRO NORTE",
+        )
+        self.assertEqual(juntas[0]["bairro"], "CENTRO NORTE")
+        self.assertEqual(juntas[1]["bairro"], "CENTRO NORTE")
+
     def test_classificar_alerta(self):
         status, desvio, _msg = classificar_alerta(50, 50)
         self.assertEqual(status, PlanejamentoSemanalRota.StatusAlerta.OK)
@@ -55,11 +90,15 @@ class RotaServicesTests(TestCase):
             tipo_rota="DIGITAL",
             qtd_vendedores=3,
             vendas_planejadas_semana=45 if timezone.localdate().weekday() == 0 else None,
+            horario_inicio="08:00",
+            horario_fim="18:00",
         )
         self.assertEqual(checkin.tipo_rota, "DIGITAL")
         self.assertEqual(checkin.qtd_vendedores, 3)
         self.assertEqual(checkin.qtd_equipes, 1)
         self.assertEqual(checkin.equipes[0]["atuacao"], "DIGITAL")
+        self.assertEqual(checkin.horario_inicio.hour, 8)
+        self.assertEqual(checkin.horario_fim.hour, 18)
 
 
 class RotaApiTests(TestCase):
@@ -154,6 +193,8 @@ class RotaApiTests(TestCase):
             "uf": "MG",
             "cidade": "BELO HORIZONTE",
             "bairro": "CENTRO",
+            "horario_inicio": "08:00",
+            "horario_fim": "17:30",
         }
         if timezone.localdate().weekday() == 0:
             payload["vendas_planejadas_semana"] = 20
@@ -191,6 +232,8 @@ class RotaApiTests(TestCase):
             "qtd_contratacoes": 1,
             "qtd_desligamentos": 0,
             "planejamento_vb_dia": 10,
+            "horario_inicio": "09:00",
+            "horario_fim": "18:00",
             "uf": "MG",
             "cidade": "BELO HORIZONTE",
             "bairro": "CENTRO",
@@ -209,6 +252,108 @@ class RotaApiTests(TestCase):
         self.assertEqual(body["tipo_rota"], "MISTO")
         self.assertEqual(body["qtd_contratacoes"], 1)
         self.assertEqual(body["planejamento_vb_dia"], 10)
+        self.assertEqual(body["horario_inicio"], "09:00")
+        self.assertEqual(body["horario_fim"], "18:00")
+
+    def test_checkin_exige_horario(self):
+        payload = {
+            "equipes": [{"atuacao": "DIGITAL", "pessoas": 2}],
+            "horario_inicio": "18:00",
+            "horario_fim": "08:00",
+        }
+        if timezone.localdate().weekday() == 0:
+            payload["vendas_planejadas_semana"] = 20
+        r = self.client.post(
+            reverse("rota_api_checkin"),
+            data=payload,
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 422)
+
+    @patch("tickets.rota_views.consultar_agregado_por_bairro")
+    def test_checkin_rotas_distintas_por_equipe(self, mock_dfv):
+        mock_dfv.return_value = {
+            "local": {"uf": "MG", "cidade": "BELO HORIZONTE", "bairro": "CENTRO"},
+            "indicadores": {"hp_livre": 4, "hps": 8, "pct_hc": 10, "fachadas_viaveis": 2, "fachadas_total": 3},
+            "credito": {},
+            "perfil": {},
+            "alertas": [],
+            "meta": {},
+        }
+        payload = {
+            "mesma_rota": False,
+            "equipes": [
+                {
+                    "atuacao": "PAP",
+                    "pessoas": 2,
+                    "uf": "MG",
+                    "cidade": "BELO HORIZONTE",
+                    "bairro": "CENTRO",
+                },
+                {
+                    "atuacao": "PAP",
+                    "pessoas": 1,
+                    "uf": "MG",
+                    "cidade": "BELO HORIZONTE",
+                    "bairro": "SAVASSI",
+                },
+            ],
+            "planejamento_vb_dia": 8,
+            "horario_inicio": "08:00",
+            "horario_fim": "17:00",
+        }
+        if timezone.localdate().weekday() == 0:
+            payload["vendas_planejadas_semana"] = 20
+        r = self.client.post(
+            reverse("rota_api_checkin"),
+            data=payload,
+            content_type="application/json",
+        )
+        self.assertIn(r.status_code, (200, 201), r.content)
+        body = r.json()["data"]
+        self.assertFalse(body["mesma_rota"])
+        self.assertEqual(body["equipes"][0]["bairro"], "CENTRO")
+        self.assertEqual(body["equipes"][1]["bairro"], "SAVASSI")
+        self.assertEqual(body["local"]["bairro"], "CENTRO")
+
+    @patch("tickets.rota_views.consultar_agregado_por_bairro")
+    def test_checkin_equipe_divide_bairros(self, mock_dfv):
+        mock_dfv.return_value = {
+            "local": {"uf": "MG", "cidade": "BELO HORIZONTE", "bairro": "CENTRO"},
+            "indicadores": {"hp_livre": 4, "hps": 8, "pct_hc": 10, "fachadas_viaveis": 2, "fachadas_total": 3},
+            "credito": {},
+            "perfil": {},
+            "alertas": [],
+            "meta": {},
+        }
+        payload = {
+            "dividir_bairros": True,
+            "uf": "MG",
+            "cidade": "BELO HORIZONTE",
+            "bairro": "CENTRO",
+            "equipes": [
+                {
+                    "atuacao": "PAP",
+                    "pessoas": 3,
+                    "bairros": ["SAVASSI"],
+                }
+            ],
+            "planejamento_vb_dia": 6,
+            "horario_inicio": "08:00",
+            "horario_fim": "17:00",
+        }
+        if timezone.localdate().weekday() == 0:
+            payload["vendas_planejadas_semana"] = 20
+        r = self.client.post(
+            reverse("rota_api_checkin"),
+            data=payload,
+            content_type="application/json",
+        )
+        self.assertIn(r.status_code, (200, 201), r.content)
+        body = r.json()["data"]
+        self.assertTrue(body["dividir_bairros"])
+        self.assertEqual(body["equipes"][0]["bairro"], "CENTRO")
+        self.assertEqual(body["equipes"][0]["bairros"], ["SAVASSI"])
 
     def test_parceiro_nao_ve_agendas_da_equipe(self):
         r = self.client.get(reverse("rota_api_agendas"))
@@ -229,6 +374,10 @@ class RotaApiTests(TestCase):
         self.assertContains(r, "rota-app")
         self.assertContains(r, "rota-week")
         self.assertContains(r, "rota_card.js")
+        self.assertContains(r, "Quantas equipes vão a campo?")
+        self.assertContains(r, "Onde vão atuar?")
+        self.assertContains(r, "As equipes trabalham na mesma rota?")
+        self.assertContains(r, "Essa equipe vai atuar em mais de um bairro?")
 
 
 class DfvAgregadoBairroTests(TestCase):
@@ -315,6 +464,8 @@ class RotaEquipeTests(TestCase):
             "pdv": self.pdv.id,
             "equipes": [{"atuacao": "DIGITAL", "pessoas": 4}],
             "planejamento_vb_dia": 10,
+            "horario_inicio": "08:00",
+            "horario_fim": "16:00",
         }
         if timezone.localdate().weekday() == 0:
             payload["vendas_planejadas_semana"] = 10
