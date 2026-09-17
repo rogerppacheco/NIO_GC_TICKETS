@@ -368,6 +368,16 @@ class HistoricoChurn(models.Model):
 
 
 class RelatorioFPD(models.Model):
+    class Indicador(models.TextChoices):
+        FPD = "FPD", "FPD"
+        SPD = "SPD", "SPD"
+        TPD = "TPD", "TPD"
+
+    class Segmento(models.TextChoices):
+        TODOS = "todos", "Todos"
+        VAREJO = "varejo", "Varejo"
+        EMPRESARIAL = "empresarial", "Empresarial"
+
     lote = models.ForeignKey(
         LoteImportacao,
         on_delete=models.CASCADE,
@@ -379,6 +389,18 @@ class RelatorioFPD(models.Model):
         related_name="relatorios_fpd",
     )
     pdv_nome = models.CharField(max_length=150)
+    indicador = models.CharField(
+        max_length=8,
+        choices=Indicador.choices,
+        default=Indicador.FPD,
+        db_index=True,
+    )
+    segmento = models.CharField(
+        max_length=16,
+        choices=Segmento.choices,
+        default=Segmento.TODOS,
+        db_index=True,
+    )
     percentual = models.FloatField()
     total_faturas = models.IntegerField()
     total_abertas = models.IntegerField()
@@ -390,6 +412,9 @@ class RelatorioFPD(models.Model):
         ordering = ["-percentual", "pdv_nome"]
         verbose_name = "Relatório FPD"
         verbose_name_plural = "Relatórios FPD"
+        indexes = [
+            models.Index(fields=["parceiro", "indicador", "segmento"]),
+        ]
 
 
 class RelatorioComissionamento(models.Model):

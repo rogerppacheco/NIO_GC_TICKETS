@@ -4,25 +4,39 @@
 {% include "gestao/_escopo.html" %}
 <div class="hero">
   <div>
-    <h1>FPD</h1>
-    <p>Faturas da primeira fatura (INDICADOR=FPD) na janela de 3 meses.</p>
+    <h1>FPD · SPD · TPD</h1>
+    <p>{{ rotulo_indicador }} · {{ rotulo_segmento }} · janela de 3 meses (coluna INDICADOR e nm_seg).</p>
   </div>
   {% if pode_enviar %}
   <form method="post">
     {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
     <input type="hidden" name="action" value="enviar_todos">
-    <button class="btn btn-primary" type="submit">Enviar todos (WhatsApp)</button>
+    <input type="hidden" name="indicador" value="{{ indicador }}">
+    <input type="hidden" name="segmento" value="{{ segmento }}">
+    <button class="btn btn-primary" type="submit">Enviar {{ indicador }}{% if segmento != "todos" %} · {{ rotulo_segmento }}{% endif %} (WhatsApp)</button>
   </form>
   {% endif %}
 </div>
+<nav class="page-tabs" aria-label="Indicador da fatura">
+  {% for ind in indicadores %}
+  <a class="page-tab{% if indicador == ind %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ ind }}&amp;segmento={{ segmento }}">{{ ind }}</a>
+  {% endfor %}
+</nav>
+<nav class="page-tabs page-tabs-sub" aria-label="Segmento">
+  {% for seg, rotulo in segmentos %}
+  <a class="page-tab{% if segmento == seg %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ indicador }}&amp;segmento={{ seg }}">{{ rotulo }}</a>
+  {% endfor %}
+</nav>
 {% if form %}
 <div class="panel" style="margin-bottom:1rem">
   <div class="panel-h"><h2>Importar FPD</h2></div>
   <div class="panel-b">
     <form method="post" enctype="multipart/form-data">
       {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+      <input type="hidden" name="indicador" value="{{ indicador }}">
+      <input type="hidden" name="segmento" value="{{ segmento }}">
       {{ form.arquivo }}
-      <p class="help">Arquivo do e-mail (APELIDO, REF_VENCTO) ou export do Power BI (<code>nm_pdv_rel</code>, <code>MES_VENC</code>). O sistema normaliza as colunas e usa só INDICADOR=FPD na janela de 3 meses.</p>
+      <p class="help">Arquivo do e-mail (APELIDO, REF_VENCTO) ou export do Power BI (<code>nm_pdv_rel</code>, <code>MES_VENC</code>). Gera <strong>FPD, SPD e TPD</strong> pela coluna INDICADOR e recorta por <code>nm_seg</code>: Todos, Varejo e Empresarial, na janela de 3 meses.</p>
       <button class="btn btn-primary" type="submit" style="margin-top:0.7rem">Processar FPD</button>
     </form>
     {% include "gestao/_ultima_importacao.html" %}
@@ -37,7 +51,7 @@
       <div>
         <strong>{{ r.pdv_nome }}</strong>
         {% include "gestao/_especialista.html" with parceiro=r.parceiro %}
-        <div class="help">{{ r.percentual|floatformat:2 }}% · abertas {{ r.total_abertas }}/{{ r.total_faturas }} · {{ r.criado_em|date:"d/m H:i" }}</div>
+        <div class="help">{{ r.percentual|floatformat:2 }}% · abertas {{ r.total_abertas }}/{{ r.total_faturas }} · {{ r.indicador }} · {{ r.get_segmento_display }} · {{ r.criado_em|date:"d/m H:i" }}</div>
       </div>
       <div style="display:flex;gap:0.4rem">
         <textarea id="fpd-{{ r.id }}" hidden>{{ r.mensagem }}</textarea>
@@ -47,6 +61,8 @@
           {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
           <input type="hidden" name="action" value="enviar_pdv">
           <input type="hidden" name="parceiro" value="{{ r.parceiro_id }}">
+          <input type="hidden" name="indicador" value="{{ indicador }}">
+          <input type="hidden" name="segmento" value="{{ segmento }}">
           <button class="btn btn-secondary" type="submit">Enviar</button>
         </form>
         {% endif %}
@@ -55,6 +71,6 @@
     <div class="long-text">{{ r.mensagem|linebreaksbr }}</div>
   </div>
 {% empty %}
-  <p class="help">Nenhum relatório FPD ainda.</p>
+  <p class="help">Nenhum relatório {{ indicador }}{% if segmento != "todos" %} · {{ rotulo_segmento }}{% endif %} ainda. Importe a planilha para gerar FPD, SPD, TPD e os recortes de segmento.</p>
 {% endfor %}
 {% endblock %}

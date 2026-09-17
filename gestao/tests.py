@@ -1039,6 +1039,56 @@ class FpdChurnTests(TestCase):
             processar_fpd(arquivo, f"{lote.id}.xlsx", lote)
         self.assertEqual(RelatorioFPD.objects.filter(parceiro=self.pdv).count(), 1)
 
+    def test_fpd_gera_spd_tpd_e_segmentos(self):
+        mes = timezone.localdate().strftime("%m/%Y")
+        arquivo = _xlsx(
+            [
+                ["APOLO", mes, "Aberta", "15 a 30 Dias", "FPD", "Varejo"],
+                ["APOLO", mes, "Paga", "0 A 15 DIAS", "FPD", "Empresarial"],
+                ["APOLO", mes, "Aberta", "15 a 30 Dias", "SPD", "Varejo"],
+                ["APOLO", mes, "Aberta", "30 a 45 Dias", "TPD", "Empresarial"],
+            ],
+            [
+                "APELIDO",
+                "REF_VENCTO",
+                "SITUACAO_FATURA_MENSAL",
+                "FAIXA",
+                "INDICADOR",
+                "nm_seg",
+            ],
+        )
+        lote = LoteImportacao.objects.create(tipo="fpd", arquivo_nome="mix.xlsx", ok=True)
+        resumo = processar_fpd(arquivo, "mix.xlsx", lote)
+        self.assertEqual(resumo["pdvs"], 1)
+        self.assertEqual(resumo["relatorios"], 7)
+        fpd_todos = RelatorioFPD.objects.get(
+            parceiro=self.pdv, indicador="FPD", segmento="todos"
+        )
+        self.assertEqual(fpd_todos.total_faturas, 2)
+        self.assertEqual(fpd_todos.total_abertas, 1)
+        self.assertIn("Primeira fatura", fpd_todos.mensagem)
+        fpd_emp = RelatorioFPD.objects.get(
+            parceiro=self.pdv, indicador="FPD", segmento="empresarial"
+        )
+        self.assertEqual(fpd_emp.total_abertas, 0)
+        self.assertIn("Empresarial", fpd_emp.mensagem)
+        spd_var = RelatorioFPD.objects.get(
+            parceiro=self.pdv, indicador="SPD", segmento="varejo"
+        )
+        self.assertEqual(spd_var.total_abertas, 1)
+        self.assertIn("Segunda fatura", spd_var.mensagem)
+        self.assertFalse(
+            RelatorioFPD.objects.filter(
+                parceiro=self.pdv, indicador="SPD", segmento="empresarial"
+            ).exists()
+        )
+        tpd_emp = RelatorioFPD.objects.get(
+            parceiro=self.pdv, indicador="TPD", segmento="empresarial"
+        )
+        self.assertEqual(tpd_emp.total_abertas, 1)
+        self.assertIn("Terceira fatura", tpd_emp.mensagem)
+        self.assertIn("TPD consolidado · Empresarial", tpd_emp.mensagem)
+
     def test_parse_periodo_yyyymm_float(self):
         from gestao.pipelines.fpd import _parse_periodo
 
@@ -1127,6 +1177,47 @@ class GestaoViewsTests(TestCase):
         self.assertContains(sysmap, "Importar Sysmap")
         cap = self.client.get(reverse("gestao_capilaridade"))
         self.assertContains(cap, "Sysmap")
+
+    def test_fpd_abas_indicador_e_segmento(self):
+        pdv = Parceiro.objects.create(
+            codigo_pdv="fpd1", nome="APOLO FPD", especialista=self.gestor
+        )
+        lote = LoteImportacao.objects.create(tipo="fpd", arquivo_nome="f.xlsx", ok=True)
+        RelatorioFPD.objects.create(
+            lote=lote,
+            parceiro=pdv,
+            pdv_nome="APOLO FPD",
+            indicador="FPD",
+            segmento="todos",
+            percentual=10,
+            total_faturas=10,
+            total_abertas=1,
+            mensagem="CARD FPD TODOS",
+        )
+        RelatorioFPD.objects.create(
+            lote=lote,
+            parceiro=pdv,
+            pdv_nome="APOLO FPD",
+            indicador="SPD",
+            segmento="empresarial",
+            percentual=40,
+            total_faturas=5,
+            total_abertas=2,
+            mensagem="CARD SPD EMPRESARIAL",
+        )
+        self.client.force_login(self.gestor)
+        padrao = self.client.get(reverse("gestao_fpd"))
+        self.assertContains(padrao, "CARD FPD TODOS")
+        self.assertNotContains(padrao, "CARD SPD EMPRESARIAL")
+        self.assertContains(padrao, ">SPD<")
+        self.assertContains(padrao, "Empresarial")
+        spd = self.client.get(
+            reverse("gestao_fpd"),
+            {"indicador": "SPD", "segmento": "empresarial"},
+        )
+        self.assertContains(spd, "CARD SPD EMPRESARIAL")
+        self.assertNotContains(spd, "CARD FPD TODOS")
+        self.assertContains(spd, "Segunda fatura")
 
     @override_settings(
         EVOLUTION_API_URL="https://evo.test",

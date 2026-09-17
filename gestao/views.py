@@ -104,7 +104,13 @@ from .parceiros import classificar_parceiros_osab, sincronizar_parceiros_osab
 from .periodo import periodo_ativo, salvar_periodo
 from .pipelines.churn import processar_churn
 from .pipelines.comissionamento import mapa_pdv_razoes, processar_comissionamento
-from .pipelines.fpd import processar_fpd
+from .pipelines.fpd import (
+    INDICADORES,
+    ROTULO_INDICADOR,
+    ROTULO_SEGMENTO,
+    SEGMENTOS,
+    processar_fpd,
+)
 from .pipelines.gdp import processar_gdp
 from .pipelines.metas import processar_metas
 from .pipelines.carteira import processar_carteira
@@ -1101,6 +1107,21 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
     )
 
 
+def _fpd_filtro(request) -> tuple[str, str]:
+    ind = (request.GET.get("indicador") or request.POST.get("indicador") or "FPD").strip().upper()
+    if ind not in INDICADORES:
+        ind = "FPD"
+    seg = (request.GET.get("segmento") or request.POST.get("segmento") or "todos").strip().lower()
+    if seg not in SEGMENTOS:
+        seg = "todos"
+    return ind, seg
+
+
+def _fpd_extra(request) -> str:
+    ind, seg = _fpd_filtro(request)
+    return f"indicador={ind}&segmento={seg}"
+
+
 @login_required
 def importar_fpd_view(request: HttpRequest) -> HttpResponse:
     form = UploadBaseForm(request.POST or None, request.FILES or None)
@@ -1111,8 +1132,13 @@ def importar_fpd_view(request: HttpRequest) -> HttpResponse:
             resumo = processar_fpd(arquivo, arquivo.name, lote)
             lote.resumo = resumo
             lote.save(update_fields=["resumo"])
-            messages.success(request, f"FPD processado: {resumo['pdvs']} PDV(s).")
-            return _voltar(request, "gestao_fpd")
+            n_rel = resumo.get("relatorios") or resumo["pdvs"]
+            messages.success(
+                request,
+                f"FPD processado: {resumo['pdvs']} PDV(s), {n_rel} relatório(s) "
+                f"(FPD/SPD/TPD · Todos/Varejo/Empresarial).",
+            )
+            return _voltar(request, "gestao_fpd", extra=_fpd_extra(request))
         except Exception as exc:
             lote.ok = False
             lote.erro = str(exc)
@@ -1125,34 +1151,49 @@ def importar_fpd_view(request: HttpRequest) -> HttpResponse:
 def fpd_view(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         action = request.POST.get("action") or ""
+        ind, seg = _fpd_filtro(request)
         if action == "enviar_pdv" and _pode_enviar(request):
             parceiro = get_object_or_404(_parceiros(request), pk=request.POST.get("parceiro"))
-            _flash_resumo(request, "FPD", enviar_fpd_pdv(parceiro, request.user))
-            return _voltar(request, "gestao_fpd")
+            _flash_resumo(
+                request,
+                f"{ind}",
+                enviar_fpd_pdv(parceiro, request.user, indicador=ind, segmento=seg),
+            )
+            return _voltar(request, "gestao_fpd", extra=_fpd_extra(request))
         if action == "enviar_todos" and _pode_enviar(request):
             ids = (
-                RelatorioFPD.objects.filter(parceiro__in=_parceiros(request))
+                RelatorioFPD.objects.filter(
+                    parceiro__in=_parceiros(request),
+                    indicador=ind,
+                    segmento=seg,
+                )
                 .values_list("parceiro_id", flat=True)
                 .distinct()
             )
+            rotulo_seg = ROTULO_SEGMENTO.get(seg, seg)
             _enviar_todos_pdv(
                 request,
-                enviar_fpd_pdv,
+                lambda p, user: enviar_fpd_pdv(
+                    p, user, indicador=ind, segmento=seg
+                ),
                 _parceiros(request).filter(id__in=ids),
-                "FPD (todos)",
+                f"{ind} · {rotulo_seg}",
             )
-            return _voltar(request, "gestao_fpd")
+            return _voltar(request, "gestao_fpd", extra=_fpd_extra(request))
         if _pode_importar(request) and request.FILES:
             return importar_fpd_view(request)
     return _render_fpd(request, UploadBaseForm() if _pode_importar(request) else None)
 
 
 def _render_fpd(request, form):
-    from django.db.models import Max
-
     visiveis = _parceiros(request)
+    indicador, segmento = _fpd_filtro(request)
     ultimos_ids = (
-        RelatorioFPD.objects.filter(parceiro__in=visiveis)
+        RelatorioFPD.objects.filter(
+            parceiro__in=visiveis,
+            indicador=indicador,
+            segmento=segmento,
+        )
         .values("parceiro_id")
         .annotate(ultimo_id=Max("id"))
         .values_list("ultimo_id", flat=True)
@@ -1168,6 +1209,12 @@ def _render_fpd(request, form):
         {
             "form": form,
             "relatorios": relatorios,
+            "indicador": indicador,
+            "segmento": segmento,
+            "indicadores": INDICADORES,
+            "segmentos": [(s, ROTULO_SEGMENTO[s]) for s in SEGMENTOS],
+            "rotulo_indicador": ROTULO_INDICADOR[indicador],
+            "rotulo_segmento": ROTULO_SEGMENTO[segmento],
             "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
             "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.FPD),

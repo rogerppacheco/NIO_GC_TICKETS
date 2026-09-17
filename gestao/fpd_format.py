@@ -212,16 +212,33 @@ def planilha_fpd(rel: RelatorioFPD) -> tuple[bytes, str]:
     wb.save(buf)
     codigo = _codigo_rede(rel)
     sufixo = f"{codigo}-" if codigo else ""
-    nome = f"FATURAS_ABERTAS_PRE-FIBRA-FPD-SPD-TPD{sufixo}{_tag_arquivo(rel.pdv_nome)}.xlsx"
+    recorte = _recorte_arquivo(rel)
+    nome = f"FATURAS_ABERTAS_PRE-FIBRA-{recorte}{sufixo}{_tag_arquivo(rel.pdv_nome)}.xlsx"
     return buf.getvalue(), nome
+
+
+def _recorte_arquivo(rel: RelatorioFPD) -> str:
+    ind = (rel.indicador or "FPD").upper()
+    seg = (rel.segmento or "todos").lower()
+    if seg == "todos":
+        return f"{ind}-"
+    return f"{ind}-{seg.upper()}-"
+
+
+def _recorte_texto(rel: RelatorioFPD) -> str:
+    ind = rel.indicador or "FPD"
+    if (rel.segmento or "todos") == "todos":
+        return ind
+    return f"{ind} · {rel.get_segmento_display()}"
 
 
 def assunto_email_fpd(rel: RelatorioFPD) -> str:
     codigo = _codigo_rede(rel)
     pdv = (rel.pdv_nome or rel.parceiro.nome or "PDV").strip().upper()
+    recorte = _recorte_arquivo(rel).rstrip("-")
     if codigo:
-        return f"FATURAS_ABERTAS_PRÉ-FIBRA-FPD-SPD-TPD{codigo}-{pdv}"
-    return f"FATURAS_ABERTAS_PRÉ-FIBRA-FPD-SPD-TPD-{pdv}"
+        return f"FATURAS_ABERTAS_PRÉ-FIBRA-{recorte}{codigo}-{pdv}"
+    return f"FATURAS_ABERTAS_PRÉ-FIBRA-{recorte}-{pdv}"
 
 
 def html_email_fpd(rel: RelatorioFPD) -> str:
@@ -232,6 +249,7 @@ def html_email_fpd(rel: RelatorioFPD) -> str:
     pagas = _total_pagas(rel)
     abertas = rel.total_abertas
     perc = rel.percentual
+    recorte = _recorte_texto(rel)
 
     linhas_html = []
     tabela = _tabela_resumo(rel)
@@ -258,11 +276,11 @@ def html_email_fpd(rel: RelatorioFPD) -> str:
 <body bgcolor="#EBF0EA" style="font-family:Calibri,Arial,sans-serif;color:#000">
 <p><b>Bom dia, prezado parceiro!</b></p>
 <p><b><span style="font-size:21pt;color:#21C002">{pdv}</span></b></p>
-<p>Segue <b>Faturas abertas</b> (FPD/SPD/TPD) <b>15 a 60 dias em aberto com vencimento no meses de {intervalo}</b><br>
+<p>Segue <b>Faturas abertas</b> ({recorte}) <b>15 a 60 dias em aberto com vencimento no meses de {intervalo}</b><br>
 Faturas Abertas com vencimento menor que 61 dias.<br>
 <b>{pdv}</b> - Com o total de faturas de
 <b><u><span style="font-size:18pt;color:blue">{total}</span></u></b> e
-<b><u><span style="font-size:18pt;color:green">{pagas}</span></u></b> Pagas, sendo com risco de FPD
+<b><u><span style="font-size:18pt;color:green">{pagas}</span></u></b> Pagas, sendo com risco de {rel.indicador or "FPD"}
 <b><u><span style="font-size:18pt;color:red">{abertas}</span></u></b> com o Percentual de
 <b><u><span style="font-size:18pt;color:red">{perc:.2f}%</span></u></b> Das Faturas Totais<br>
 <b>Faixas e Quantidades, Faturas Abertas a tratar</b></p>
@@ -276,12 +294,14 @@ Faturas Abertas com vencimento menor que 61 dias.<br>
 def corpo_texto_email_fpd(rel: RelatorioFPD) -> str:
     pdv = (rel.pdv_nome or rel.parceiro.nome or "PDV").strip().upper()
     intervalo = _intervalo_meses(_meses_ordenados(rel.detalhes or {}))
+    recorte = _recorte_texto(rel)
     return (
         f"Bom dia, prezado parceiro!\n\n"
         f"{pdv}\n\n"
-        f"Segue Faturas abertas (FPD/SPD/TPD) 15 a 60 dias em aberto "
+        f"Segue Faturas abertas ({recorte}) 15 a 60 dias em aberto "
         f"com vencimento nos meses de {intervalo}.\n"
         f"Total: {rel.total_faturas} | Pagas: {_total_pagas(rel)} | "
-        f"Em aberto (FPD): {rel.total_abertas} | Percentual: {rel.percentual:.2f}%\n\n"
+        f"Em aberto ({rel.indicador or 'FPD'}): {rel.total_abertas} | "
+        f"Percentual: {rel.percentual:.2f}%\n\n"
         f"Planilha detalhada em anexo."
     )

@@ -66,6 +66,7 @@ FPD_CAMPOS: dict[str, list[str]] = {
     ],
     "FAIXA": ["FAIXA"],
     "INDICADOR": ["INDICADOR"],
+    "NM_SEG": ["NM_SEG", "nm_seg", "NM_SEGMENTO", "SEGMENTO"],
 }
 
 

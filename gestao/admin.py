@@ -100,5 +100,11 @@ admin.site.register(DiaFiscal)
 admin.site.register(HistoricoOSAB)
 admin.site.register(GrossMensal)
 admin.site.register(HistoricoChurn)
-admin.site.register(RelatorioFPD)
 admin.site.register(PracaBTU)
+
+
+@admin.register(RelatorioFPD)
+class RelatorioFPDAdmin(admin.ModelAdmin):
+    list_display = ("pdv_nome", "indicador", "segmento", "percentual", "criado_em")
+    list_filter = ("indicador", "segmento", "criado_em")
+    search_fields = ("pdv_nome",)

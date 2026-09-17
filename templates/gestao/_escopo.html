@@ -1,10 +1,10 @@
 {% with escopo=gestao_escopo|default:"meus" %}
-{% with aba_qs=request.GET.aba|default:"" parcial_sub_qs=request.GET.parcial_sub|default:"" %}
+{% with aba_qs=request.GET.aba|default:"" parcial_sub_qs=request.GET.parcial_sub|default:"" indicador_qs=request.GET.indicador|default:"" segmento_qs=request.GET.segmento|default:"" %}
 <div class="gestao-escopo" role="tablist" aria-label="Parceiros">
-  <a href="?escopo=meus{% if aba_qs %}&amp;aba={{ aba_qs }}{% endif %}{% if parcial_sub_qs %}&amp;parcial_sub={{ parcial_sub_qs }}{% endif %}" class="{% if escopo == 'meus' %}is-on{% endif %}">Meus parceiros <span class="help">({{ gestao_qtd_meus|default:0 }})</span></a>
-  <a href="?escopo=outros{% if aba_qs %}&amp;aba={{ aba_qs }}{% endif %}{% if parcial_sub_qs %}&amp;parcial_sub={{ parcial_sub_qs }}{% endif %}" class="{% if escopo == 'outros' %}is-on{% endif %}">Outros especialistas <span class="help">({{ gestao_qtd_outros|default:0 }})</span></a>
+  <a href="?escopo=meus{% if aba_qs %}&amp;aba={{ aba_qs }}{% endif %}{% if parcial_sub_qs %}&amp;parcial_sub={{ parcial_sub_qs }}{% endif %}{% if indicador_qs %}&amp;indicador={{ indicador_qs }}{% endif %}{% if segmento_qs %}&amp;segmento={{ segmento_qs }}{% endif %}" class="{% if escopo == 'meus' %}is-on{% endif %}">Meus parceiros <span class="help">({{ gestao_qtd_meus|default:0 }})</span></a>
+  <a href="?escopo=outros{% if aba_qs %}&amp;aba={{ aba_qs }}{% endif %}{% if parcial_sub_qs %}&amp;parcial_sub={{ parcial_sub_qs }}{% endif %}{% if indicador_qs %}&amp;indicador={{ indicador_qs }}{% endif %}{% if segmento_qs %}&amp;segmento={{ segmento_qs }}{% endif %}" class="{% if escopo == 'outros' %}is-on{% endif %}">Outros especialistas <span class="help">({{ gestao_qtd_outros|default:0 }})</span></a>
   {% if eh_gestor or request.resolver_match.url_name == "gestao_resultados" %}
-  <a href="?escopo=todos{% if aba_qs %}&amp;aba={{ aba_qs }}{% endif %}{% if parcial_sub_qs %}&amp;parcial_sub={{ parcial_sub_qs }}{% endif %}" class="{% if escopo == 'todos' %}is-on{% endif %}">Todos <span class="help">({{ gestao_qtd_todos|default:0 }})</span></a>
+  <a href="?escopo=todos{% if aba_qs %}&amp;aba={{ aba_qs }}{% endif %}{% if parcial_sub_qs %}&amp;parcial_sub={{ parcial_sub_qs }}{% endif %}{% if indicador_qs %}&amp;indicador={{ indicador_qs }}{% endif %}{% if segmento_qs %}&amp;segmento={{ segmento_qs }}{% endif %}" class="{% if escopo == 'todos' %}is-on{% endif %}">Todos <span class="help">({{ gestao_qtd_todos|default:0 }})</span></a>
   {% endif %}
 </div>
 {% if escopo == "meus" and not gestao_qtd_meus %}

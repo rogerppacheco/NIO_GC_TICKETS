@@ -9,6 +9,23 @@ from ..models import LoteImportacao, RelatorioFPD
 from ..parceiros import indice_parceiros, resolver_parceiro_id
 from ..periodo import hoje
 
+INDICADORES = ("FPD", "SPD", "TPD")
+SEGMENTOS = ("todos", "varejo", "empresarial")
+
+ROTULO_INDICADOR = {
+    "FPD": "Primeira fatura",
+    "SPD": "Segunda fatura",
+    "TPD": "Terceira fatura",
+}
+ROTULO_SEGMENTO = {
+    "todos": "Todos",
+    "varejo": "Varejo",
+    "empresarial": "Empresarial",
+}
+
+_COL_IND = "_ind"
+_COL_SEG = "_seg"
+
 
 def _status_aberta(valor) -> bool:
     txt = str(valor or "").strip().lower()
@@ -102,6 +119,147 @@ def _fmt_mes(valor) -> str:
     return f"{meses[periodo.month - 1]}/{periodo.year}"
 
 
+def _normalizar_indicador(valor) -> str | None:
+    txt = str(valor or "").strip().upper()
+    if txt in INDICADORES:
+        return txt
+    return None
+
+
+def _segmento_linha(valor) -> str | None:
+    txt = str(valor or "").strip().casefold()
+    if not txt or txt in {"nan", "none", "-", "nat"}:
+        return None
+    if "empres" in txt or txt in {"b2b", "pj", "pessoa jurídica", "pessoa juridica"}:
+        return "empresarial"
+    return "varejo"
+
+
+def _subtitulo(indicador: str, segmento: str) -> str:
+    base = ROTULO_INDICADOR.get(indicador, indicador)
+    if segmento != "todos":
+        return f"{base} · {ROTULO_SEGMENTO.get(segmento, segmento)}"
+    return base
+
+
+def _filtrar_segmento(df: pd.DataFrame, segmento: str) -> pd.DataFrame:
+    if segmento == "todos":
+        return df
+    if _COL_SEG not in df.columns:
+        return df.iloc[0:0]
+    return df[df[_COL_SEG] == segmento]
+
+
+def _codigo_rede(df_pdv: pd.DataFrame, col_rede: str | None) -> str:
+    if not col_rede or df_pdv[col_rede].dropna().empty:
+        return ""
+    codigo = str(df_pdv[col_rede].dropna().iloc[0]).strip()
+    if codigo.endswith(".0") and codigo[:-2].isdigit():
+        return codigo[:-2]
+    return codigo
+
+
+def _base_sem_aux(df: pd.DataFrame) -> pd.DataFrame:
+    return df.drop(columns=[_COL_IND, _COL_SEG], errors="ignore")
+
+
+def _criar_relatorio(
+    *,
+    lote: LoteImportacao,
+    parceiro_id: int,
+    apelido: str,
+    indicador: str,
+    segmento: str,
+    df_pdv: pd.DataFrame,
+    col_ref: str,
+    col_sit: str,
+    col_faixa: str,
+    col_rede: str | None,
+) -> None:
+    subtitulo = _subtitulo(indicador, segmento)
+    mensagem = f"📊 *Relatório {indicador} - {apelido}*\n_({subtitulo})_\n\n"
+    meses_ref = sorted(df_pdv[col_ref].dropna().unique(), key=lambda x: str(x))
+    total_fat = total_ab = total_pg = 0
+    detalhe_meses = []
+    codigo_rede = _codigo_rede(df_pdv, col_rede)
+    for mes_ref in meses_ref:
+        bloco = df_pdv[df_pdv[col_ref] == mes_ref]
+        status = bloco[col_sit].fillna("").astype(str)
+        total = len(bloco)
+        pagas = int(status.apply(_status_paga).sum())
+        abertas = int(status.apply(_status_aberta).sum())
+        perc = (abertas / total * 100) if total else 0
+        total_fat += total
+        total_ab += abertas
+        total_pg += pagas
+        faixas = {
+            "10 a 15 Dias": 0,
+            "15 a 30 Dias": 0,
+            "30 a 45 Dias": 0,
+            "45 a 55 Dias": 0,
+            "55 a 60 Dias": 0,
+            ">= a 61 Dias": 0,
+        }
+        if abertas:
+            abertos = bloco[status.apply(_status_aberta)]
+            contagem = abertos[col_faixa].apply(_normalizar_faixa).dropna().value_counts().to_dict()
+            for chave in faixas:
+                faixas[chave] = int(contagem.get(chave, 0))
+        mensagem += f"🗓️ *Mês fatura: {_fmt_mes(mes_ref)}*\n"
+        mensagem += f"   - Total: *{total}*\n"
+        mensagem += f"   - Pagas: *{pagas}*\n"
+        mensagem += f"   - Em aberto: *{abertas}*\n"
+        mensagem += f"   - % em aberto: *{perc:.2f}%*\n"
+        if abertas:
+            mensagem += "   *Abertas por faixa:*\n"
+            mensagem += f"     - 10 a 15: {faixas['10 a 15 Dias']}\n"
+            mensagem += f"     - 15 a 30: {faixas['15 a 30 Dias']}\n"
+            mensagem += f"     - 30 a 45: {faixas['30 a 45 Dias']}\n"
+            mensagem += f"     - 45 a 55: {faixas['45 a 55 Dias']}\n"
+            mensagem += f"     - 55 a 60: {faixas['55 a 60 Dias']}\n"
+            mensagem += f"     - >60: {faixas['>= a 61 Dias']}\n"
+        mensagem += "\n"
+        detalhe_meses.append(
+            {
+                "mes": _fmt_mes(mes_ref),
+                "mes_yyyymm": mes_para_yyyymm(mes_ref),
+                "total": total,
+                "pagas": pagas,
+                "abertas": abertas,
+                "perc_aberto": round(perc, 2),
+                "faixas": faixas,
+            }
+        )
+    perc_pdv = (total_ab / total_fat * 100) if total_fat else 0
+    consolidado = f"{indicador} consolidado"
+    if segmento != "todos":
+        consolidado += f" · {ROTULO_SEGMENTO[segmento]}"
+    mensagem += (
+        f"📌 *{consolidado}:* {perc_pdv:.2f}% (Abertas: {total_ab} / Total: {total_fat})"
+    )
+    base = _base_sem_aux(df_pdv)
+    RelatorioFPD.objects.create(
+        lote=lote,
+        parceiro_id=parceiro_id,
+        pdv_nome=str(apelido),
+        indicador=indicador,
+        segmento=segmento,
+        percentual=perc_pdv,
+        total_faturas=total_fat,
+        total_abertas=total_ab,
+        mensagem=mensagem.strip(),
+        detalhes={
+            "meses": detalhe_meses,
+            "codigo_rede": codigo_rede,
+            "total_pagas": total_pg,
+            "indicador": indicador,
+            "segmento": segmento,
+            "base_colunas": list(base.columns),
+            "base": dataframe_para_base(base),
+        },
+    )
+
+
 def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
     df = normalizar_fpd(ler_planilha(arquivo, nome_arquivo))
     col_pdv = resolver_coluna(df, ["APELIDO", "nm_pdv_rel", "NM_PDV_REL", "REDE", "DESC_APELIDO"])
@@ -109,6 +267,7 @@ def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
     col_sit = resolver_coluna(df, ["SITUACAO_FATURA_MENSAL", "DS_SIT_FATURA", "DS_STATUS_FATURA"])
     col_faixa = resolver_coluna(df, ["FAIXA"])
     col_ind = resolver_coluna(df, ["INDICADOR"])
+    col_seg = resolver_coluna(df, ["NM_SEG", "nm_seg", "NM_SEGMENTO", "SEGMENTO"])
     col_rede = resolver_coluna(df, ["cd_rede", "CD_REDE", "cd_sap_original", "CD_SAP_ORIGINAL"])
     faltantes = []
     if not col_pdv:
@@ -123,16 +282,27 @@ def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
         raise ValueError("Colunas FPD ausentes: " + ", ".join(faltantes))
 
     if col_ind:
-        df = df[df[col_ind].fillna("").astype(str).str.strip().str.upper() == "FPD"].copy()
+        df = df.copy()
+        df[_COL_IND] = df[col_ind].map(_normalizar_indicador)
+        df = df[df[_COL_IND].notna()].copy()
+    else:
+        df = df.copy()
+        df[_COL_IND] = "FPD"
+
+    if col_seg:
+        df[_COL_SEG] = df[col_seg].map(_segmento_linha)
+    else:
+        df[_COL_SEG] = None
 
     meses_validos = _meses_janela()
     periodos = df[col_ref].apply(_parse_periodo)
     df = df[periodos.isin(meses_validos)].copy()
     if df.empty:
-        return {"pdvs": 0, "aviso": "Nenhuma linha na janela de 3 meses."}
+        return {"pdvs": 0, "relatorios": 0, "aviso": "Nenhuma linha na janela de 3 meses."}
 
     indice = indice_parceiros()
     RelatorioFPD.objects.filter(lote=lote).delete()
+    gerados_pdvs = 0
     gerados = 0
     sem_parceiro = []
 
@@ -142,84 +312,32 @@ def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
             sem_parceiro.append(str(apelido))
             continue
         RelatorioFPD.objects.filter(parceiro_id=parceiro_id).delete()
-        df_pdv = df[df[col_pdv] == apelido].copy()
-        mensagem = f"📊 *Relatório FPD - {apelido}*\n_(Faturas Por Dia)_\n\n"
-        meses_ref = sorted(df_pdv[col_ref].dropna().unique(), key=lambda x: str(x))
-        total_fat = total_ab = total_pg = 0
-        detalhe_meses = []
-        codigo_rede = ""
-        if col_rede and not df_pdv[col_rede].dropna().empty:
-            codigo_rede = str(df_pdv[col_rede].dropna().iloc[0]).strip()
-            if codigo_rede.endswith(".0") and codigo_rede[:-2].isdigit():
-                codigo_rede = codigo_rede[:-2]
-        for mes_ref in meses_ref:
-            bloco = df_pdv[df_pdv[col_ref] == mes_ref]
-            status = bloco[col_sit].fillna("").astype(str)
-            total = len(bloco)
-            pagas = int(status.apply(_status_paga).sum())
-            abertas = int(status.apply(_status_aberta).sum())
-            perc = (abertas / total * 100) if total else 0
-            total_fat += total
-            total_ab += abertas
-            total_pg += pagas
-            faixas = {
-                "10 a 15 Dias": 0,
-                "15 a 30 Dias": 0,
-                "30 a 45 Dias": 0,
-                "45 a 55 Dias": 0,
-                "55 a 60 Dias": 0,
-                ">= a 61 Dias": 0,
-            }
-            if abertas:
-                abertos = bloco[status.apply(_status_aberta)]
-                contagem = abertos[col_faixa].apply(_normalizar_faixa).dropna().value_counts().to_dict()
-                for chave in faixas:
-                    faixas[chave] = int(contagem.get(chave, 0))
-            mensagem += f"🗓️ *Mês fatura: {_fmt_mes(mes_ref)}*\n"
-            mensagem += f"   - Total: *{total}*\n"
-            mensagem += f"   - Pagas: *{pagas}*\n"
-            mensagem += f"   - Em aberto: *{abertas}*\n"
-            mensagem += f"   - % em aberto: *{perc:.2f}%*\n"
-            if abertas:
-                mensagem += "   *Abertas por faixa:*\n"
-                mensagem += f"     - 10 a 15: {faixas['10 a 15 Dias']}\n"
-                mensagem += f"     - 15 a 30: {faixas['15 a 30 Dias']}\n"
-                mensagem += f"     - 30 a 45: {faixas['30 a 45 Dias']}\n"
-                mensagem += f"     - 45 a 55: {faixas['45 a 55 Dias']}\n"
-                mensagem += f"     - 55 a 60: {faixas['55 a 60 Dias']}\n"
-                mensagem += f"     - >60: {faixas['>= a 61 Dias']}\n"
-            mensagem += "\n"
-            detalhe_meses.append(
-                {
-                    "mes": _fmt_mes(mes_ref),
-                    "mes_yyyymm": mes_para_yyyymm(mes_ref),
-                    "total": total,
-                    "pagas": pagas,
-                    "abertas": abertas,
-                    "perc_aberto": round(perc, 2),
-                    "faixas": faixas,
-                }
-            )
-        perc_pdv = (total_ab / total_fat * 100) if total_fat else 0
-        mensagem += (
-            f"📌 *FPD consolidado:* {perc_pdv:.2f}% (Abertas: {total_ab} / Total: {total_fat})"
-        )
-        RelatorioFPD.objects.create(
-            lote=lote,
-            parceiro_id=parceiro_id,
-            pdv_nome=str(apelido),
-            percentual=perc_pdv,
-            total_faturas=total_fat,
-            total_abertas=total_ab,
-            mensagem=mensagem.strip(),
-            detalhes={
-                "meses": detalhe_meses,
-                "codigo_rede": codigo_rede,
-                "total_pagas": total_pg,
-                "base_colunas": list(df_pdv.columns),
-                "base": dataframe_para_base(df_pdv),
-            },
-        )
-        gerados += 1
+        df_pdv = df[df[col_pdv] == apelido]
+        criou = False
+        for indicador in INDICADORES:
+            df_ind = df_pdv[df_pdv[_COL_IND] == indicador]
+            if df_ind.empty:
+                continue
+            segmentos = SEGMENTOS if col_seg else ("todos",)
+            for segmento in segmentos:
+                bloco = _filtrar_segmento(df_ind, segmento)
+                if bloco.empty:
+                    continue
+                _criar_relatorio(
+                    lote=lote,
+                    parceiro_id=parceiro_id,
+                    apelido=str(apelido),
+                    indicador=indicador,
+                    segmento=segmento,
+                    df_pdv=bloco,
+                    col_ref=col_ref,
+                    col_sit=col_sit,
+                    col_faixa=col_faixa,
+                    col_rede=col_rede,
+                )
+                gerados += 1
+                criou = True
+        if criou:
+            gerados_pdvs += 1
 
-    return {"pdvs": gerados, "sem_parceiro": sem_parceiro}
+    return {"pdvs": gerados_pdvs, "relatorios": gerados, "sem_parceiro": sem_parceiro}

@@ -657,19 +657,36 @@ def enviar_osab_pdv(parceiro: Parceiro, user: AbstractBaseUser | None = None) ->
     )
 
 
-def enviar_fpd_pdv(parceiro: Parceiro, user: AbstractBaseUser | None = None) -> ResumoEnvio:
+def enviar_fpd_pdv(
+    parceiro: Parceiro,
+    user: AbstractBaseUser | None = None,
+    *,
+    indicador: str = "FPD",
+    segmento: str = "todos",
+) -> ResumoEnvio:
     from ..fpd_format import assunto_email_fpd, corpo_texto_email_fpd, html_email_fpd
 
-    rel = RelatorioFPD.objects.filter(parceiro=parceiro).order_by("-criado_em").first()
+    rel = (
+        RelatorioFPD.objects.filter(
+            parceiro=parceiro, indicador=indicador, segmento=segmento
+        )
+        .order_by("-criado_em")
+        .first()
+    )
     if not rel or not rel.mensagem.strip():
-        return ResumoEnvio(ignorados=1, detalhes=[f"{parceiro.nome}: sem relatório FPD."])
+        recorte = indicador if segmento == "todos" else f"{indicador} · {segmento}"
+        return ResumoEnvio(
+            ignorados=1,
+            detalhes=[f"{parceiro.nome}: sem relatório {recorte}."],
+        )
     destinos = destinos_para_envio(user, "envio_fpd", parceiro)
     arquivo_bytes, nome_arquivo = planilha_fpd(rel)
     email_destinos = emails_fpd_especialista(parceiro)
+    caption_seg = "" if rel.segmento == "todos" else f" · {rel.get_segmento_display()}"
     resumo = _enviar_com_anexo(
         tipo=EnvioWhatsApp.Tipo.FPD,
         mensagem=rel.mensagem,
-        caption=f"📁 *FPD* — {rel.pdv_nome}",
+        caption=f"📁 *{rel.indicador}{caption_seg}* — {rel.pdv_nome}",
         destinos=destinos,
         parceiro=parceiro,
         user=user,
@@ -683,13 +700,18 @@ def enviar_fpd_pdv(parceiro: Parceiro, user: AbstractBaseUser | None = None) -> 
     )
     if not email_destinos and smtp_configurado():
         resumo.detalhes.append(
-            f"E-mail FPD não enviado: PDV {parceiro.nome} sem especialista com e-mail cadastrado."
+            f"E-mail {rel.indicador} não enviado: PDV {parceiro.nome} sem especialista com e-mail cadastrado."
         )
-    # Alerta crítico global
+    # Alerta crítico global (só FPD consolidado, para não triplicar o disparo)
     from django.conf import settings
 
     limite = float(getattr(settings, "FPD_PERCENTUAL_CRITICO", 30))
-    if eh_gestor(user) and rel.percentual >= limite:
+    if (
+        eh_gestor(user)
+        and rel.indicador == "FPD"
+        and rel.segmento == "todos"
+        and rel.percentual >= limite
+    ):
         criticos = destinos_para_envio(user, "envio_fpd_critico")
         if criticos:
             alerta = (
