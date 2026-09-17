@@ -1190,6 +1190,85 @@ class BlocoVertical(models.Model):
         return f"{self.nome_bloco} · {self.total_hps_bloco} HPs"
 
 
+class Comunicado(models.Model):
+    class Publico(models.TextChoices):
+        PARCEIROS = "parceiros", "Parceiros (PDV)"
+        EQUIPE = "equipe", "Equipe interna"
+        TODOS = "todos", "Parceiros e equipe"
+
+    titulo = models.CharField("Título", max_length=180)
+    corpo = models.TextField("Comunicado")
+    ativo = models.BooleanField(
+        default=True,
+        help_text="Se desmarcado, deixa de aparecer no login e no sininho.",
+    )
+    publico = models.CharField(
+        "Público",
+        max_length=20,
+        choices=Publico.choices,
+        default=Publico.PARCEIROS,
+        db_index=True,
+    )
+    publicado_em = models.DateTimeField(null=True, blank=True, db_index=True)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="comunicados_criados",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-publicado_em", "-criado_em"]
+        verbose_name = "Comunicado"
+        verbose_name_plural = "Comunicados"
+
+    def __str__(self) -> str:
+        return self.titulo
+
+    def save(self, *args, **kwargs):
+        if self.ativo and self.publicado_em is None:
+            self.publicado_em = timezone.now()
+        super().save(*args, **kwargs)
+
+
+class ComunicadoLeitura(models.Model):
+    comunicado = models.ForeignKey(
+        Comunicado, on_delete=models.CASCADE, related_name="leituras"
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="comunicado_leituras",
+    )
+    entendeu = models.BooleanField(default=True)
+    ticket = models.ForeignKey(
+        Ticket,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="comunicado_leituras",
+    )
+    lido_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["comunicado", "usuario"],
+                name="uniq_comunicado_usuario_leitura",
+            ),
+        ]
+        ordering = ["-lido_em"]
+        verbose_name = "Leitura de comunicado"
+        verbose_name_plural = "Leituras de comunicados"
+
+    def __str__(self) -> str:
+        estado = "entendeu" if self.entendeu else "não entendeu"
+        return f"{self.usuario} · {self.comunicado} ({estado})"
+
+
 from tickets.consultas.vtal_models import (  # noqa: E402, F401
     VtalDadosViabilidade,
     VtalFonteDados,

@@ -53,7 +53,7 @@
       </div>
     </details>
 
-    <details class="app-acc-item" data-acc {% if name == "gestao_whatsapp" or name == "gestao_envios" or "destinatario" in name %}open{% endif %}>
+    <details class="app-acc-item" data-acc {% if name == "gestao_whatsapp" or name == "gestao_envios" or "destinatario" in name or "comunicado" in name %}open{% endif %}>
       <summary>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h9M5 17h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         Comunicação e setup
@@ -62,6 +62,7 @@
         <a href="{% url 'gestao_whatsapp' %}" {% if name == "gestao_whatsapp" %}class="is-on"{% endif %}>WhatsApp</a>
         <a href="{% url 'gestao_destinatarios' %}" {% if "destinatario" in name %}class="is-on"{% endif %}>Destinatários</a>
         <a href="{% url 'gestao_envios' %}?escopo={{ esc }}" {% if name == "gestao_envios" %}class="is-on"{% endif %}>Envios</a>
+        <a href="{% url 'comunicados_gerir' %}" {% if "comunicado" in name %}class="is-on"{% endif %}>Comunicados</a>
       </div>
     </details>
   </nav>

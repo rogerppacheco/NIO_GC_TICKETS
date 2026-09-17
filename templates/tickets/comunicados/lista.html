@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Comunicados · NIO ESPECIALISTA Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Comunicados</h1>
+    <p>Avisos lidos e não lidos. Você pode reabrir qualquer um a qualquer momento.</p>
+  </div>
+  {% if tem_acesso_interno %}
+  <a class="btn btn-secondary" href="{% url 'comunicados_gerir' %}">Gerenciar comunicados</a>
+  {% endif %}
+</div>
+
+<div class="aviso-filtros">
+  <a href="{% url 'comunicados_lista' %}?filtro=todos" {% if filtro == "todos" %}class="is-on"{% endif %}>Todos</a>
+  <a href="{% url 'comunicados_lista' %}?filtro=nao_lidos" {% if filtro == "nao_lidos" %}class="is-on"{% endif %}>
+    Não lidos{% if nao_lidos %} ({{ nao_lidos }}){% endif %}
+  </a>
+  <a href="{% url 'comunicados_lista' %}?filtro=lidos" {% if filtro == "lidos" %}class="is-on"{% endif %}>Lidos</a>
+</div>
+
+<div class="aviso-lista">
+  {% for c in comunicados %}
+  <a class="aviso-item{% if not c.lido %} is-unread{% endif %}" href="{% url 'comunicado_detalhe' c.pk %}">
+    <div>
+      <strong>{{ c.titulo }}</strong>
+      <span class="help">{{ c.publicado_em|date:"d/m/Y H:i" }}</span>
+    </div>
+    {% if c.lido %}
+      <span class="pill resolvido">Lido</span>
+    {% else %}
+      <span class="pill em_analise">Não lido</span>
+    {% endif %}
+  </a>
+  {% empty %}
+  <div class="panel">
+    <div class="panel-b help">Nenhum comunicado neste filtro.</div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

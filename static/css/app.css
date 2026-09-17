@@ -114,6 +114,28 @@ a:hover { text-decoration: underline; }
   gap: 0.2rem;
 }
 .nav-user::after { content: "▾"; font-size: 0.65rem; opacity: 0.65; }
+.nav-bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  padding: 0;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.nav-bell svg { width: 1.25rem; height: 1.25rem; display: block; }
+.nav-bell:hover { color: var(--ink); text-decoration: none; background: #eef3f6; }
+.nav-bell .badge {
+  position: absolute;
+  top: 0.05rem;
+  right: 0.05rem;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  font-size: 0.62rem;
+  padding: 0 0.22rem;
+}
 .nav-account { position: relative; padding-bottom: 0.35rem; margin-bottom: -0.35rem; }
 .nav-account-menu {
   display: none;
@@ -2444,3 +2466,60 @@ body.page-fpd .gestao-escopo + .help { display: none; }
   .fpd-preview { border-left: 0; border-top: 1px solid var(--line); max-height: 40vh; }
   .fpd-toolbar .fpd-send { margin-left: 0; }
 }
+
+.aviso-gate { max-width: 720px; }
+.aviso-gate .eyebrow, .hero .eyebrow {
+  margin: 0 0 0.25rem;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.aviso-card { margin-top: 0.35rem; }
+.aviso-corpo { font-size: 1rem; line-height: 1.55; }
+.aviso-corpo p { margin: 0 0 0.85rem; }
+.aviso-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+.aviso-nota { margin-top: 0.85rem; max-width: 40rem; }
+.aviso-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 0.9rem;
+}
+.aviso-filtros a {
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.88rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.aviso-filtros a:hover, .aviso-filtros a.is-on {
+  text-decoration: none;
+  color: var(--brand);
+  background: #eef8f5;
+  border-color: #c9e8df;
+}
+.aviso-lista { display: grid; gap: 0.55rem; }
+.aviso-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: inherit;
+}
+.aviso-item:hover { text-decoration: none; border-color: #c9d6e0; }
+.aviso-item.is-unread { border-left: 3px solid var(--accent); }
+.aviso-item strong { display: block; }
+.aviso-item .help { display: block; margin-top: 0.15rem; }

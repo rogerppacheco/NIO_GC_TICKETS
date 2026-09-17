@@ -2323,5 +2323,198 @@ class LoginUnificadoTests(TestCase):
         )
 
 
+@override_settings(STORAGES=STORAGES_TESTE)
+class ComunicadoTests(TestCase):
+    def setUp(self):
+        from .seguranca import garantir_conta_parceiro
 
+        User = get_user_model()
+        self.spec = User.objects.create_user(
+            "spec_aviso", "spec@x.com", "senha-spec-ok1", first_name="Spec", is_staff=True
+        )
+        PerfilStaff.objects.create(
+            user=self.spec, papel=PerfilStaff.Papel.ESPECIALISTA, gerencia="P"
+        )
+        self.pdv = Parceiro.objects.create(
+            codigo_pdv="8801",
+            nome="PDV Aviso",
+            especialista=self.spec,
+        )
+        self.user_pdv, _, _ = garantir_conta_parceiro(
+            self.pdv, senha="token-aviso", must_change=False
+        )
+        from .models import Comunicado
 
+        self.aviso = Comunicado.objects.create(
+            titulo="Régua de bloqueio do serviço Nio Fibra",
+            corpo="Pré-pago: bloqueio 5 dias após o vencimento.\nHíbrido: vencimento 25 dias após a instalação.",
+            ativo=True,
+            publico="parceiros",
+        )
+
+    def test_seed_da_migration_nao_roda_nos_testes(self):
+        from .models import Comunicado
+
+        self.assertEqual(
+            Comunicado.objects.filter(
+                titulo="Régua de bloqueio do serviço Nio Fibra"
+            ).count(),
+            1,
+        )
+
+    def test_pdv_e_redirecionado_ao_comunicado_pendente(self):
+        self.client.force_login(self.user_pdv)
+        r = self.client.get(reverse("portal_parceiro"))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/comunicados/pendente/", r["Location"])
+        tela = self.client.get(reverse("comunicado_pendente"))
+        self.assertEqual(tela.status_code, 200)
+        self.assertContains(tela, "Régua de bloqueio do serviço Nio Fibra")
+        self.assertContains(tela, "Li o comunicado/aviso e entendi")
+        self.assertContains(tela, "Li o comunicado e não entendi")
+        self.assertContains(tela, 'class="nav-bell"', html=False)
+
+    def test_especialista_nao_e_preso_por_aviso_de_parceiro(self):
+        self.client.force_login(self.spec)
+        r = self.client.get(reverse("portal_inicio"))
+        self.assertEqual(r.status_code, 200)
+
+    def test_login_do_pdv_cai_no_pendente(self):
+        r = self.client.post(
+            reverse("login"),
+            {"username": "8801", "password": "token-aviso"},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/comunicados/pendente/", r["Location"])
+
+    def test_entendi_libera_o_sistema_sem_demanda(self):
+        self.client.force_login(self.user_pdv)
+        r = self.client.post(
+            reverse("comunicado_pendente"),
+            {"comunicado_id": str(self.aviso.pk), "acao": "entendi"},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/abrir/inicio/", r["Location"])
+        self.assertEqual(Ticket.objects.filter(parceiro=self.pdv).count(), 0)
+        portal = self.client.get(reverse("portal_parceiro"))
+        self.assertEqual(portal.status_code, 302)
+        self.assertIn("/abrir/contato/", portal["Location"])
+        lista = self.client.get(reverse("comunicados_lista"))
+        self.assertEqual(lista.status_code, 200)
+        self.assertContains(lista, "Régua de bloqueio do serviço Nio Fibra")
+        self.assertContains(lista, "Lido")
+
+    def test_nao_entendi_abre_demanda_e_libera(self):
+        self.client.force_login(self.user_pdv)
+        r = self.client.post(
+            reverse("comunicado_pendente"),
+            {"comunicado_id": str(self.aviso.pk), "acao": "nao_entendi"},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/abrir/inicio/", r["Location"])
+        ticket = Ticket.objects.get(parceiro=self.pdv)
+        self.assertEqual(ticket.tipo, TipoDemanda.OUTROS)
+        self.assertIn(
+            "Não entendi o comunicado/aviso [Régua de bloqueio do serviço Nio Fibra].",
+            ticket.descricao,
+        )
+        self.assertTrue(ticket.mensagens.exists())
+        portal = self.client.get(reverse("portal_parceiro"))
+        self.assertEqual(portal.status_code, 302)
+        self.assertIn("/abrir/contato/", portal["Location"])
+        self.client.post(
+            reverse("comunicado_pendente"),
+            {"comunicado_id": str(self.aviso.pk), "acao": "nao_entendi"},
+        )
+        self.assertEqual(Ticket.objects.filter(parceiro=self.pdv).count(), 1)
+
+    def test_troca_de_senha_vem_antes_do_comunicado(self):
+        from .models import ContaAcesso
+
+        ContaAcesso.objects.update_or_create(
+            user=self.user_pdv, defaults={"must_change_password": True}
+        )
+        self.client.force_login(self.user_pdv)
+        r = self.client.get(reverse("portal_parceiro"))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/senha/trocar/", r["Location"])
+        pendente = self.client.get(reverse("comunicado_pendente"))
+        self.assertEqual(pendente.status_code, 302)
+        self.assertIn("/senha/trocar/", pendente["Location"])
+
+    def test_dois_comunicados_em_sequencia(self):
+        from .models import Comunicado
+
+        Comunicado.objects.create(
+            titulo="Segundo aviso",
+            corpo="Outro texto",
+            ativo=True,
+            publico="parceiros",
+        )
+        self.client.force_login(self.user_pdv)
+        primeiro = self.client.post(
+            reverse("comunicado_pendente"),
+            {"comunicado_id": str(self.aviso.pk), "acao": "entendi"},
+        )
+        self.assertEqual(primeiro.status_code, 302)
+        self.assertIn("/comunicados/pendente/", primeiro["Location"])
+        tela = self.client.get(reverse("comunicado_pendente"))
+        self.assertContains(tela, "Segundo aviso")
+        segundo = self.client.post(
+            reverse("comunicado_pendente"),
+            {
+                "comunicado_id": str(Comunicado.objects.get(titulo="Segundo aviso").pk),
+                "acao": "entendi",
+            },
+        )
+        self.assertIn("/abrir/inicio/", segundo["Location"])
+
+    def test_equipe_cria_comunicado_e_pdv_nao_gerencia(self):
+        self.client.force_login(self.spec)
+        form = self.client.get(reverse("comunicado_novo"))
+        self.assertEqual(form.status_code, 200)
+        criado = self.client.post(
+            reverse("comunicado_novo"),
+            {
+                "titulo": "Aviso interno",
+                "corpo": "Texto da equipe",
+                "publico": "equipe",
+                "ativo": "on",
+            },
+        )
+        self.assertEqual(criado.status_code, 302)
+        self.assertIn("/comunicados/gerir/", criado["Location"])
+        from .models import Comunicado
+
+        self.assertTrue(Comunicado.objects.filter(titulo="Aviso interno").exists())
+        self.client.force_login(self.user_pdv)
+        self.client.post(
+            reverse("comunicado_pendente"),
+            {"comunicado_id": str(self.aviso.pk), "acao": "entendi"},
+        )
+        gerir = self.client.get(reverse("comunicados_gerir"))
+        self.assertEqual(gerir.status_code, 302)
+        self.assertIn("/abrir/inicio/", gerir["Location"])
+
+    def test_equipe_precisa_confirmar_aviso_interno(self):
+        from .models import Comunicado
+
+        Comunicado.objects.create(
+            titulo="Mudança interna",
+            corpo="Só equipe",
+            ativo=True,
+            publico="equipe",
+        )
+        self.client.force_login(self.spec)
+        r = self.client.get(reverse("fila"))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/comunicados/pendente/", r["Location"])
+        self.client.post(
+            reverse("comunicado_pendente"),
+            {
+                "comunicado_id": str(Comunicado.objects.get(titulo="Mudança interna").pk),
+                "acao": "entendi",
+            },
+        )
+        self.assertEqual(self.client.get(reverse("fila")).status_code, 200)
+        self.assertEqual(Ticket.objects.count(), 0)

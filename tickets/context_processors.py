@@ -19,6 +19,7 @@ def nav_counts(request):
         "eh_gerencia": False,
         "eh_parceiro": False,
         "tem_acesso_interno": False,
+        "comunicados_nao_lidos": 0,
     }
     user = getattr(request, "user", None)
     if user and user.is_authenticated:
@@ -40,6 +41,9 @@ def nav_counts(request):
                 StatusTicket.CANCELADO,
             ]
         ).count()
+        from .comunicados import contar_nao_lidos
+
+        ctx["comunicados_nao_lidos"] = contar_nao_lidos(user)
 
         pdv = parceiro_de(user)
         if pdv:

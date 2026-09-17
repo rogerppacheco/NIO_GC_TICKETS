@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ comunicado.titulo }} · Comunicados{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <p class="eyebrow">Comunicado</p>
+    <h1>{{ comunicado.titulo }}</h1>
+    <p class="help">
+      Publicado em {{ comunicado.publicado_em|date:"d/m/Y H:i" }}
+      {% if leitura %}
+        · Confirmado em {{ leitura.lido_em|date:"d/m/Y H:i" }}
+        ({% if leitura.entendeu %}entendeu{% else %}não entendeu{% endif %})
+      {% endif %}
+    </p>
+  </div>
+  <a class="btn btn-secondary" href="{% url 'comunicados_lista' %}">← Comunicados</a>
+</div>
+
+<div class="panel aviso-card">
+  <div class="panel-b aviso-corpo">{{ comunicado.corpo|linebreaks }}</div>
+</div>
+{% if leitura and leitura.ticket %}
+<p class="help">Demanda aberta: {{ leitura.ticket.protocolo }}</p>
+{% endif %}
+{% endblock %}

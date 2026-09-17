@@ -5,6 +5,7 @@ from django.shortcuts import redirect
 from django.urls import reverse
 
 from .acesso import aplicar_gerencia_sessao, eh_parceiro, parceiro_de, tem_acesso_interno
+from .comunicados import deve_confirmar_comunicado
 from .seguranca import deve_trocar_senha, sessao_ociosa, tocar_atividade
 
 LIVRE_PREFIXOS = (
@@ -23,6 +24,7 @@ PORTAL_PREFIXOS = (
     "/tradehub/",
     "/senha/",
     "/perfil/",
+    "/comunicados/",
 )
 
 
@@ -63,6 +65,11 @@ class AcessoInternoMiddleware:
 
         if deve_trocar_senha(user) and not _livre(path):
             return redirect("senha_trocar")
+
+        if deve_confirmar_comunicado(user) and not _livre(path) and not path.startswith(
+            "/comunicados/pendente"
+        ):
+            return redirect("comunicado_pendente")
 
         if tem_acesso_interno(user):
             aplicar_gerencia_sessao(request)

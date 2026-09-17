@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo_pagina }} · Comunicados{% endblock %}
+{% block content %}
+<div class="hero">
+  <div><h1>{{ titulo_pagina }}</h1></div>
+  <a class="btn btn-secondary" href="{% url 'comunicados_gerir' %}">← Lista</a>
+</div>
+
+<form method="post" class="panel">
+  <div class="panel-b form-grid">
+    {% csrf_token %}
+    {% for field in form %}
+      <div class="{% if field.field.widget.input_type == 'checkbox' %}checkbox-row{% endif %}"{% if field.name == "corpo" %} style="grid-column:1/-1"{% endif %}>
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+        {% for err in field.errors %}<div class="help warn">{{ err }}</div>{% endfor %}
+      </div>
+    {% endfor %}
+    <div style="grid-column:1/-1">
+      <button class="btn btn-primary" type="submit">Salvar</button>
+    </div>
+  </div>
+</form>
+{% endblock %}

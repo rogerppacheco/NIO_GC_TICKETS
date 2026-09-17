@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Comunicado · NIO ESPECIALISTA Tickets{% endblock %}
+{% block content %}
+<div class="aviso-gate">
+  <div class="hero">
+    <div>
+      <p class="eyebrow">Comunicado obrigatório</p>
+      <h1>{{ comunicado.titulo }}</h1>
+      {% if restantes > 1 %}
+      <p class="help">Há {{ restantes }} comunicados para confirmar. Este é o próximo.</p>
+      {% else %}
+      <p class="help">Confirme a leitura para liberar o acesso ao sistema.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="panel aviso-card">
+    <div class="panel-b aviso-corpo">{{ comunicado.corpo|linebreaks }}</div>
+  </div>
+
+  <form method="post" class="aviso-acoes">
+    {% csrf_token %}
+    <input type="hidden" name="comunicado_id" value="{{ comunicado.pk }}">
+    <button class="btn btn-primary" type="submit" name="acao" value="entendi">
+      Li o comunicado/aviso e entendi
+    </button>
+    <button class="btn btn-secondary" type="submit" name="acao" value="nao_entendi">
+      Li o comunicado e não entendi
+    </button>
+  </form>
+  <p class="help aviso-nota">
+    Se você não entendeu, abre automaticamente uma demanda para o especialista esclarecer.
+    Depois disso o sistema é liberado.
+  </p>
+</div>
+{% endblock %}

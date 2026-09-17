@@ -38,6 +38,7 @@
               <a href="{% url 'acessos' %}">Acessos e senhas</a>
               <a href="{% url 'consultas_hub' %}">DFV</a>
               <a href="{% url 'repositorio_lista' %}">Processos</a>
+              <a href="{% url 'comunicados_gerir' %}">Comunicados</a>
               <a href="{% url 'rota_portal' %}">Rota</a>
               <a href="{% url 'tradehub' %}">Kit de marca</a>
               {% if eh_gestor %}
@@ -54,6 +55,10 @@
             </button>
           </form>
           {% endif %}
+          <a class="nav-bell" href="{% url 'comunicados_lista' %}" title="Comunicados" aria-label="Comunicados{% if comunicados_nao_lidos %}, {{ comunicados_nao_lidos }} não lidos{% endif %}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 1 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6zm4.5 10a1.5 1.5 0 0 0 3 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            {% if comunicados_nao_lidos %}<span class="badge">{{ comunicados_nao_lidos }}</span>{% endif %}
+          </a>
           <div class="nav-account">
             <a class="nav-user" href="{% url 'meu_perfil' %}" title="{{ user.get_full_name|default:user.username }} — Meu perfil">{{ nav_primeiro_nome|default:user.username }}</a>
             <div class="nav-account-menu">
@@ -75,6 +80,10 @@
             <a href="{% url 'repositorio_lista' %}">Processos</a>
             <a href="{% url 'tradehub' %}">Kit de marca</a>
             <a href="{% url 'portal_contato' %}?trocar=1">Trocar contato</a>
+          <a class="nav-bell" href="{% url 'comunicados_lista' %}" title="Comunicados" aria-label="Comunicados{% if comunicados_nao_lidos %}, {{ comunicados_nao_lidos }} não lidos{% endif %}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 1 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6zm4.5 10a1.5 1.5 0 0 0 3 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            {% if comunicados_nao_lidos %}<span class="badge">{{ comunicados_nao_lidos }}</span>{% endif %}
+          </a>
           <div class="nav-account">
             <a class="nav-user" href="{% url 'meu_perfil' %}" title="{{ user.get_full_name|default:user.username }} — Meu perfil">{{ nav_primeiro_nome|default:user.username }}</a>
             <div class="nav-account-menu">

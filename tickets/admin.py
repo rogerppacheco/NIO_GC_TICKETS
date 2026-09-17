@@ -4,6 +4,8 @@ from .models import (
     Anexo,
     BlocoVertical,
     CheckinRotaDiaria,
+    Comunicado,
+    ComunicadoLeitura,
     ContatoParceiro,
     Encaminhamento,
     Mascara,
@@ -202,4 +204,27 @@ class SolicitacaoVerticalAdmin(admin.ModelAdmin):
     list_filter = ("status", "uf")
     search_fields = ("nome_condominio", "nome_sindico", "cep", "cidade")
     inlines = [BlocoVerticalInline]
+
+
+class ComunicadoLeituraInline(admin.TabularInline):
+    model = ComunicadoLeitura
+    extra = 0
+    raw_id_fields = ("usuario", "ticket")
+    readonly_fields = ("lido_em",)
+
+
+@admin.register(Comunicado)
+class ComunicadoAdmin(admin.ModelAdmin):
+    list_display = ("titulo", "publico", "ativo", "publicado_em", "criado_por")
+    list_filter = ("ativo", "publico")
+    search_fields = ("titulo", "corpo")
+    inlines = [ComunicadoLeituraInline]
+
+
+@admin.register(ComunicadoLeitura)
+class ComunicadoLeituraAdmin(admin.ModelAdmin):
+    list_display = ("comunicado", "usuario", "entendeu", "ticket", "lido_em")
+    list_filter = ("entendeu",)
+    search_fields = ("comunicado__titulo", "usuario__username")
+    raw_id_fields = ("comunicado", "usuario", "ticket")
 

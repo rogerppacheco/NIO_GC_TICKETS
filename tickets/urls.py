@@ -1,12 +1,46 @@
 from django.urls import include, path
 
-from . import acessos_views, repositorio_views, rota_views, tradehub_views, vertical_views, views
+from . import (
+    acessos_views,
+    comunicados_views,
+    repositorio_views,
+    rota_views,
+    tradehub_views,
+    vertical_views,
+    views,
+)
 
 urlpatterns = [
     path("", views.home, name="home"),
     path("login/", views.StaffLoginView.as_view(), name="login"),
     path("logout/", views.StaffLogoutView.as_view(), name="logout"),
     path("perfil/", views.meu_perfil, name="meu_perfil"),
+    path("comunicados/", comunicados_views.comunicados_lista, name="comunicados_lista"),
+    path(
+        "comunicados/pendente/",
+        comunicados_views.comunicado_pendente,
+        name="comunicado_pendente",
+    ),
+    path(
+        "comunicados/gerir/",
+        comunicados_views.comunicados_gerir,
+        name="comunicados_gerir",
+    ),
+    path(
+        "comunicados/gerir/novo/",
+        comunicados_views.comunicado_gerir_form,
+        name="comunicado_novo",
+    ),
+    path(
+        "comunicados/gerir/<int:pk>/",
+        comunicados_views.comunicado_gerir_form,
+        name="comunicado_editar",
+    ),
+    path(
+        "comunicados/<int:pk>/",
+        comunicados_views.comunicado_detalhe,
+        name="comunicado_detalhe",
+    ),
     path("senha/trocar/", acessos_views.senha_trocar, name="senha_trocar"),
     path("senha/sessoes/encerrar/", acessos_views.logout_todas_sessoes, name="logout_todas_sessoes"),
     path("acessos/", acessos_views.acessos_lista, name="acessos"),

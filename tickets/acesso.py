@@ -372,6 +372,10 @@ def equipe_required(view_func):
 def destino_pos_login(user) -> str:
     from django.urls import reverse
 
+    from .comunicados import deve_confirmar_comunicado
+
+    if deve_confirmar_comunicado(user):
+        return reverse("comunicado_pendente")
     if eh_parceiro(user) or parceiro_de(user):
         return reverse("portal_parceiro")
     if tem_acesso_interno(user):

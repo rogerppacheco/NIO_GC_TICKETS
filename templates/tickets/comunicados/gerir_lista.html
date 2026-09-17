@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Gerenciar comunicados · NIO ESPECIALISTA Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Comunicados</h1>
+    <p>Cadastre avisos. Parceiros e equipe precisam confirmar a leitura no próximo login.</p>
+  </div>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    <a class="btn btn-primary" href="{% url 'comunicado_novo' %}">Novo comunicado</a>
+    <a class="btn btn-secondary" href="{% url 'comunicados_lista' %}">Ver sininho</a>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-b" style="padding:0">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Título</th>
+          <th>Público</th>
+          <th>Ativo</th>
+          <th>Publicado</th>
+          <th>Leituras</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in comunicados %}
+          <tr>
+            <td>{{ c.titulo }}</td>
+            <td>{{ c.get_publico_display }}</td>
+            <td>{% if c.ativo %}Sim{% else %}Não{% endif %}</td>
+            <td>{% if c.publicado_em %}{{ c.publicado_em|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
+            <td>{{ c.qtd_leituras }}</td>
+            <td><a href="{% url 'comunicado_editar' c.pk %}">Editar</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="help">Nenhum comunicado cadastrado.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
