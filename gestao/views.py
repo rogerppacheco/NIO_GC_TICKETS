@@ -104,6 +104,13 @@ from .parceiros import classificar_parceiros_osab, sincronizar_parceiros_osab
 from .periodo import periodo_ativo, salvar_periodo
 from .pipelines.churn import processar_churn
 from .pipelines.comissionamento import mapa_pdv_razoes, processar_comissionamento
+from .fpd_format import (
+    mes_para_yyyymm,
+    mes_tratar_yyyymm,
+    meses_janela_yyyymm,
+    rotulo_mes_venc,
+    visao_fpd,
+)
 from .pipelines.fpd import (
     INDICADORES,
     ROTULO_INDICADOR,
@@ -1121,9 +1128,42 @@ def _fpd_pdv_id(request) -> str:
     return (request.GET.get("pdv") or request.POST.get("pdv") or "").strip()
 
 
+def _fpd_mes(request) -> str:
+    raw = (request.GET.get("mes") or request.POST.get("mes") or "").strip()
+    chave = mes_para_yyyymm(raw)
+    if len(chave) == 6 and chave.isdigit():
+        return chave
+    return mes_tratar_yyyymm()
+
+
+def _fpd_meses_opcoes(relatorios) -> list[tuple[str, str]]:
+    vistos = set(meses_janela_yyyymm())
+    for rel in relatorios:
+        for mes in (rel.detalhes or {}).get("meses") or []:
+            chave = mes_para_yyyymm(mes.get("mes_yyyymm") or mes.get("mes"))
+            if len(chave) == 6 and chave.isdigit():
+                vistos.add(chave)
+    return [(chave, rotulo_mes_venc(chave)) for chave in sorted(vistos)]
+
+
+def _fpd_com_visao(relatorios, mes_venc: str):
+    linhas = []
+    for rel in relatorios:
+        visao = visao_fpd(rel, mes_venc)
+        if visao is None:
+            continue
+        rel.visao_percentual = visao["percentual"]
+        rel.visao_abertas = visao["abertas"]
+        rel.visao_total = visao["total"]
+        rel.visao_mensagem = visao["mensagem"]
+        linhas.append(rel)
+    linhas.sort(key=lambda r: (-float(r.visao_percentual or 0), r.pdv_nome or ""))
+    return linhas
+
+
 def _fpd_extra(request) -> str:
     ind, seg = _fpd_filtro(request)
-    extra = f"indicador={ind}&segmento={seg}"
+    extra = f"indicador={ind}&segmento={seg}&mes={_fpd_mes(request)}"
     pdv = _fpd_pdv_id(request)
     if pdv.isdigit():
         extra += f"&pdv={pdv}"
@@ -1131,15 +1171,22 @@ def _fpd_extra(request) -> str:
 
 
 def _fpd_parceiros_envio(request, visiveis, ind: str, seg: str):
-    ids = (
+    mes = _fpd_mes(request)
+    ultimos_ids = (
         RelatorioFPD.objects.filter(
             parceiro__in=visiveis,
             indicador=ind,
             segmento=seg,
         )
-        .values_list("parceiro_id", flat=True)
-        .distinct()
+        .values("parceiro_id")
+        .annotate(ultimo_id=Max("id"))
+        .values_list("ultimo_id", flat=True)
     )
+    ids = [
+        rel.parceiro_id
+        for rel in RelatorioFPD.objects.filter(id__in=ultimos_ids)
+        if visao_fpd(rel, mes)
+    ]
     qs = visiveis.filter(id__in=ids)
     pdv = _fpd_pdv_id(request)
     if pdv.isdigit():
@@ -1183,6 +1230,7 @@ def fpd_view(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         action = request.POST.get("action") or ""
         ind, seg = _fpd_filtro(request)
+        mes = _fpd_mes(request)
         visiveis = _parceiros(request)
         rotulo_seg = ROTULO_SEGMENTO.get(seg, seg)
         if action == "enviar_pdv" and _pode_enviar(request):
@@ -1191,7 +1239,12 @@ def fpd_view(request: HttpRequest) -> HttpResponse:
                 request,
                 f"{ind} WhatsApp",
                 enviar_fpd_pdv(
-                    parceiro, request.user, indicador=ind, segmento=seg, canal="whatsapp"
+                    parceiro,
+                    request.user,
+                    indicador=ind,
+                    segmento=seg,
+                    canal="whatsapp",
+                    mes_venc=mes,
                 ),
             )
             return _voltar(request, "gestao_fpd", extra=_fpd_extra(request))
@@ -1201,7 +1254,12 @@ def fpd_view(request: HttpRequest) -> HttpResponse:
                 request,
                 f"{ind} e-mail",
                 enviar_fpd_pdv(
-                    parceiro, request.user, indicador=ind, segmento=seg, canal="email"
+                    parceiro,
+                    request.user,
+                    indicador=ind,
+                    segmento=seg,
+                    canal="email",
+                    mes_venc=mes,
                 ),
             )
             return _voltar(request, "gestao_fpd", extra=_fpd_extra(request))
@@ -1209,7 +1267,7 @@ def fpd_view(request: HttpRequest) -> HttpResponse:
             _enviar_todos_pdv(
                 request,
                 lambda p, user: enviar_fpd_pdv(
-                    p, user, indicador=ind, segmento=seg, canal="whatsapp"
+                    p, user, indicador=ind, segmento=seg, canal="whatsapp", mes_venc=mes
                 ),
                 _fpd_parceiros_envio(request, visiveis, ind, seg),
                 f"{ind} · {rotulo_seg} (WhatsApp)",
@@ -1219,7 +1277,7 @@ def fpd_view(request: HttpRequest) -> HttpResponse:
             _enviar_todos_pdv(
                 request,
                 lambda p, user: enviar_fpd_pdv(
-                    p, user, indicador=ind, segmento=seg, canal="email"
+                    p, user, indicador=ind, segmento=seg, canal="email", mes_venc=mes
                 ),
                 _fpd_parceiros_envio(request, visiveis, ind, seg),
                 f"{ind} · {rotulo_seg} (e-mail)",
@@ -1252,15 +1310,17 @@ def _render_fpd(request, form):
     )
     pdv_raw = _fpd_pdv_id(request)
     pdv_filtro = int(pdv_raw) if pdv_raw.isdigit() else None
+    mes_venc = _fpd_mes(request)
+    mes_tratar = mes_tratar_yyyymm()
+    com_visao = _fpd_com_visao(relatorios, mes_venc)
     if pdv_filtro is not None:
-        filtrados = [r for r in relatorios if r.parceiro_id == pdv_filtro]
-        if filtrados:
-            visiveis_rel = filtrados
+        if any(r.parceiro_id == pdv_filtro for r in relatorios):
+            visiveis_rel = [r for r in com_visao if r.parceiro_id == pdv_filtro]
         else:
             pdv_filtro = None
-            visiveis_rel = relatorios
+            visiveis_rel = com_visao
     else:
-        visiveis_rel = relatorios
+        visiveis_rel = com_visao
     if form is not None:
         form.fields["arquivo"].label = ""
         form.fields["arquivo"].widget.attrs.update(
@@ -1276,6 +1336,10 @@ def _render_fpd(request, form):
             "pdv_filtro": pdv_filtro,
             "indicador": indicador,
             "segmento": segmento,
+            "mes_venc": mes_venc,
+            "mes_tratar": mes_tratar,
+            "meses_opcoes": _fpd_meses_opcoes(relatorios),
+            "rotulo_mes": rotulo_mes_venc(mes_venc),
             "indicadores": INDICADORES,
             "segmentos": [(s, ROTULO_SEGMENTO[s]) for s in SEGMENTOS],
             "rotulo_indicador": ROTULO_INDICADOR[indicador],

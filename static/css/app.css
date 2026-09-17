@@ -2360,6 +2360,11 @@ body.page-fpd .gestao-escopo + .help { display: none; }
   align-items: flex-end;
   gap: 0.4rem;
 }
+.fpd-pick-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
 .fpd-file {
   display: flex;
   flex-direction: column;

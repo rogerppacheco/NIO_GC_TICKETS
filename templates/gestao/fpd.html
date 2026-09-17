@@ -10,6 +10,7 @@
       {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       <input type="hidden" name="indicador" value="{{ indicador }}">
       <input type="hidden" name="segmento" value="{{ segmento }}">
+      <input type="hidden" name="mes" value="{{ mes_venc }}">
       {% if pdv_filtro %}<input type="hidden" name="pdv" value="{{ pdv_filtro }}">{% endif %}
       <label class="fpd-file">
         <span class="help" style="margin:0">Arquivo</span>
@@ -24,23 +25,33 @@
       <input type="hidden" name="escopo" value="{{ gestao_escopo|default:'meus' }}">
       <input type="hidden" name="indicador" value="{{ indicador }}">
       <input type="hidden" name="segmento" value="{{ segmento }}">
-      <label class="help" style="margin:0" for="fpd-pdv">Parceiro</label>
-      <select id="fpd-pdv" name="pdv" class="fila-pick" onchange="this.form.submit()">
-        <option value="">Todos ({{ relatorios_opcoes|length }})</option>
-        {% for r in relatorios_opcoes %}
-        <option value="{{ r.parceiro_id }}" {% if pdv_filtro == r.parceiro_id %}selected{% endif %}>{{ r.pdv_nome }}</option>
-        {% endfor %}
-      </select>
+      <div class="fpd-pick-field">
+        <label class="help" style="margin:0" for="fpd-pdv">Parceiro</label>
+        <select id="fpd-pdv" name="pdv" class="fila-pick" onchange="this.form.submit()">
+          <option value="">Todos ({{ relatorios_opcoes|length }})</option>
+          {% for r in relatorios_opcoes %}
+          <option value="{{ r.parceiro_id }}" {% if pdv_filtro == r.parceiro_id %}selected{% endif %}>{{ r.pdv_nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="fpd-pick-field">
+        <label class="help" style="margin:0" for="fpd-mes">MES_VENC</label>
+        <select id="fpd-mes" name="mes" class="fila-pick" onchange="this.form.submit()">
+          {% for yyyymm, rotulo in meses_opcoes %}
+          <option value="{{ yyyymm }}" {% if mes_venc == yyyymm %}selected{% endif %}>{{ rotulo }}{% if yyyymm == mes_tratar %} · vigente{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
     </form>
 
     <nav class="fpd-pills" aria-label="Indicador">
       {% for ind in indicadores %}
-      <a class="page-tab{% if indicador == ind %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ ind }}&amp;segmento={{ segmento }}{% if pdv_filtro %}&amp;pdv={{ pdv_filtro }}{% endif %}">{{ ind }}</a>
+      <a class="page-tab{% if indicador == ind %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ ind }}&amp;segmento={{ segmento }}&amp;mes={{ mes_venc }}{% if pdv_filtro %}&amp;pdv={{ pdv_filtro }}{% endif %}">{{ ind }}</a>
       {% endfor %}
     </nav>
     <nav class="fpd-pills" aria-label="Segmento">
       {% for seg, rotulo in segmentos %}
-      <a class="page-tab{% if segmento == seg %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ indicador }}&amp;segmento={{ seg }}{% if pdv_filtro %}&amp;pdv={{ pdv_filtro }}{% endif %}">{{ rotulo }}</a>
+      <a class="page-tab{% if segmento == seg %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ indicador }}&amp;segmento={{ seg }}&amp;mes={{ mes_venc }}{% if pdv_filtro %}&amp;pdv={{ pdv_filtro }}{% endif %}">{{ rotulo }}</a>
       {% endfor %}
     </nav>
 
@@ -51,6 +62,7 @@
         <input type="hidden" name="action" value="enviar_todos">
         <input type="hidden" name="indicador" value="{{ indicador }}">
         <input type="hidden" name="segmento" value="{{ segmento }}">
+        <input type="hidden" name="mes" value="{{ mes_venc }}">
         {% if pdv_filtro %}<input type="hidden" name="pdv" value="{{ pdv_filtro }}">{% endif %}
         <button class="btn btn-secondary" type="submit">WhatsApp {% if pdv_filtro %}deste{% else %}todos{% endif %}</button>
       </form>
@@ -61,6 +73,7 @@
         <input type="hidden" name="action" value="enviar_email_todos">
         <input type="hidden" name="indicador" value="{{ indicador }}">
         <input type="hidden" name="segmento" value="{{ segmento }}">
+        <input type="hidden" name="mes" value="{{ mes_venc }}">
         {% if pdv_filtro %}<input type="hidden" name="pdv" value="{{ pdv_filtro }}">{% endif %}
         <button class="btn btn-secondary" type="submit">E-mail {% if pdv_filtro %}deste{% else %}todos{% endif %}</button>
       </form>
@@ -69,7 +82,7 @@
   </div>
 
   <p class="help fpd-meta">
-    {{ rotulo_indicador }} · {{ rotulo_segmento }} · {{ relatorios|length }} PDV{{ relatorios|length|pluralize }}
+    {{ rotulo_indicador }} · {{ rotulo_segmento }} · MES_VENC {{ rotulo_mes }}{% if mes_venc == mes_tratar %} (vigente ~60 dias){% endif %} · {{ relatorios|length }} PDV{{ relatorios|length|pluralize }}
     {% if ultima_importacao %}
     · última importação {{ ultima_importacao.criado_em|date:"d/m/Y H:i" }}{% if ultima_importacao.arquivo_nome %} · {{ ultima_importacao.arquivo_nome }}{% endif %}
     {% endif %}
@@ -92,16 +105,16 @@
           {% for r in relatorios %}
           <tr{% if pdv_filtro == r.parceiro_id %} class="is-on"{% endif %}>
             <td class="num">
-              <span class="fpd-pct{% if r.percentual >= fpd_limite %} is-crit{% elif r.percentual >= 15 %} is-warn{% endif %}">{{ r.percentual|floatformat:2 }}%</span>
+              <span class="fpd-pct{% if r.visao_percentual >= fpd_limite %} is-crit{% elif r.visao_percentual >= 15 %} is-warn{% endif %}">{{ r.visao_percentual|floatformat:2 }}%</span>
             </td>
             <td>
-              <a href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ indicador }}&amp;segmento={{ segmento }}&amp;pdv={{ r.parceiro_id }}">{{ r.pdv_nome }}</a>
+              <a href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ indicador }}&amp;segmento={{ segmento }}&amp;mes={{ mes_venc }}&amp;pdv={{ r.parceiro_id }}">{{ r.pdv_nome }}</a>
             </td>
             <td>{{ r.parceiro.especialista.get_full_name|default:r.parceiro.especialista.username|default:"—" }}</td>
-            <td class="num">{{ r.total_abertas }}</td>
-            <td class="num">{{ r.total_faturas }}</td>
+            <td class="num">{{ r.visao_abertas }}</td>
+            <td class="num">{{ r.visao_total }}</td>
             <td class="col-acoes">
-              <textarea id="fpd-{{ r.id }}" hidden>{{ r.mensagem }}</textarea>
+              <textarea id="fpd-{{ r.id }}" hidden>{{ r.visao_mensagem }}</textarea>
               <div class="fila-actions">
                 <button class="btn btn-secondary" type="button" data-copy-target="fpd-{{ r.id }}">Copiar</button>
                 {% if pode_enviar %}
@@ -111,6 +124,7 @@
                   <input type="hidden" name="parceiro" value="{{ r.parceiro_id }}">
                   <input type="hidden" name="indicador" value="{{ indicador }}">
                   <input type="hidden" name="segmento" value="{{ segmento }}">
+                  <input type="hidden" name="mes" value="{{ mes_venc }}">
                   {% if pdv_filtro %}<input type="hidden" name="pdv" value="{{ pdv_filtro }}">{% endif %}
                   <button class="btn btn-secondary" type="submit">WhatsApp</button>
                 </form>
@@ -122,6 +136,7 @@
                   <input type="hidden" name="parceiro" value="{{ r.parceiro_id }}">
                   <input type="hidden" name="indicador" value="{{ indicador }}">
                   <input type="hidden" name="segmento" value="{{ segmento }}">
+                  <input type="hidden" name="mes" value="{{ mes_venc }}">
                   {% if pdv_filtro %}<input type="hidden" name="pdv" value="{{ pdv_filtro }}">{% endif %}
                   <button class="btn btn-secondary" type="submit"{% if r.parceiro.especialista and r.parceiro.especialista.email %} title="{{ r.parceiro.especialista.email }}"{% endif %}>E-mail</button>
                 </form>
@@ -131,7 +146,7 @@
           </tr>
           {% empty %}
           <tr>
-            <td colspan="6" class="help">Nenhum relatório {{ indicador }}{% if segmento != "todos" %} · {{ rotulo_segmento }}{% endif %} ainda. Importe a planilha para gerar FPD, SPD, TPD e os recortes de segmento.</td>
+            <td colspan="6" class="help">Nenhum relatório {{ indicador }}{% if segmento != "todos" %} · {{ rotulo_segmento }}{% endif %} · MES_VENC {{ rotulo_mes }} neste recorte. Importe a planilha para gerar FPD, SPD, TPD e os recortes de segmento.</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -141,9 +156,9 @@
     <div class="fpd-preview">
       <div class="fpd-preview-h">
         <strong>{{ relatorios.0.pdv_nome }}</strong>
-        <a class="help" href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ indicador }}&amp;segmento={{ segmento }}">Ver todos</a>
+        <a class="help" href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ indicador }}&amp;segmento={{ segmento }}&amp;mes={{ mes_venc }}">Ver todos</a>
       </div>
-      <div class="long-text">{{ relatorios.0.mensagem|linebreaksbr }}</div>
+      <div class="long-text">{{ relatorios.0.visao_mensagem|linebreaksbr }}</div>
     </div>
     {% endif %}
   </div>

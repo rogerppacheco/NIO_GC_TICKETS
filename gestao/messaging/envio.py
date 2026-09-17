@@ -664,8 +664,14 @@ def enviar_fpd_pdv(
     indicador: str = "FPD",
     segmento: str = "todos",
     canal: str = "ambos",
+    mes_venc: str | None = None,
 ) -> ResumoEnvio:
-    from ..fpd_format import assunto_email_fpd, corpo_texto_email_fpd, html_email_fpd
+    from ..fpd_format import (
+        assunto_email_fpd,
+        corpo_texto_email_fpd,
+        html_email_fpd,
+        visao_fpd,
+    )
 
     canal = (canal or "ambos").strip().lower()
     if canal not in {"whatsapp", "email", "ambos"}:
@@ -677,21 +683,27 @@ def enviar_fpd_pdv(
         .order_by("-criado_em")
         .first()
     )
-    if not rel or not rel.mensagem.strip():
+    visao = visao_fpd(rel, mes_venc) if rel else None
+    if not rel or not visao:
         recorte = indicador if segmento == "todos" else f"{indicador} · {segmento}"
+        if mes_venc:
+            recorte = f"{recorte} · {mes_venc}"
         return ResumoEnvio(
             ignorados=1,
             detalhes=[f"{parceiro.nome}: sem relatório {recorte}."],
         )
-    arquivo_bytes, nome_arquivo = planilha_fpd(rel)
+    mensagem = visao["mensagem"]
+    arquivo_bytes, nome_arquivo = planilha_fpd(rel, mes_venc=mes_venc)
     email_destinos = emails_fpd_especialista(parceiro)
     caption_seg = "" if rel.segmento == "todos" else f" · {rel.get_segmento_display()}"
+    if mes_venc:
+        caption_seg += f" · {mes_venc}"
     resumo = ResumoEnvio()
     if canal in {"whatsapp", "ambos"}:
         destinos = destinos_para_envio(user, "envio_fpd", parceiro)
         wa = _enviar_com_anexo(
             tipo=EnvioWhatsApp.Tipo.FPD,
-            mensagem=rel.mensagem,
+            mensagem=mensagem,
             caption=f"📁 *{rel.indicador}{caption_seg}* — {rel.pdv_nome}",
             destinos=destinos,
             parceiro=parceiro,
@@ -708,15 +720,15 @@ def enviar_fpd_pdv(
         _talvez_email(
             flag="envio_fpd",
             tipo=EnvioWhatsApp.Tipo.FPD,
-            mensagem=rel.mensagem,
+            mensagem=mensagem,
             parceiro=parceiro,
             user=user,
             arquivo_bytes=arquivo_bytes,
             nome_arquivo=nome_arquivo,
             resumo=resumo,
-            assunto=assunto_email_fpd(rel),
-            corpo_texto=corpo_texto_email_fpd(rel),
-            corpo_html=html_email_fpd(rel),
+            assunto=assunto_email_fpd(rel, mes_venc),
+            corpo_texto=corpo_texto_email_fpd(rel, mes_venc),
+            corpo_html=html_email_fpd(rel, mes_venc),
             destinos_email=email_destinos,
         )
         if not email_destinos:
@@ -732,14 +744,14 @@ def enviar_fpd_pdv(
             eh_gestor(user)
             and rel.indicador == "FPD"
             and rel.segmento == "todos"
-            and rel.percentual >= limite
+            and visao["percentual"] >= limite
         ):
             criticos = destinos_para_envio(user, "envio_fpd_critico")
             if criticos:
                 alerta = (
                     f"🚨 *Alerta FPD crítico — {rel.pdv_nome}*\n"
-                    f"Percentual FPD: *{rel.percentual:.2f}%* (limite {limite:.2f}%)\n\n"
-                    f"{rel.mensagem}"
+                    f"Percentual FPD: *{visao['percentual']:.2f}%* (limite {limite:.2f}%)\n\n"
+                    f"{mensagem}"
                 )
                 parte = _enviar_para_lista(
                     tipo=EnvioWhatsApp.Tipo.FPD_CRITICO,

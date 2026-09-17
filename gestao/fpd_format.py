@@ -81,17 +81,33 @@ def base_para_dataframe(detalhes: dict) -> pd.DataFrame:
     return df
 
 
+MESES_ABREV = (
+    "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+    "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+)
+
+
 def mes_para_yyyymm(valor) -> str:
     if valor is None:
         return ""
+    if hasattr(valor, "year") and hasattr(valor, "month"):
+        try:
+            return f"{int(valor.year):04d}{int(valor.month):02d}"
+        except (TypeError, ValueError):
+            pass
     texto = str(valor).strip()
     if texto.endswith(".0") and texto[:-2].isdigit():
         texto = texto[:-2]
     if texto.isdigit() and len(texto) == 6:
         return texto
+    iso = re.match(r"^(\d{4})-(\d{2})", texto)
+    if iso:
+        return f"{iso.group(1)}{iso.group(2)}"
     if "/" in texto:
         try:
             a, b = texto.split("/", 1)
+            if a[:3].title() in MESES_ABREV:
+                return f"{int(b):04d}{MESES_ABREV.index(a[:3].title()) + 1:02d}"
             if len(a) == 4:
                 return f"{int(a):04d}{int(b):02d}"
             return f"{int(b):04d}{int(a):02d}"
@@ -100,9 +116,134 @@ def mes_para_yyyymm(valor) -> str:
     return texto
 
 
+def rotulo_mes_venc(yyyymm: str) -> str:
+    chave = mes_para_yyyymm(yyyymm)
+    if len(chave) == 6 and chave.isdigit():
+        mes = int(chave[4:6])
+        if 1 <= mes <= 12:
+            return f"{MESES_ABREV[mes - 1]}/{chave[:4]}"
+    return yyyymm or ""
+
+
+def mes_tratar_yyyymm(hoje: date | None = None) -> str:
+    """Mês de vencimento prestes a completar 60 dias (hoje − 2 meses)."""
+    from django.utils import timezone
+
+    d = hoje or timezone.localdate()
+    mes = d.month - 2
+    ano = d.year
+    if mes <= 0:
+        mes += 12
+        ano -= 1
+    return f"{ano:04d}{mes:02d}"
+
+
+def meses_janela_yyyymm(hoje: date | None = None) -> list[str]:
+    from django.utils import timezone
+
+    d = hoje or timezone.localdate()
+    meses = []
+    ano, mes = d.year, d.month
+    for _ in range(3):
+        meses.append(f"{ano:04d}{mes:02d}")
+        mes -= 1
+        if mes <= 0:
+            mes = 12
+            ano -= 1
+    return list(reversed(meses))
+
+
 def _meses_ordenados(detalhes: dict) -> list[dict]:
     meses = list((detalhes or {}).get("meses") or [])
     return sorted(meses, key=lambda m: mes_para_yyyymm(m.get("mes_yyyymm") or m.get("mes")))
+
+
+def _meses_do_recorte(rel: RelatorioFPD, mes_venc: str | None) -> list[dict] | None:
+    """None = PDV sem aquele MES_VENC (quando a base tem breakdown)."""
+    meses = _meses_ordenados(rel.detalhes or {})
+    if not mes_venc:
+        return meses
+    alvo = mes_para_yyyymm(mes_venc)
+    filtrados = [
+        m for m in meses if mes_para_yyyymm(m.get("mes_yyyymm") or m.get("mes")) == alvo
+    ]
+    if filtrados:
+        return filtrados
+    if meses:
+        return None
+    return []
+
+
+def visao_fpd(rel: RelatorioFPD, mes_venc: str | None = None) -> dict | None:
+    """Totais e texto do relatório no MES_VENC (ou consolidado se mes_venc vazio)."""
+    meses = _meses_do_recorte(rel, mes_venc)
+    if meses is None:
+        return None
+    if not meses:
+        return {
+            "percentual": rel.percentual,
+            "total": rel.total_faturas,
+            "abertas": rel.total_abertas,
+            "pagas": _total_pagas(rel),
+            "mensagem": rel.mensagem,
+            "meses": [],
+        }
+    total = sum(int(m.get("total") or 0) for m in meses)
+    abertas = sum(int(m.get("abertas") or 0) for m in meses)
+    pagas = sum(int(m.get("pagas") or 0) for m in meses)
+    perc = (abertas / total * 100) if total else 0.0
+    return {
+        "percentual": perc,
+        "total": total,
+        "abertas": abertas,
+        "pagas": pagas,
+        "mensagem": _mensagem_visao(rel, meses, perc, total, abertas, mes_venc),
+        "meses": meses,
+    }
+
+
+def _mensagem_visao(
+    rel: RelatorioFPD,
+    meses: list[dict],
+    perc: float,
+    total: int,
+    abertas: int,
+    mes_venc: str | None,
+) -> str:
+    ind = rel.indicador or "FPD"
+    sub = {
+        "FPD": "Primeira fatura",
+        "SPD": "Segunda fatura",
+        "TPD": "Terceira fatura",
+    }.get(ind, ind)
+    if (rel.segmento or "todos") != "todos":
+        sub += f" · {rel.get_segmento_display()}"
+    if mes_venc:
+        sub += f" · MES_VENC {rotulo_mes_venc(mes_venc)}"
+    linhas = [f"📊 *Relatório {ind} - {rel.pdv_nome}*", f"_({sub})_", ""]
+    for mes in meses:
+        faixas = mes.get("faixas") or {}
+        linhas.append(f"🗓️ *Mês fatura: {mes.get('mes') or rotulo_mes_venc(str(mes.get('mes_yyyymm') or ''))}*")
+        linhas.append(f"   - Total: *{int(mes.get('total') or 0)}*")
+        linhas.append(f"   - Pagas: *{int(mes.get('pagas') or 0)}*")
+        linhas.append(f"   - Em aberto: *{int(mes.get('abertas') or 0)}*")
+        linhas.append(f"   - % em aberto: *{float(mes.get('perc_aberto') or 0):.2f}%*")
+        if int(mes.get("abertas") or 0):
+            linhas.append("   *Abertas por faixa:*")
+            linhas.append(f"     - 10 a 15: {int(faixas.get('10 a 15 Dias') or 0)}")
+            linhas.append(f"     - 15 a 30: {int(faixas.get('15 a 30 Dias') or 0)}")
+            linhas.append(f"     - 30 a 45: {int(faixas.get('30 a 45 Dias') or 0)}")
+            linhas.append(f"     - 45 a 55: {int(faixas.get('45 a 55 Dias') or 0)}")
+            linhas.append(f"     - 55 a 60: {int(faixas.get('55 a 60 Dias') or 0)}")
+            linhas.append(f"     - >60: {int(faixas.get('>= a 61 Dias') or 0)}")
+        linhas.append("")
+    consolidado = f"{ind} consolidado"
+    if (rel.segmento or "todos") != "todos":
+        consolidado += f" · {rel.get_segmento_display()}"
+    if mes_venc:
+        consolidado += f" · {rotulo_mes_venc(mes_venc)}"
+    linhas.append(f"📌 *{consolidado}:* {perc:.2f}% (Abertas: {abertas} / Total: {total})")
+    return "\n".join(linhas).strip()
 
 
 def _intervalo_meses(meses: list[dict]) -> str:
@@ -142,8 +283,14 @@ def _fmt_percentual_br(valor: float) -> str:
     return f"{valor:.2f}".replace(".", ",") + "%"
 
 
-def _tabela_resumo(rel: RelatorioFPD) -> list[list[str]]:
-    meses = _meses_ordenados(rel.detalhes or {})
+def _tabela_resumo(rel: RelatorioFPD, mes_venc: str | None = None) -> list[list[str]]:
+    recorte = _meses_do_recorte(rel, mes_venc)
+    if recorte is None:
+        meses = []
+    elif recorte:
+        meses = recorte
+    else:
+        meses = _meses_ordenados(rel.detalhes or {})
     cabecalho = ["MÊS FATURA"] + [mes_para_yyyymm(m.get("mes_yyyymm") or m.get("mes")) for m in meses]
     linhas = [cabecalho]
     linhas.append(["FATURA PAGA"] + [str(int(m.get("pagas") or 0)) for m in meses])
@@ -175,12 +322,22 @@ def _estilo_faixa(label: str) -> tuple[str, str]:
     return ("FFFFFF", "000000")
 
 
-def planilha_fpd(rel: RelatorioFPD) -> tuple[bytes, str]:
+def _filtrar_base_mes(df: pd.DataFrame, mes_venc: str | None) -> pd.DataFrame:
+    if df.empty or not mes_venc:
+        return df
+    alvo = mes_para_yyyymm(mes_venc)
+    for col in ("REF_VENCTO", "MES_VENC", "MES_VENCIMENTO"):
+        if col in df.columns:
+            return df[df[col].map(lambda v: mes_para_yyyymm(v) == alvo)]
+    return df
+
+
+def planilha_fpd(rel: RelatorioFPD, mes_venc: str | None = None) -> tuple[bytes, str]:
     wb = Workbook()
     ws_resumo = wb.active
     ws_resumo.title = "Planilha1"
 
-    tabela = _tabela_resumo(rel)
+    tabela = _tabela_resumo(rel, mes_venc)
     for r_idx, linha in enumerate(tabela, start=1):
         for c_idx, valor in enumerate(linha, start=1):
             cell = ws_resumo.cell(row=r_idx, column=c_idx, value=valor)
@@ -194,11 +351,11 @@ def planilha_fpd(rel: RelatorioFPD) -> tuple[bytes, str]:
             if linha[0] == "% ABERTO" and c_idx > 1:
                 cell.font = Font(bold=True, underline="single")
 
-    for col in range(1, len(tabela[0]) + 1):
+    for col in range(1, max(len(tabela[0]) if tabela else 1, 1) + 1):
         ws_resumo.column_dimensions[get_column_letter(col)].width = 16
 
     ws_base = wb.create_sheet("BASE_PRE_FPD_ABERTO")
-    df_base = base_para_dataframe(rel.detalhes or {})
+    df_base = _filtrar_base_mes(base_para_dataframe(rel.detalhes or {}), mes_venc)
     if df_base.empty:
         ws_base.append(["Sem base detalhada para este PDV."])
     else:
@@ -212,17 +369,20 @@ def planilha_fpd(rel: RelatorioFPD) -> tuple[bytes, str]:
     wb.save(buf)
     codigo = _codigo_rede(rel)
     sufixo = f"{codigo}-" if codigo else ""
-    recorte = _recorte_arquivo(rel)
+    recorte = _recorte_arquivo(rel, mes_venc)
     nome = f"FATURAS_ABERTAS_PRE-FIBRA-{recorte}{sufixo}{_tag_arquivo(rel.pdv_nome)}.xlsx"
     return buf.getvalue(), nome
 
 
-def _recorte_arquivo(rel: RelatorioFPD) -> str:
+def _recorte_arquivo(rel: RelatorioFPD, mes_venc: str | None = None) -> str:
     ind = (rel.indicador or "FPD").upper()
     seg = (rel.segmento or "todos").lower()
-    if seg == "todos":
-        return f"{ind}-"
-    return f"{ind}-{seg.upper()}-"
+    partes = [ind]
+    if seg != "todos":
+        partes.append(seg.upper())
+    if mes_venc:
+        partes.append(mes_para_yyyymm(mes_venc))
+    return "-".join(partes) + "-"
 
 
 def _recorte_texto(rel: RelatorioFPD) -> str:
@@ -232,27 +392,36 @@ def _recorte_texto(rel: RelatorioFPD) -> str:
     return f"{ind} · {rel.get_segmento_display()}"
 
 
-def assunto_email_fpd(rel: RelatorioFPD) -> str:
+def assunto_email_fpd(rel: RelatorioFPD, mes_venc: str | None = None) -> str:
     codigo = _codigo_rede(rel)
     pdv = (rel.pdv_nome or rel.parceiro.nome or "PDV").strip().upper()
-    recorte = _recorte_arquivo(rel).rstrip("-")
+    recorte = _recorte_arquivo(rel, mes_venc).rstrip("-")
     if codigo:
         return f"FATURAS_ABERTAS_PRÉ-FIBRA-{recorte}{codigo}-{pdv}"
     return f"FATURAS_ABERTAS_PRÉ-FIBRA-{recorte}-{pdv}"
 
 
-def html_email_fpd(rel: RelatorioFPD) -> str:
+def html_email_fpd(rel: RelatorioFPD, mes_venc: str | None = None) -> str:
+    visao = visao_fpd(rel, mes_venc) or {
+        "percentual": rel.percentual,
+        "total": rel.total_faturas,
+        "abertas": rel.total_abertas,
+        "pagas": _total_pagas(rel),
+        "meses": _meses_ordenados(rel.detalhes or {}),
+    }
     pdv = (rel.pdv_nome or rel.parceiro.nome or "PDV").strip().upper()
-    meses = _meses_ordenados(rel.detalhes or {})
-    intervalo = _intervalo_meses(meses)
-    total = rel.total_faturas
-    pagas = _total_pagas(rel)
-    abertas = rel.total_abertas
-    perc = rel.percentual
+    meses = visao.get("meses") or _meses_ordenados(rel.detalhes or {})
+    intervalo = rotulo_mes_venc(mes_venc) if mes_venc else _intervalo_meses(meses)
+    total = visao["total"]
+    pagas = visao["pagas"]
+    abertas = visao["abertas"]
+    perc = visao["percentual"]
     recorte = _recorte_texto(rel)
+    if mes_venc:
+        recorte = f"{recorte} · {rotulo_mes_venc(mes_venc)}"
 
     linhas_html = []
-    tabela = _tabela_resumo(rel)
+    tabela = _tabela_resumo(rel, mes_venc)
     for r_idx, linha in enumerate(tabela):
         cells = []
         for c_idx, valor in enumerate(linha):
@@ -291,17 +460,25 @@ Faturas Abertas com vencimento menor que 61 dias.<br>
 </body></html>"""
 
 
-def corpo_texto_email_fpd(rel: RelatorioFPD) -> str:
+def corpo_texto_email_fpd(rel: RelatorioFPD, mes_venc: str | None = None) -> str:
+    visao = visao_fpd(rel, mes_venc)
     pdv = (rel.pdv_nome or rel.parceiro.nome or "PDV").strip().upper()
-    intervalo = _intervalo_meses(_meses_ordenados(rel.detalhes or {}))
+    meses = (visao or {}).get("meses") or _meses_ordenados(rel.detalhes or {})
+    intervalo = rotulo_mes_venc(mes_venc) if mes_venc else _intervalo_meses(meses)
     recorte = _recorte_texto(rel)
+    if mes_venc:
+        recorte = f"{recorte} · {rotulo_mes_venc(mes_venc)}"
+    total = visao["total"] if visao else rel.total_faturas
+    pagas = visao["pagas"] if visao else _total_pagas(rel)
+    abertas = visao["abertas"] if visao else rel.total_abertas
+    perc = visao["percentual"] if visao else rel.percentual
     return (
         f"Bom dia, prezado parceiro!\n\n"
         f"{pdv}\n\n"
         f"Segue Faturas abertas ({recorte}) 15 a 60 dias em aberto "
         f"com vencimento nos meses de {intervalo}.\n"
-        f"Total: {rel.total_faturas} | Pagas: {_total_pagas(rel)} | "
-        f"Em aberto ({rel.indicador or 'FPD'}): {rel.total_abertas} | "
-        f"Percentual: {rel.percentual:.2f}%\n\n"
+        f"Total: {total} | Pagas: {pagas} | "
+        f"Em aberto ({rel.indicador or 'FPD'}): {abertas} | "
+        f"Percentual: {perc:.2f}%\n\n"
         f"Planilha detalhada em anexo."
     )

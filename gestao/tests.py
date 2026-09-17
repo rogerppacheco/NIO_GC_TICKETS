@@ -1027,6 +1027,71 @@ class FpdChurnTests(TestCase):
         self.assertIn("Faixas e Quantidades", html)
         self.assertIn("APOLO", html)
 
+    def test_mes_tratar_e_visao_fpd(self):
+        from gestao.fpd_format import mes_tratar_yyyymm, meses_janela_yyyymm, visao_fpd
+
+        self.assertEqual(mes_tratar_yyyymm(date(2026, 9, 16)), "202607")
+        self.assertEqual(mes_tratar_yyyymm(date(2026, 1, 10)), "202511")
+        self.assertEqual(
+            meses_janela_yyyymm(date(2026, 9, 16)), ["202607", "202608", "202609"]
+        )
+        lote = LoteImportacao.objects.create(tipo="fpd", arquivo_nome="v.xlsx", ok=True)
+        rel = RelatorioFPD.objects.create(
+            lote=lote,
+            parceiro=self.pdv,
+            pdv_nome="APOLO",
+            indicador="FPD",
+            segmento="todos",
+            percentual=50,
+            total_faturas=18,
+            total_abertas=7,
+            mensagem="CONSOLIDADO",
+            detalhes={
+                "meses": [
+                    {
+                        "mes": "Mai/2026",
+                        "mes_yyyymm": "202605",
+                        "total": 10,
+                        "pagas": 9,
+                        "abertas": 1,
+                        "perc_aberto": 10.0,
+                        "faixas": {},
+                    },
+                    {
+                        "mes": "Jul/2026",
+                        "mes_yyyymm": "202607",
+                        "total": 8,
+                        "pagas": 2,
+                        "abertas": 6,
+                        "perc_aberto": 75.0,
+                        "faixas": {"15 a 30 Dias": 6},
+                    },
+                ]
+            },
+        )
+        jul = visao_fpd(rel, "202607")
+        self.assertEqual(jul["abertas"], 6)
+        self.assertEqual(jul["total"], 8)
+        self.assertAlmostEqual(jul["percentual"], 75.0)
+        self.assertIn("Jul/2026", jul["mensagem"])
+        self.assertNotIn("Mai/2026", jul["mensagem"])
+        self.assertIsNone(visao_fpd(rel, "202601"))
+        legado = RelatorioFPD.objects.create(
+            lote=lote,
+            parceiro=self.pdv,
+            pdv_nome="APOLO LEGADO",
+            indicador="SPD",
+            segmento="todos",
+            percentual=10,
+            total_faturas=10,
+            total_abertas=1,
+            mensagem="LEGADO",
+            detalhes={},
+        )
+        vis_legado = visao_fpd(legado, "202607")
+        self.assertEqual(vis_legado["mensagem"], "LEGADO")
+        self.assertEqual(vis_legado["abertas"], 1)
+
     def test_fpd_reimport_nao_duplica_pdv(self):
         mes = timezone.localdate().strftime("%m/%Y")
         lote1 = LoteImportacao.objects.create(tipo="fpd", arquivo_nome="f1.xlsx", ok=True)
@@ -1283,6 +1348,122 @@ class GestaoViewsTests(TestCase):
         kwargs = mock_env.call_args.kwargs
         self.assertEqual(kwargs.get("canal"), "email")
         self.assertEqual(kwargs.get("indicador"), "FPD")
+        from gestao.fpd_format import mes_tratar_yyyymm
+
+        self.assertEqual(kwargs.get("mes_venc"), mes_tratar_yyyymm())
+
+    def test_fpd_filtra_mes_venc(self):
+        from gestao.fpd_format import mes_tratar_yyyymm, meses_janela_yyyymm, rotulo_mes_venc
+
+        tratar = mes_tratar_yyyymm()
+        outro = next(m for m in meses_janela_yyyymm() if m != tratar)
+        pdv = Parceiro.objects.create(
+            codigo_pdv="fpd-mes", nome="APOLO MES", especialista=self.gestor
+        )
+        so_antigo = Parceiro.objects.create(
+            codigo_pdv="fpd-old", nome="PDV ANTIGO", especialista=self.gestor
+        )
+        legado = Parceiro.objects.create(
+            codigo_pdv="fpd-leg", nome="PDV LEGADO", especialista=self.gestor
+        )
+        lote = LoteImportacao.objects.create(tipo="fpd", arquivo_nome="m.xlsx", ok=True)
+        RelatorioFPD.objects.create(
+            lote=lote,
+            parceiro=pdv,
+            pdv_nome="APOLO MES",
+            indicador="FPD",
+            segmento="todos",
+            percentual=50,
+            total_faturas=18,
+            total_abertas=7,
+            mensagem="CARD CONSOLIDADO",
+            detalhes={
+                "meses": [
+                    {
+                        "mes": rotulo_mes_venc(outro),
+                        "mes_yyyymm": outro,
+                        "total": 10,
+                        "pagas": 9,
+                        "abertas": 1,
+                        "perc_aberto": 10.0,
+                        "faixas": {},
+                    },
+                    {
+                        "mes": rotulo_mes_venc(tratar),
+                        "mes_yyyymm": tratar,
+                        "total": 8,
+                        "pagas": 2,
+                        "abertas": 6,
+                        "perc_aberto": 75.0,
+                        "faixas": {"15 a 30 Dias": 6},
+                    },
+                ]
+            },
+        )
+        RelatorioFPD.objects.create(
+            lote=lote,
+            parceiro=so_antigo,
+            pdv_nome="PDV ANTIGO",
+            indicador="FPD",
+            segmento="todos",
+            percentual=90,
+            total_faturas=5,
+            total_abertas=5,
+            mensagem="CARD ANTIGO",
+            detalhes={
+                "meses": [
+                    {
+                        "mes": "Jan/2020",
+                        "mes_yyyymm": "202001",
+                        "total": 5,
+                        "pagas": 0,
+                        "abertas": 5,
+                        "perc_aberto": 100.0,
+                        "faixas": {},
+                    }
+                ]
+            },
+        )
+        RelatorioFPD.objects.create(
+            lote=lote,
+            parceiro=legado,
+            pdv_nome="PDV LEGADO",
+            indicador="FPD",
+            segmento="todos",
+            percentual=10,
+            total_faturas=10,
+            total_abertas=1,
+            mensagem="CARD LEGADO",
+            detalhes={},
+        )
+        self.client.force_login(self.gestor)
+        padrao = self.client.get(reverse("gestao_fpd"))
+        self.assertEqual(padrao.context["mes_venc"], tratar)
+        self.assertContains(padrao, 'name="mes"')
+        self.assertContains(padrao, "MES_VENC")
+        self.assertContains(padrao, "CARD LEGADO")
+        self.assertNotContains(padrao, "CARD ANTIGO")
+        ids_padrao = [r.parceiro_id for r in padrao.context["relatorios"]]
+        self.assertIn(pdv.id, ids_padrao)
+        self.assertIn(legado.id, ids_padrao)
+        self.assertNotIn(so_antigo.id, ids_padrao)
+        apolo = next(r for r in padrao.context["relatorios"] if r.parceiro_id == pdv.id)
+        self.assertEqual(apolo.visao_abertas, 6)
+        self.assertEqual(apolo.visao_total, 8)
+        self.assertAlmostEqual(apolo.visao_percentual, 75.0)
+        outro_resp = self.client.get(reverse("gestao_fpd"), {"mes": outro})
+        self.assertEqual(outro_resp.context["mes_venc"], outro)
+        apolo_outro = next(
+            r for r in outro_resp.context["relatorios"] if r.parceiro_id == pdv.id
+        )
+        self.assertEqual(apolo_outro.visao_abertas, 1)
+        self.assertEqual(apolo_outro.visao_total, 10)
+        self.assertContains(outro_resp, rotulo_mes_venc(outro))
+        antigo = self.client.get(reverse("gestao_fpd"), {"mes": "202001"})
+        ids_antigo = [r.parceiro_id for r in antigo.context["relatorios"]]
+        self.assertIn(so_antigo.id, ids_antigo)
+        self.assertNotIn(pdv.id, ids_antigo)
+        self.assertIn(legado.id, ids_antigo)
 
     @override_settings(
         EVOLUTION_API_URL="https://evo.test",
