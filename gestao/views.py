@@ -1117,9 +1117,40 @@ def _fpd_filtro(request) -> tuple[str, str]:
     return ind, seg
 
 
+def _fpd_pdv_id(request) -> str:
+    return (request.GET.get("pdv") or request.POST.get("pdv") or "").strip()
+
+
 def _fpd_extra(request) -> str:
     ind, seg = _fpd_filtro(request)
-    return f"indicador={ind}&segmento={seg}"
+    extra = f"indicador={ind}&segmento={seg}"
+    pdv = _fpd_pdv_id(request)
+    if pdv.isdigit():
+        extra += f"&pdv={pdv}"
+    return extra
+
+
+def _fpd_parceiros_envio(request, visiveis, ind: str, seg: str):
+    ids = (
+        RelatorioFPD.objects.filter(
+            parceiro__in=visiveis,
+            indicador=ind,
+            segmento=seg,
+        )
+        .values_list("parceiro_id", flat=True)
+        .distinct()
+    )
+    qs = visiveis.filter(id__in=ids)
+    pdv = _fpd_pdv_id(request)
+    if pdv.isdigit():
+        qs = qs.filter(id=int(pdv))
+    return qs
+
+
+def _pode_email_fpd(request) -> bool:
+    from gestao.messaging.email_smtp import smtp_configurado
+
+    return tem_acesso_interno(request.user) and smtp_configurado()
 
 
 @login_required
@@ -1152,32 +1183,46 @@ def fpd_view(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         action = request.POST.get("action") or ""
         ind, seg = _fpd_filtro(request)
+        visiveis = _parceiros(request)
+        rotulo_seg = ROTULO_SEGMENTO.get(seg, seg)
         if action == "enviar_pdv" and _pode_enviar(request):
-            parceiro = get_object_or_404(_parceiros(request), pk=request.POST.get("parceiro"))
+            parceiro = get_object_or_404(visiveis, pk=request.POST.get("parceiro"))
             _flash_resumo(
                 request,
-                f"{ind}",
-                enviar_fpd_pdv(parceiro, request.user, indicador=ind, segmento=seg),
+                f"{ind} WhatsApp",
+                enviar_fpd_pdv(
+                    parceiro, request.user, indicador=ind, segmento=seg, canal="whatsapp"
+                ),
+            )
+            return _voltar(request, "gestao_fpd", extra=_fpd_extra(request))
+        if action == "enviar_email_pdv" and _pode_email_fpd(request):
+            parceiro = get_object_or_404(visiveis, pk=request.POST.get("parceiro"))
+            _flash_resumo(
+                request,
+                f"{ind} e-mail",
+                enviar_fpd_pdv(
+                    parceiro, request.user, indicador=ind, segmento=seg, canal="email"
+                ),
             )
             return _voltar(request, "gestao_fpd", extra=_fpd_extra(request))
         if action == "enviar_todos" and _pode_enviar(request):
-            ids = (
-                RelatorioFPD.objects.filter(
-                    parceiro__in=_parceiros(request),
-                    indicador=ind,
-                    segmento=seg,
-                )
-                .values_list("parceiro_id", flat=True)
-                .distinct()
-            )
-            rotulo_seg = ROTULO_SEGMENTO.get(seg, seg)
             _enviar_todos_pdv(
                 request,
                 lambda p, user: enviar_fpd_pdv(
-                    p, user, indicador=ind, segmento=seg
+                    p, user, indicador=ind, segmento=seg, canal="whatsapp"
                 ),
-                _parceiros(request).filter(id__in=ids),
-                f"{ind} · {rotulo_seg}",
+                _fpd_parceiros_envio(request, visiveis, ind, seg),
+                f"{ind} · {rotulo_seg} (WhatsApp)",
+            )
+            return _voltar(request, "gestao_fpd", extra=_fpd_extra(request))
+        if action == "enviar_email_todos" and _pode_email_fpd(request):
+            _enviar_todos_pdv(
+                request,
+                lambda p, user: enviar_fpd_pdv(
+                    p, user, indicador=ind, segmento=seg, canal="email"
+                ),
+                _fpd_parceiros_envio(request, visiveis, ind, seg),
+                f"{ind} · {rotulo_seg} (e-mail)",
             )
             return _voltar(request, "gestao_fpd", extra=_fpd_extra(request))
         if _pode_importar(request) and request.FILES:
@@ -1186,6 +1231,8 @@ def fpd_view(request: HttpRequest) -> HttpResponse:
 
 
 def _render_fpd(request, form):
+    from django.conf import settings
+
     visiveis = _parceiros(request)
     indicador, segmento = _fpd_filtro(request)
     ultimos_ids = (
@@ -1198,25 +1245,45 @@ def _render_fpd(request, form):
         .annotate(ultimo_id=Max("id"))
         .values_list("ultimo_id", flat=True)
     )
-    relatorios = (
+    relatorios = list(
         RelatorioFPD.objects.select_related("parceiro__especialista", "lote")
         .filter(id__in=ultimos_ids)
         .order_by("-percentual", "pdv_nome")
     )
+    pdv_raw = _fpd_pdv_id(request)
+    pdv_filtro = int(pdv_raw) if pdv_raw.isdigit() else None
+    if pdv_filtro is not None:
+        filtrados = [r for r in relatorios if r.parceiro_id == pdv_filtro]
+        if filtrados:
+            visiveis_rel = filtrados
+        else:
+            pdv_filtro = None
+            visiveis_rel = relatorios
+    else:
+        visiveis_rel = relatorios
+    if form is not None:
+        form.fields["arquivo"].label = ""
+        form.fields["arquivo"].widget.attrs.update(
+            {"accept": ".xlsx,.xls,.xlsb", "title": "Planilha FPD/SPD/TPD"}
+        )
     return render(
         request,
         "gestao/fpd.html",
         {
             "form": form,
-            "relatorios": relatorios,
+            "relatorios": visiveis_rel,
+            "relatorios_opcoes": relatorios,
+            "pdv_filtro": pdv_filtro,
             "indicador": indicador,
             "segmento": segmento,
             "indicadores": INDICADORES,
             "segmentos": [(s, ROTULO_SEGMENTO[s]) for s in SEGMENTOS],
             "rotulo_indicador": ROTULO_INDICADOR[indicador],
             "rotulo_segmento": ROTULO_SEGMENTO[segmento],
+            "fpd_limite": float(getattr(settings, "FPD_PERCENTUAL_CRITICO", 30)),
             "pode_importar": _pode_importar(request),
             "pode_enviar": _pode_enviar(request),
+            "pode_email": _pode_email_fpd(request),
             "ultima_importacao": _ultimo_lote_ok(LoteImportacao.Tipo.FPD),
         },
     )

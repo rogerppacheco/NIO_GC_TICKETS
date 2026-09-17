@@ -663,9 +663,13 @@ def enviar_fpd_pdv(
     *,
     indicador: str = "FPD",
     segmento: str = "todos",
+    canal: str = "ambos",
 ) -> ResumoEnvio:
     from ..fpd_format import assunto_email_fpd, corpo_texto_email_fpd, html_email_fpd
 
+    canal = (canal or "ambos").strip().lower()
+    if canal not in {"whatsapp", "email", "ambos"}:
+        canal = "ambos"
     rel = (
         RelatorioFPD.objects.filter(
             parceiro=parceiro, indicador=indicador, segmento=segmento
@@ -679,57 +683,75 @@ def enviar_fpd_pdv(
             ignorados=1,
             detalhes=[f"{parceiro.nome}: sem relatório {recorte}."],
         )
-    destinos = destinos_para_envio(user, "envio_fpd", parceiro)
     arquivo_bytes, nome_arquivo = planilha_fpd(rel)
     email_destinos = emails_fpd_especialista(parceiro)
     caption_seg = "" if rel.segmento == "todos" else f" · {rel.get_segmento_display()}"
-    resumo = _enviar_com_anexo(
-        tipo=EnvioWhatsApp.Tipo.FPD,
-        mensagem=rel.mensagem,
-        caption=f"📁 *{rel.indicador}{caption_seg}* — {rel.pdv_nome}",
-        destinos=destinos,
-        parceiro=parceiro,
-        user=user,
-        arquivo_bytes=arquivo_bytes,
-        nome_arquivo=nome_arquivo,
-        flag="envio_fpd",
-        email_assunto=assunto_email_fpd(rel),
-        email_corpo_texto=corpo_texto_email_fpd(rel),
-        email_corpo_html=html_email_fpd(rel),
-        email_destinos=email_destinos,
-    )
-    if not email_destinos and smtp_configurado():
-        resumo.detalhes.append(
-            f"E-mail {rel.indicador} não enviado: PDV {parceiro.nome} sem especialista com e-mail cadastrado."
+    resumo = ResumoEnvio()
+    if canal in {"whatsapp", "ambos"}:
+        destinos = destinos_para_envio(user, "envio_fpd", parceiro)
+        wa = _enviar_com_anexo(
+            tipo=EnvioWhatsApp.Tipo.FPD,
+            mensagem=rel.mensagem,
+            caption=f"📁 *{rel.indicador}{caption_seg}* — {rel.pdv_nome}",
+            destinos=destinos,
+            parceiro=parceiro,
+            user=user,
+            arquivo_bytes=arquivo_bytes,
+            nome_arquivo=nome_arquivo,
+            flag="",
         )
-    # Alerta crítico global (só FPD consolidado, para não triplicar o disparo)
-    from django.conf import settings
+        resumo.enviados += wa.enviados
+        resumo.erros += wa.erros
+        resumo.ignorados += wa.ignorados
+        resumo.detalhes.extend(wa.detalhes)
+    if canal in {"email", "ambos"}:
+        _talvez_email(
+            flag="envio_fpd",
+            tipo=EnvioWhatsApp.Tipo.FPD,
+            mensagem=rel.mensagem,
+            parceiro=parceiro,
+            user=user,
+            arquivo_bytes=arquivo_bytes,
+            nome_arquivo=nome_arquivo,
+            resumo=resumo,
+            assunto=assunto_email_fpd(rel),
+            corpo_texto=corpo_texto_email_fpd(rel),
+            corpo_html=html_email_fpd(rel),
+            destinos_email=email_destinos,
+        )
+        if not email_destinos:
+            resumo.detalhes.append(
+                f"E-mail {rel.indicador} não enviado: PDV {parceiro.nome} "
+                "sem especialista com e-mail cadastrado."
+            )
+    if canal in {"whatsapp", "ambos"}:
+        from django.conf import settings
 
-    limite = float(getattr(settings, "FPD_PERCENTUAL_CRITICO", 30))
-    if (
-        eh_gestor(user)
-        and rel.indicador == "FPD"
-        and rel.segmento == "todos"
-        and rel.percentual >= limite
-    ):
-        criticos = destinos_para_envio(user, "envio_fpd_critico")
-        if criticos:
-            alerta = (
-                f"🚨 *Alerta FPD crítico — {rel.pdv_nome}*\n"
-                f"Percentual FPD: *{rel.percentual:.2f}%* (limite {limite:.2f}%)\n\n"
-                f"{rel.mensagem}"
-            )
-            parte = _enviar_para_lista(
-                tipo=EnvioWhatsApp.Tipo.FPD_CRITICO,
-                mensagem=alerta,
-                destinos=criticos,
-                parceiro=parceiro,
-                user=user,
-                flag="envio_fpd_critico",
-            )
-            resumo.enviados += parte.enviados
-            resumo.erros += parte.erros
-            resumo.detalhes.extend(parte.detalhes)
+        limite = float(getattr(settings, "FPD_PERCENTUAL_CRITICO", 30))
+        if (
+            eh_gestor(user)
+            and rel.indicador == "FPD"
+            and rel.segmento == "todos"
+            and rel.percentual >= limite
+        ):
+            criticos = destinos_para_envio(user, "envio_fpd_critico")
+            if criticos:
+                alerta = (
+                    f"🚨 *Alerta FPD crítico — {rel.pdv_nome}*\n"
+                    f"Percentual FPD: *{rel.percentual:.2f}%* (limite {limite:.2f}%)\n\n"
+                    f"{rel.mensagem}"
+                )
+                parte = _enviar_para_lista(
+                    tipo=EnvioWhatsApp.Tipo.FPD_CRITICO,
+                    mensagem=alerta,
+                    destinos=criticos,
+                    parceiro=parceiro,
+                    user=user,
+                    flag="envio_fpd_critico",
+                )
+                resumo.enviados += parte.enviados
+                resumo.erros += parte.erros
+                resumo.detalhes.extend(parte.detalhes)
     return resumo
 
 

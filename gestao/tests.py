@@ -1219,6 +1219,71 @@ class GestaoViewsTests(TestCase):
         self.assertNotContains(spd, "CARD FPD TODOS")
         self.assertContains(spd, "Segunda fatura")
 
+    @override_settings(SMTP_HOST="smtp.test", SMTP_FROM="from@test.com")
+    def test_fpd_filtra_parceiro_e_envia_email(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.envio import ResumoEnvio
+
+        pdv = Parceiro.objects.create(
+            codigo_pdv="fpd1", nome="APOLO FPD", especialista=self.gestor
+        )
+        outro = Parceiro.objects.create(
+            codigo_pdv="fpd2", nome="INOVA FPD", especialista=self.gestor
+        )
+        lote = LoteImportacao.objects.create(tipo="fpd", arquivo_nome="f.xlsx", ok=True)
+        RelatorioFPD.objects.create(
+            lote=lote,
+            parceiro=pdv,
+            pdv_nome="APOLO FPD",
+            indicador="FPD",
+            segmento="todos",
+            percentual=10,
+            total_faturas=10,
+            total_abertas=1,
+            mensagem="CARD APOLO",
+        )
+        RelatorioFPD.objects.create(
+            lote=lote,
+            parceiro=outro,
+            pdv_nome="INOVA FPD",
+            indicador="FPD",
+            segmento="todos",
+            percentual=20,
+            total_faturas=8,
+            total_abertas=2,
+            mensagem="CARD INOVA",
+        )
+        self.client.force_login(self.gestor)
+        lista = self.client.get(reverse("gestao_fpd"))
+        self.assertContains(lista, "CARD APOLO")
+        self.assertContains(lista, "CARD INOVA")
+        self.assertContains(lista, "Importar FPD")
+        self.assertContains(lista, "E-mail todos")
+        um = self.client.get(reverse("gestao_fpd"), {"pdv": str(pdv.id)})
+        self.assertContains(um, "CARD APOLO")
+        self.assertNotContains(um, "CARD INOVA")
+        self.assertContains(um, "Ver todos")
+        with patch(
+            "gestao.views.enviar_fpd_pdv",
+            return_value=ResumoEnvio(enviados=1, detalhes=["ok"]),
+        ) as mock_env:
+            r = self.client.post(
+                reverse("gestao_fpd"),
+                {
+                    "action": "enviar_email_pdv",
+                    "parceiro": str(pdv.id),
+                    "indicador": "FPD",
+                    "segmento": "todos",
+                    "pdv": str(pdv.id),
+                },
+            )
+        self.assertEqual(r.status_code, 302)
+        mock_env.assert_called_once()
+        kwargs = mock_env.call_args.kwargs
+        self.assertEqual(kwargs.get("canal"), "email")
+        self.assertEqual(kwargs.get("indicador"), "FPD")
+
     @override_settings(
         EVOLUTION_API_URL="https://evo.test",
         EVOLUTION_API_KEY="evo.key",
