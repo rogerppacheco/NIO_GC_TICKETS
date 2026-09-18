@@ -65,6 +65,8 @@ class VerticalPortalTests(TestCase):
         self.assertContains(r, "Projeto Vertical")
         self.assertContains(r, "Nova solicitação")
         self.assertContains(r, "CNPJ por cidade")
+        self.assertContains(r, ">Acionamentos<")
+        self.assertNotContains(r, "Meus acionamentos")
         self.assertContains(r, 'data-acionado-por="Spec"')
         self.assertContains(r, 'id="inp_acionado_por"')
         self.assertNotContains(r, 'name="criado_por_id"')
@@ -88,6 +90,7 @@ class VerticalPortalTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, 'data-acionado-por="Contato Vertical"')
         self.assertContains(r, 'value="Contato Vertical"')
+        self.assertContains(r, "Meus acionamentos")
         self.assertNotContains(r, 'name="criado_por_id"')
 
     def test_criar_e_dashboard(self):
@@ -236,6 +239,63 @@ class VerticalPortalTests(TestCase):
         self.assertEqual(item.parceiro_id, self.pdv.id)
         lista = self.client.get(reverse("vertical_api_solicitacoes")).json()
         self.assertEqual(lista["data"][0]["criado_por_nome"], "Contato Vertical")
+
+    def test_especialista_ve_pedido_do_parceiro(self):
+        self.pdv.especialista = self.spec
+        self.pdv.save(update_fields=["especialista"])
+        outro = get_user_model().objects.create_user("vert-spec2", password="senha-ok-1234")
+        PerfilStaff.objects.create(user=outro, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self._login_pdv()
+        r = self.client.post(
+            reverse("vertical_api_solicitacoes"),
+            {
+                "nome_condominio": "Ed. Carteira Ricardo",
+                "nome_sindico": "Maria",
+                "contato": "31999998888",
+                "cep": "30130100",
+                "logradouro": "Rua A",
+                "numero": "100",
+                "arquivo_carta": _arquivo("carta.pdf"),
+                "arquivo_fachada": _arquivo("fachada.jpg"),
+            },
+        )
+        self.assertEqual(r.status_code, 201, r.content)
+
+        self.client.force_login(self.spec)
+        lista = self.client.get(reverse("vertical_api_solicitacoes")).json()
+        self.assertEqual(len(lista["data"]), 1)
+        self.assertEqual(lista["data"][0]["nome"], "Ed. Carteira Ricardo")
+        self.assertEqual(lista["data"][0]["parceiro_nome"], "PDV Vertical")
+        dash = self.client.get(reverse("vertical_api_dashboard")).json()
+        self.assertEqual(dash["data"]["total_acionamentos"], 1)
+
+        self.client.force_login(outro)
+        lista_outro = self.client.get(reverse("vertical_api_solicitacoes")).json()
+        self.assertEqual(lista_outro["data"], [])
+        dash_outro = self.client.get(reverse("vertical_api_dashboard")).json()
+        self.assertEqual(dash_outro["data"]["total_acionamentos"], 0)
+
+        self.client.force_login(self.gestor)
+        lista_gestor = self.client.get(reverse("vertical_api_solicitacoes")).json()
+        self.assertEqual(len(lista_gestor["data"]), 1)
+
+    def test_especialista_ve_pedido_via_contato_sem_parceiro_fk(self):
+        self.pdv.especialista = self.spec
+        self.pdv.save(update_fields=["especialista"])
+        SolicitacaoVertical.objects.create(
+            nome_condominio="Cond sem FK parceiro",
+            nome_sindico="Joao",
+            contato_sindico="31988887777",
+            cep="30000000",
+            numero="1",
+            criado_por=self.pdv_user,
+            contato=self.contato,
+            parceiro=None,
+        )
+        self.client.force_login(self.spec)
+        lista = self.client.get(reverse("vertical_api_solicitacoes")).json()
+        self.assertEqual(len(lista["data"]), 1)
+        self.assertEqual(lista["data"][0]["nome"], "Cond sem FK parceiro")
 
     @patch("tickets.vertical_services.urllib.request.urlopen")
     def test_viacep(self, urlopen):

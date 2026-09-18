@@ -204,6 +204,7 @@
           esc(i.status) +
           "</span></td><td><small>" +
           esc(i.criado_por_nome) +
+          (i.parceiro_nome ? "<br>" + esc(i.parceiro_nome) : "") +
           "</small></td><td>" +
           acoes +
           "</td></tr>";

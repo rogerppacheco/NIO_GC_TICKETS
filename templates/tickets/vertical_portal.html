@@ -31,7 +31,7 @@
     {% if can_config %}
     <button type="button" class="tab" data-tab="config">Configuração</button>
     {% endif %}
-    <button type="button" class="tab" data-tab="lista">Meus acionamentos</button>
+    <button type="button" class="tab" data-tab="lista">{% if visao_equipe %}Acionamentos{% else %}Meus acionamentos{% endif %}</button>
     <button type="button" class="tab" data-tab="cnpj">CNPJ por cidade/bairro</button>
   </nav>
 

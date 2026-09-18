@@ -10,7 +10,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from django.db.models import QuerySet, Sum
+from django.db.models import Q, QuerySet, Sum
 from django.http import HttpRequest
 
 from tickets.acesso import eh_gerencia, eh_gestor, parceiro_de
@@ -30,11 +30,28 @@ def pode_gestao_vertical(user) -> bool:
 
 def qs_solicitacoes(user) -> QuerySet[SolicitacaoVertical]:
     qs = SolicitacaoVertical.objects.select_related(
-        "criado_por", "parceiro", "contato"
+        "criado_por",
+        "parceiro",
+        "parceiro__especialista",
+        "contato",
+        "contato__parceiro",
     ).prefetch_related("blocos")
+    if not getattr(user, "is_authenticated", False):
+        return qs.none()
     if pode_gestao_vertical(user):
         return qs
-    return qs.filter(criado_por=user)
+    pdv = parceiro_de(user)
+    if pdv:
+        return qs.filter(
+            Q(parceiro=pdv) | Q(contato__parceiro=pdv) | Q(criado_por=user)
+        ).distinct()
+    # Especialista: o que ele criou + pedidos dos PDVs da carteira dele.
+    return qs.filter(
+        Q(criado_por=user)
+        | Q(parceiro__especialista=user)
+        | Q(contato__parceiro__especialista=user)
+        | Q(criado_por__parceiro_conta__especialista=user)
+    ).distinct()
 
 
 def _int(valor: Any, default: int = 0) -> int:
@@ -124,6 +141,7 @@ def serializar_solicitacao(
         "criado_por_id": item.criado_por_id,
         "criado_por_nome": nome_acionado(item),
         "parceiro_id": item.parceiro_id,
+        "parceiro_nome": (item.parceiro.nome if item.parceiro_id and item.parceiro else ""),
     }
     if detalhe:
         data.update(
