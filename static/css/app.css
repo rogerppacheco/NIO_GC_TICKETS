@@ -2536,3 +2536,5 @@ body.page-fpd .gestao-escopo + .help { display: none; }
 .aviso-item.is-unread { border-left: 3px solid var(--accent); }
 .aviso-item strong { display: block; }
 .aviso-item .help { display: block; margin-top: 0.15rem; }
+
+.wrap-fluid { max-width: none; width: 100%; }
