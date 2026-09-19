@@ -3,7 +3,7 @@
 <div class="panel" style="max-width:100%">
   <div class="panel-b">
     <p class="help" data-tipo-hint style="margin-top:0">Selecione o tipo da demanda para ver só os campos necessários.</p>
-    <form method="post" enctype="multipart/form-data" class="form-grid" data-demanda-form>
+    <form method="post" enctype="multipart/form-data" class="form-grid form-grid-fluid" data-demanda-form>
       {% csrf_token %}
       {% for field in form %}
         <div

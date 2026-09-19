@@ -2538,3 +2538,5 @@ body.page-fpd .gestao-escopo + .help { display: none; }
 .aviso-item .help { display: block; margin-top: 0.15rem; }
 
 .wrap-fluid { max-width: none; width: 100%; }
+
+.form-grid-fluid { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
