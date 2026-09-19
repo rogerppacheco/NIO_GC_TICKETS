@@ -2,39 +2,257 @@
 {% load static %}
 {% block title %}Bem-vindo · NIO ESPECIALISTA Tickets{% endblock %}
 
-{% block main_class %}wrap{% endblock %}
+{% block main_class %}wrap wrap-wide{% endblock %}
 
 {% block content %}
-<div style="max-width: 800px; margin: 4rem auto; text-align: center;">
-  <h1 style="margin-bottom: 0.5rem; font-size: 2rem;">Bem-vindo ao NIO ESPECIALISTA Tickets</h1>
-  <p style="margin-bottom: 3rem; color: #555; font-size: 1.1rem;">Selecione como deseja acessar o sistema:</p>
+<style>
+  /* Futuristic Landing Page Styles */
+  .landing-container {
+    min-height: calc(100vh - 120px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+  }
   
-  <div class="grid-2" style="gap: 2rem;">
+  /* Abstract background glow */
+  .landing-container::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60vw;
+    height: 60vw;
+    max-width: 600px;
+    max-height: 600px;
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.12) 0%, rgba(0,0,0,0) 70%);
+    z-index: -1;
+    pointer-events: none;
+    border-radius: 50%;
+  }
+
+  .landing-header {
+    text-align: center;
+    margin-bottom: 4rem;
+    animation: fadeDown 0.8s ease-out;
+  }
+
+  .landing-title {
+    font-size: clamp(2.5rem, 6vw, 4rem);
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.75rem;
+    line-height: 1.1;
+  }
+
+  .landing-subtitle {
+    font-size: 1.25rem;
+    color: var(--color-muted, #64748b);
+    max-width: 550px;
+    margin: 0 auto;
+    font-weight: 500;
+  }
+
+  .landing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 2.5rem;
+    width: 100%;
+    max-width: 900px;
+    animation: fadeUp 1s ease-out;
+  }
+
+  .futuristic-card {
+    position: relative;
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    border-radius: 20px;
+    padding: 3rem 2rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    text-align: center;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+  }
+
+  .futuristic-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, transparent, #10b981, transparent);
+    transform: scaleX(0);
+    transition: transform 0.6s ease;
+  }
+
+  .futuristic-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 30px 40px -15px rgba(16, 185, 129, 0.2), 0 10px 20px -10px rgba(16, 185, 129, 0.1);
+    border-color: rgba(16, 185, 129, 0.5);
+  }
+
+  .futuristic-card:hover::before {
+    transform: scaleX(1);
+  }
+
+  .card-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    height: 72px;
+    border-radius: 20px;
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    margin-bottom: 2rem;
+    transition: all 0.4s ease;
+    transform: rotate(-5deg);
+  }
+
+  .futuristic-card:hover .card-icon {
+    transform: rotate(0deg) scale(1.1);
+    background: #10b981;
+    color: #fff;
+    box-shadow: 0 10px 20px -5px rgba(16, 185, 129, 0.4);
+  }
+
+  .card-title {
+    font-size: 1.75rem;
+    font-weight: 800;
+    margin-bottom: 1rem;
+    color: var(--color-text, #1e293b);
+  }
+
+  .card-desc {
+    color: var(--color-muted, #64748b);
+    line-height: 1.6;
+    font-size: 1.05rem;
+    margin-bottom: 2.5rem;
+    flex-grow: 1;
+  }
+
+  .card-action {
+    display: inline-block;
+    padding: 1rem 2rem;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 1.05rem;
+    letter-spacing: 0.5px;
+    transition: all 0.3s ease;
+    width: 100%;
+  }
+
+  .card-action.primary {
+    background: #10b981;
+    color: white;
+    box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.39);
+  }
+
+  .futuristic-card:hover .card-action.primary {
+    background: #059669;
+    box-shadow: 0 8px 25px rgba(16, 185, 129, 0.5);
+  }
+
+  .card-action.secondary {
+    background: transparent;
+    color: #10b981;
+    border: 2px solid #10b981;
+  }
+
+  .futuristic-card:hover .card-action.secondary {
+    background: rgba(16, 185, 129, 0.1);
+  }
+  
+  /* Dark mode */
+  body.theme-dark .futuristic-card,
+  @media (prefers-color-scheme: dark) {
+    .futuristic-card {
+      background: rgba(15, 23, 42, 0.7);
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+    .futuristic-card:hover {
+      background: rgba(30, 41, 59, 0.8);
+    }
+    .card-title {
+      color: #f8fafc;
+    }
+    .card-desc {
+      color: #94a3b8;
+    }
+  }
+
+  /* Animations */
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+
+<div class="landing-container">
+  <div class="landing-header">
+    <h1 class="landing-title">NIO ESPECIALISTA</h1>
+    <p class="landing-subtitle">Selecione o seu perfil de acesso para continuar no sistema de forma rápida e segura.</p>
+  </div>
+  
+  <div class="landing-grid">
     <!-- Modal 1: Vendedor -->
-    <div class="panel" style="padding: 2.5rem 2rem; text-align: center; display: flex; flex-direction: column; justify-content: space-between;">
+    <a href="{% url 'consulta_dfv' %}" class="futuristic-card">
       <div>
-        <h2 style="margin-bottom: 1rem; font-size: 1.5rem;">Vendedor</h2>
-        <p style="margin-bottom: 2rem; color: #666; line-height: 1.5;">
-          Acesse a ferramenta de <strong>DFV (Disponibilidade de Fachada)</strong> para consultar viabilidade por CEP de forma rápida, sem necessidade de login.
+        <div class="card-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+            <circle cx="12" cy="10" r="3"></circle>
+          </svg>
+        </div>
+        <h2 class="card-title">Vendedor</h2>
+        <p class="card-desc">
+          Acesse a ferramenta de <strong>DFV (Disponibilidade de Fachada)</strong> para consultar viabilidade por CEP de forma imediata, sem necessidade de login.
         </p>
       </div>
-      <a href="{% url 'consulta_dfv' %}" class="btn btn-primary" style="width: 100%; padding: 0.75rem; font-size: 1.1rem;">
+      <div class="card-action primary">
         Consultar DFV
-      </a>
-    </div>
+      </div>
+    </a>
     
     <!-- Modal 2: Backoffice/Empresário -->
-    <div class="panel" style="padding: 2.5rem 2rem; text-align: center; display: flex; flex-direction: column; justify-content: space-between;">
+    <a href="{% url 'login' %}" class="futuristic-card">
       <div>
-        <h2 style="margin-bottom: 1rem; font-size: 1.5rem;">Backoffice / Empresário</h2>
-        <p style="margin-bottom: 2rem; color: #666; line-height: 1.5;">
-          Acesse o <strong>Portal Completo</strong> para gerenciar tickets, abrir demandas, consultar histórico e acompanhar tratativas (requer login).
+        <div class="card-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+        </div>
+        <h2 class="card-title">Backoffice / Empresário</h2>
+        <p class="card-desc">
+          Acesse o <strong>Portal Completo</strong> para gerenciar tickets, abrir demandas, consultar histórico e acompanhar tratativas exclusivas.
         </p>
       </div>
-      <a href="{% url 'login' %}" class="btn btn-secondary" style="width: 100%; padding: 0.75rem; font-size: 1.1rem;">
-        Fazer Login
-      </a>
-    </div>
+      <div class="card-action secondary">
+        Acessar Sistema
+      </div>
+    </a>
   </div>
 </div>
 {% endblock %}

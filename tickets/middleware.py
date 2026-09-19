@@ -14,6 +14,7 @@ LIVRE_PREFIXOS = (
     "/senha/",
     "/static/",
     "/media/",
+    "/consultas/",
 )
 
 PORTAL_PREFIXOS = (
