@@ -54,4 +54,29 @@
       /* ignore */
     }
   });
+
+  document.addEventListener("submit", function (ev) {
+    if (ev.defaultPrevented) return;
+    var form = ev.target;
+    if (form.dataset.submitting) {
+      ev.preventDefault();
+      return;
+    }
+    form.dataset.submitting = "1";
+    var btns = form.querySelectorAll('button[type="submit"], input[type="submit"]');
+    btns.forEach(function (b) {
+      if (!b.dataset.originalText) {
+        b.style.width = b.offsetWidth + "px";
+        if (b.tagName === "BUTTON") {
+          b.dataset.originalText = b.innerHTML;
+          b.innerHTML = "Aguarde...";
+        } else {
+          b.dataset.originalText = b.value;
+          b.value = "Aguarde...";
+        }
+        b.classList.add("is-loading");
+      }
+      setTimeout(function() { b.disabled = true; }, 10);
+    });
+  });
 })();

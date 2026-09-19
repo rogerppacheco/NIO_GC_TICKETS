@@ -16,11 +16,11 @@
           {% if field.errors %}<div class="help" style="color:var(--danger)">{{ field.errors|striptags }}</div>{% endif %}
         </div>
       {% endfor %}
-      <div class="full" style="display:flex;gap:0.5rem;flex-wrap:wrap">
-        <button class="btn btn-primary" type="submit">{{ submit_label }}</button>
+      <div class="full form-actions-sticky">
         {% if cancel_url %}
           <a class="btn btn-secondary" href="{% url cancel_url %}">Cancelar</a>
         {% endif %}
+        <button class="btn btn-primary" type="submit">{{ submit_label }}</button>
       </div>
     </form>
   </div>

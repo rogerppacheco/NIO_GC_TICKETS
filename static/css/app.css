@@ -2540,3 +2540,5 @@ body.page-fpd .gestao-escopo + .help { display: none; }
 .wrap-fluid { max-width: none; width: 100%; }
 
 .form-grid-fluid { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+
+.form-actions-sticky { position: sticky; bottom: 0; background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(8px); padding: 0.85rem 1.5rem; border-top: 1px solid var(--line); margin: 1.5rem -1.5rem -1.5rem; border-bottom-left-radius: inherit; border-bottom-right-radius: inherit; display: flex; justify-content: flex-end; gap: 0.65rem; z-index: 20; }
