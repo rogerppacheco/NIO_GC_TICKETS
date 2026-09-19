@@ -1305,6 +1305,36 @@ def _consultar_bairro_com_fallback(
     return [], list(SELECT_COLS), False
 
 
+def listar_cidades_dfv(uf: str) -> list[str]:
+    """Lista municípios distintos no DFV para uma UF."""
+    uf_limpo = limpar_uf(uf)
+    if not uf_limpo:
+        raise DfvPowerBiError("UF é obrigatório.")
+
+    regiao = regiao_por_uf(uf_limpo)
+    if regiao is None:
+        raise DfvPowerBiError(f"UF {uf_limpo} sem região DFV configurada.")
+
+    cache_base = f"dfv_pbi:cidades:{uf_limpo}"
+    max_pages = int(_cfg("DFV_POWERBI_ROTA_CIDADES_MAX_PAGES", 10) or 10)
+
+    rows = _consultar_por_filtro(
+        filters=[("UF", uf_limpo)],
+        cache_key=f"{cache_base}:list",
+        log_label=f"CIDADES uf={uf_limpo}",
+        region=regiao,
+        select_cols=["UF", "MUNICIPIO"],
+        max_pages=max_pages,
+    )
+
+    cidades: set[str] = set()
+    for row in rows:
+        nome = str(row.get("MUNICIPIO") or "").strip()
+        if nome and nome.lower() not in ("none", "null", "nan"):
+            cidades.add(nome)
+    return sorted(cidades, key=lambda x: _norm_local(x))
+
+
 def listar_bairros_dfv(uf: str, cidade: str) -> list[str]:
     """Lista bairros distintos no DFV para UF + município."""
     uf_limpo = limpar_uf(uf)

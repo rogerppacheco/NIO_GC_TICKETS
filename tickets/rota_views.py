@@ -20,6 +20,7 @@ from tickets.consultas.dfv_powerbi_service import (
     DfvPowerBiTimeout,
     consultar_agregado_por_bairro,
     listar_bairros_dfv,
+    listar_cidades_dfv,
 )
 from tickets.models import CheckinRotaDiaria, PlanejamentoSemanalRota
 from tickets.rota_services import (
@@ -271,7 +272,28 @@ def rota_api_cidades(request: HttpRequest) -> JsonResponse:
     uf = (request.GET.get("uf") or "").strip().upper()
     if len(uf) != 2:
         return _json_error("validation_error", "Informe a UF.", fields={"uf": "Obrigatório."})
-    return _json_ok({"uf": uf, "items": listar_cidades(parceiro, uf)})
+    
+    items = listar_cidades(parceiro, uf)
+    fonte = "banco_local" if items else "vazio"
+    if not items:
+        try:
+            nomes = listar_cidades_dfv(uf)
+            items = [{"cidade": n, "origem": "dfv"} for n in nomes]
+            fonte = "dfv_cache" if items else "vazio"
+        except DfvPowerBiDisabled:
+            fonte = "dfv_disabled"
+        except DfvPowerBiTimeout:
+            return _json_error(
+                "dfv_timeout",
+                "Consulta DFV demorou demais ao listar cidades. Tente novamente.",
+                status=504,
+            )
+        except DfvPowerBiError as exc:
+            logger.warning("[ROTA] listar cidades DFV: %s", exc)
+            fonte = "dfv_erro"
+            items = []
+
+    return _json_ok({"uf": uf, "items": items, "fonte": fonte})
 
 
 @login_required
