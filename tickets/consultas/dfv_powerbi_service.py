@@ -44,6 +44,11 @@ SELECT_COLS: list[str] = [
     "UF",
     "VIABILIDADE_ATUAL",
     "CODIGO_CDO",
+    "HP_LIVRE",
+    "HP_TOT",
+    "HC_TOT",
+    "CLASSIFICACAO",
+    "ds_faixa_aprovacao_credito_total",
 ]
 
 # Colunas extras para o card Rota (agregação por bairro).
@@ -976,12 +981,28 @@ def formatar_resposta_dfv_powerbi(
             f"\n⚠️ *Sem fachadas viáveis* neste CEP — exibindo status: {status_txt}\n"
         )
 
+    hp_tot = str(primeiro.get("HP_TOT") or "—").strip()
+    hc_tot = str(primeiro.get("HC_TOT") or "—").strip()
+    hp_livre = str(primeiro.get("HP_LIVRE") or "—").strip()
+    classificacao = str(primeiro.get("CLASSIFICACAO") or "—").strip()
+    faixa_cred = str(primeiro.get("ds_faixa_aprovacao_credito_total") or "—").strip()
+
+    info_rota = ""
+    if hp_tot != "—" or hp_livre != "—":
+        info_rota = (
+            f"📊 *Perfil da Rota:*\n"
+            f"• HPs (Total): {hp_tot} | Livres: {hp_livre} | Ocupados (HC): {hc_tot}\n"
+            f"• Classificação: {classificacao}\n"
+            f"• Faixa de Aprovação: {faixa_cred}\n"
+        )
+
     cabecalho = (
         f"🏢 *DFV (Power BI ao vivo{titulo_fonte})*\n\n"
         f"📍 *Endereço:* {logradouro}\n"
         f"🏙️ *Bairro:* {bairro} | *Cidade/UF:* {cidade_uf}\n"
         f"📡 *CDO(s):* {cdos_str}\n"
-        f"✅ *Total de fachadas:* {len(filtrados)}"
+        f"{info_rota}"
+        f"✅ *Total de fachadas listadas:* {len(filtrados)}"
         f"{aviso_status}\n"
         f"🔢 *Números Disponíveis (com complemento):*\n"
         f"{lista_str}"
