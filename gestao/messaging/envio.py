@@ -1637,8 +1637,10 @@ def enviar_parcial_gerencia(
     destinos = _destino_grupo(destinatario_id, parceiros)
     if not destinos:
         return ResumoEnvio(erros=1, detalhes=["Grupo inválido ou sem flag Resultados."])
-    png, nome = imagem_parcial_gerencia(dados)
-    caption = caption_imagem_parcial(dados, sufixo="Parceiros PP", nota=nota)
+    from tickets.acesso import gerencia_de
+    gerencia = gerencia_de(user) or "PP"
+    png, nome = imagem_parcial_gerencia(dados, titulo=f"Parceiros {gerencia}")
+    caption = caption_imagem_parcial(dados, sufixo=f"Parceiros {gerencia}", nota=nota)
     return _enviar_parcial_imagem(
         png=png,
         nome=nome,

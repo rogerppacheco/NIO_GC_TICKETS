@@ -702,9 +702,11 @@ def _grupos_ranking(parceiros: list[Parceiro]):
     )
 
 
-def _grupo_ranking_padrao(grupos) -> Destinatario | None:
+def _grupo_ranking_padrao(grupos, gerencia_ativa: str = "PP") -> Destinatario | None:
+    ger = (gerencia_ativa or "PP").casefold()
+    slug = f"parceiros_{ger}"
     for g in grupos:
-        if g.ranking_consolidado and "parceiros_pp" in (g.nome or "").casefold():
+        if g.ranking_consolidado and slug in (g.nome or "").casefold():
             return g
     for g in grupos:
         if g.ranking_consolidado:
@@ -862,7 +864,8 @@ def parcial_preview(request: HttpRequest) -> HttpResponse:
         sub = sub_parcial(linhas or dados["linhas"], dados, titulo="Minha carteira")
         png, _ = imagem_parcial_especialistas(sub, titulo="Minha carteira")
     else:
-        png, _ = imagem_parcial_gerencia(dados)
+        gerencia = _gerencia_lote(request) or "PP"
+        png, _ = imagem_parcial_gerencia(dados, titulo=f"Parceiros {gerencia}")
     del cache
     return HttpResponse(png, content_type="image/png")
 
@@ -1017,7 +1020,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                 dest_raw = (request.POST.get("destinatario") or "").strip()
                 dest_id = int(dest_raw) if dest_raw.isdigit() else None
                 if dest_id is None:
-                    padrao = _grupo_ranking_padrao(_grupos_parcial(visiveis))
+                    padrao = _grupo_ranking_padrao(_grupos_parcial(visiveis), _gerencia_lote(request) or "PP")
                     dest_id = padrao.pk if padrao else None
                 _flash_resumo(
                     request,
@@ -1164,7 +1167,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             "parcial_turno": rotulo_turno,
             "parcial_horarios": HORARIOS_PARCIAL,
             "ultimo_parcial": ultimo_parcial,
-            "ranking_grupo_padrao": _grupo_ranking_padrao(grupos_ranking),
+            "ranking_grupo_padrao": _grupo_ranking_padrao(grupos_ranking, _gerencia_lote(request) or "PP"),
             "grupo_pp_wa": grupo_pp_wa,
             "pracas_btu": pracas_ativas,
             "pracas_btu_mg": pracas_ativas.filter(uf="MG").count(),
