@@ -39,15 +39,15 @@
           </select>
         </div>
         {% endif %}
-        <div style="margin-bottom:0.85rem">
-          <label for="cep">CEP</label>
-          <input type="text" name="cep" id="cep" value="{{ cep }}" placeholder="00000-000" maxlength="12">
+        <div style="margin-bottom:1.5rem">
+          <label for="cep" style="font-size: 1.1rem; font-weight: 700;">CEP</label>
+          <input type="text" name="cep" id="cep" class="consulta-input-lg mono" value="{{ cep }}" placeholder="00000-000" maxlength="12" style="margin-top: 0.5rem">
         </div>
-        <div style="margin-bottom:0.85rem">
-          <label for="numero_fachada">Número da fachada</label>
-          <input type="text" name="numero_fachada" id="numero_fachada" value="{{ numero_fachada }}" placeholder="Ex.: 123">
+        <div style="margin-bottom:1.5rem">
+          <label for="numero_fachada" style="font-size: 1.1rem; font-weight: 700;">Número da fachada</label>
+          <input type="text" name="numero_fachada" id="numero_fachada" class="consulta-input-lg" value="{{ numero_fachada }}" placeholder="Ex.: 123" style="margin-top: 0.5rem">
         </div>
-        <button class="btn btn-primary" type="submit" {% if not vtal_ok %}disabled{% endif %}>Consultar</button>
+        <button class="btn btn-primary" type="submit" {% if not vtal_ok %}disabled{% endif %} style="width: 100%; padding: 1.2rem; font-size: 1.3rem; border-radius: 12px; font-weight: 800;">Consultar</button>
       </form>
     </div>
   </div>
