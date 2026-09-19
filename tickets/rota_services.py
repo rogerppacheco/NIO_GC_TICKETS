@@ -25,6 +25,35 @@ ALERTA_CRITICO_PCT = -30.0  # < -30% = crítico
 ATUACOES_EQUIPE = frozenset({"PAP", "DIGITAL", "MISTO"})
 MAX_EQUIPES = 12
 MAX_PESSOAS_EQUIPE = 80
+UFS_BRASIL: tuple[str, ...] = (
+    "AC",
+    "AL",
+    "AM",
+    "AP",
+    "BA",
+    "CE",
+    "DF",
+    "ES",
+    "GO",
+    "MA",
+    "MG",
+    "MS",
+    "MT",
+    "PA",
+    "PB",
+    "PE",
+    "PI",
+    "PR",
+    "RJ",
+    "RN",
+    "RO",
+    "RR",
+    "RS",
+    "SC",
+    "SE",
+    "SP",
+    "TO",
+)
 
 
 def hoje_local() -> date:
@@ -632,10 +661,6 @@ def listar_ufs(parceiro: Parceiro) -> list[dict[str, str]]:
     ):
         _add(u, "praca_parceiro")
 
-    if items:
-        return sorted(items, key=lambda x: x["uf"])
-
-    # Fallback: UFs com praça BTU
     try:
         from gestao.models import PracaBTU
 
@@ -645,6 +670,9 @@ def listar_ufs(parceiro: Parceiro) -> list[dict[str, str]]:
             _add(u, "catalogo")
     except Exception:
         pass
+
+    for u in UFS_BRASIL:
+        _add(u, "brasil")
     return sorted(items, key=lambda x: x["uf"])
 
 
@@ -669,9 +697,6 @@ def listar_cidades(parceiro: Parceiro, uf: str) -> list[dict[str, str]]:
         parceiro=parceiro, ativo=True, uf=uf_limpo
     ).values_list("cidade", flat=True):
         _add(c, "praca_parceiro")
-
-    if items:
-        return sorted(items, key=lambda x: x["cidade"].upper())
 
     try:
         from gestao.models import PracaBTU

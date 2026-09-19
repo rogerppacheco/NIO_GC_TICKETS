@@ -75,6 +75,16 @@ class RotaServicesTests(TestCase):
         self.assertEqual(juntas[0]["bairro"], "CENTRO NORTE")
         self.assertEqual(juntas[1]["bairro"], "CENTRO NORTE")
 
+    def test_listar_ufs_sempre_as_27(self):
+        from tickets.rota_services import UFS_BRASIL, listar_ufs
+
+        ParceiroPraca.objects.create(
+            parceiro=self.pdv, uf="MG", cidade="BELO HORIZONTE", bairro="CENTRO"
+        )
+        ufs = [i["uf"] for i in listar_ufs(self.pdv)]
+        self.assertEqual(ufs, list(UFS_BRASIL))
+        self.assertEqual(len(ufs), 27)
+
     def test_classificar_alerta(self):
         status, desvio, _msg = classificar_alerta(50, 50)
         self.assertEqual(status, PlanejamentoSemanalRota.StatusAlerta.OK)
@@ -153,6 +163,12 @@ class RotaApiTests(TestCase):
         ufs = [i["uf"] for i in r.json()["data"]["items"]]
         self.assertEqual(ufs.count("MG"), 1)
         self.assertEqual(len(ufs), len(set(ufs)))
+        from tickets.rota_services import UFS_BRASIL
+
+        self.assertEqual(ufs, list(UFS_BRASIL))
+        self.assertIn("SP", ufs)
+        self.assertIn("RJ", ufs)
+        self.assertIn("AC", ufs)
 
         r = self.client.get(reverse("rota_api_cidades"), {"uf": "MG"})
         self.assertEqual(r.status_code, 200)
