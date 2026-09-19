@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Bem-vindo · NIO ESPECIALISTA Tickets{% endblock %}
+
+{% block main_class %}wrap{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 4rem auto; text-align: center;">
+  <h1 style="margin-bottom: 0.5rem; font-size: 2rem;">Bem-vindo ao NIO ESPECIALISTA Tickets</h1>
+  <p style="margin-bottom: 3rem; color: #555; font-size: 1.1rem;">Selecione como deseja acessar o sistema:</p>
+  
+  <div class="grid-2" style="gap: 2rem;">
+    <!-- Modal 1: Vendedor -->
+    <div class="panel" style="padding: 2.5rem 2rem; text-align: center; display: flex; flex-direction: column; justify-content: space-between;">
+      <div>
+        <h2 style="margin-bottom: 1rem; font-size: 1.5rem;">Vendedor</h2>
+        <p style="margin-bottom: 2rem; color: #666; line-height: 1.5;">
+          Acesse a ferramenta de <strong>DFV (Disponibilidade de Fachada)</strong> para consultar viabilidade por CEP de forma rápida, sem necessidade de login.
+        </p>
+      </div>
+      <a href="{% url 'consulta_dfv' %}" class="btn btn-primary" style="width: 100%; padding: 0.75rem; font-size: 1.1rem;">
+        Consultar DFV
+      </a>
+    </div>
+    
+    <!-- Modal 2: Backoffice/Empresário -->
+    <div class="panel" style="padding: 2.5rem 2rem; text-align: center; display: flex; flex-direction: column; justify-content: space-between;">
+      <div>
+        <h2 style="margin-bottom: 1rem; font-size: 1.5rem;">Backoffice / Empresário</h2>
+        <p style="margin-bottom: 2rem; color: #666; line-height: 1.5;">
+          Acesse o <strong>Portal Completo</strong> para gerenciar tickets, abrir demandas, consultar histórico e acompanhar tratativas (requer login).
+        </p>
+      </div>
+      <a href="{% url 'login' %}" class="btn btn-secondary" style="width: 100%; padding: 0.75rem; font-size: 1.1rem;">
+        Fazer Login
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

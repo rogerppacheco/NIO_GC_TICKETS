@@ -188,7 +188,7 @@ def home(request: HttpRequest) -> HttpResponse:
         if deve_trocar_senha(request.user):
             return redirect("senha_trocar")
         return redirect(destino_pos_login(request.user))
-    return redirect("login")
+    return render(request, "tickets/landing.html")
 
 
 @login_required
