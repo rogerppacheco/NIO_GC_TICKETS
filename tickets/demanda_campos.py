@@ -31,9 +31,11 @@ CAMPOS_POR_TIPO: dict[str, dict] = {
         "obrigatorios": ["pedido"],
     },
     TipoDemanda.PRIORIDADE_ELITE: {
-        "titulo": "OS, endereço, data agendada no sistema, contato e descrição",
+        "titulo": "OS, titular, CPF, endereço, data agendada no sistema, contato e descrição",
         "campos": [
             "pedido",
+            "nome_cliente",
+            "documento_cliente",
             "cep",
             "logradouro",
             "numero_fachada",
@@ -50,6 +52,8 @@ CAMPOS_POR_TIPO: dict[str, dict] = {
         ],
         "obrigatorios": [
             "pedido",
+            "nome_cliente",
+            "documento_cliente",
             "cep",
             "numero_fachada",
             "data_desejada",
@@ -566,6 +570,8 @@ LABELS_POR_TIPO: dict[str, dict[str, str]] = {
     },
     TipoDemanda.PRIORIDADE_ELITE: {
         "pedido": "Nº do pedido/OS",
+        "nome_cliente": "Nome do titular",
+        "documento_cliente": "CPF do titular",
         "data_desejada": "Data agendada no sistema",
         "solicitante_nome": "Nome de contato da instalação",
         "solicitante_contato": "Telefone de contato com o cliente",
@@ -639,6 +645,8 @@ CAMPOS_CONTEXTO_RESPOSTA: dict[str, list[str]] = {
     ],
     TipoDemanda.PRIORIDADE_ELITE: [
         "pedido",
+        "nome_cliente",
+        "documento_cliente",
         "endereco_completo",
         "data_desejada",
         "turno",
