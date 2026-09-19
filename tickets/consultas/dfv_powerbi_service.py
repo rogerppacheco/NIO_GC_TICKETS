@@ -868,6 +868,14 @@ def _filtrar_e_deduplicar(
     usou_viaveis = bool(viaveis)
     base = viaveis if usou_viaveis else list(registros)
 
+    def _parse_num(v: Any) -> float:
+        if v is None or v == "": return 0.0
+        if isinstance(v, (int, float)): return float(v)
+        try:
+            return float(str(v).strip().replace("%", "").replace(",", "."))
+        except ValueError:
+            return 0.0
+
     vistos: set[tuple[str, str]] = set()
     unicos: list[dict[str, Any]] = []
     for row in base:
@@ -877,9 +885,20 @@ def _filtrar_e_deduplicar(
         if chave in vistos:
             continue
         vistos.add(chave)
+        
+        hc = _parse_num(row.get("HC_TOT"))
+        hp_tot = _parse_num(row.get("HP_TOT"))
+        hp_livre = _parse_num(row.get("HP_LIVRE"))
+        ocupado = (hc > 0) or (hp_livre == 0 and hp_tot > 0)
+
         enriched = dict(row)
         enriched["_complemento"] = compl
-        enriched["_linha"] = f"{num} ({compl})" if compl else num
+        
+        texto_linha = f"{num} ({compl})" if compl else num
+        if ocupado:
+            texto_linha = f"~~{texto_linha}~~"
+            
+        enriched["_linha"] = texto_linha
         unicos.append(enriched)
 
     unicos.sort(key=lambda r: _ordenar_chave_fachada(r.get("NO_FACHADA")))
