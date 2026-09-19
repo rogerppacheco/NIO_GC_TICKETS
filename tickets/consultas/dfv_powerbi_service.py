@@ -981,14 +981,23 @@ def formatar_resposta_dfv_powerbi(
             f"\n⚠️ *Sem fachadas viáveis* neste CEP — exibindo status: {status_txt}\n"
         )
 
-    hp_tot = str(primeiro.get("HP_TOT") or "—").strip()
-    hc_tot = str(primeiro.get("HC_TOT") or "—").strip()
-    hp_livre = str(primeiro.get("HP_LIVRE") or "—").strip()
+    def _parse_num(v: Any) -> float:
+        if v is None or v == "": return 0.0
+        if isinstance(v, (int, float)): return float(v)
+        try:
+            return float(str(v).strip().replace("%", "").replace(",", "."))
+        except ValueError:
+            return 0.0
+
+    hp_tot = int(round(sum(_parse_num(r.get("HP_TOT")) for r in filtrados)))
+    hc_tot = int(round(sum(_parse_num(r.get("HC_TOT")) for r in filtrados)))
+    hp_livre = int(round(sum(_parse_num(r.get("HP_LIVRE")) for r in filtrados)))
+    
     classificacao = str(primeiro.get("CLASSIFICACAO") or "—").strip()
     faixa_cred = str(primeiro.get("ds_faixa_aprovacao_credito_total") or "—").strip()
 
     info_rota = ""
-    if hp_tot != "—" or hp_livre != "—":
+    if hp_tot > 0 or hp_livre > 0:
         info_rota = (
             f"📊 *Perfil da Rota:*\n"
             f"• HPs (Total): {hp_tot} | Livres: {hp_livre} | Ocupados (HC): {hc_tot}\n"
