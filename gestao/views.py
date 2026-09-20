@@ -1430,6 +1430,7 @@ def _render_fpd(request, form=None) -> HttpResponse:
             RelatorioFPDCidade.objects.filter(
                 indicador=indicador,
                 segmento=segmento,
+                mes=mes_venc,
             )
             .values("cidade", "parceiro")
             .annotate(ultimo_id=Max("id"))

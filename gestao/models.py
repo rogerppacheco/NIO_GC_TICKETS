@@ -443,6 +443,7 @@ class RelatorioFPDCidade(models.Model):
         related_name="relatorios_fpd_cidade",
     )
     cidade = models.CharField(max_length=150)
+    mes = models.CharField(max_length=6, default="", db_index=True)
     indicador = models.CharField(
         max_length=8,
         choices=RelatorioFPD.Indicador.choices,
@@ -465,7 +466,7 @@ class RelatorioFPDCidade(models.Model):
         verbose_name = "Relatório FPD Cidade"
         verbose_name_plural = "Relatórios FPD Cidade"
         indexes = [
-            models.Index(fields=["cidade", "indicador", "segmento"]),
+            models.Index(fields=["cidade", "mes", "indicador", "segmento"]),
         ]
 
 

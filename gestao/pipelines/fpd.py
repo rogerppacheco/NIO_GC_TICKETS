@@ -416,9 +416,12 @@ def reprocessar_cidades_lote(lote: LoteImportacao) -> int:
     ])
     col_ind = resolver_coluna(df, ["INDICADOR"])
     col_seg = resolver_coluna(df, ["NM_SEG", "nm_seg", "NM_SEGMENTO", "SEGMENTO"])
+    col_ref = resolver_coluna(df, ["REF_VENCTO", "MES_VENC", "MES_VENCIMENTO"])
     
-    if not col_cidade or not col_sit:
+    if not col_cidade or not col_sit or not col_ref:
         return 0
+    
+    df["_mes_venc"] = df[col_ref].apply(lambda x: mes_para_yyyymm(str(x)))
         
     if col_ind:
         df[_COL_IND] = df[col_ind].map(_normalizar_indicador)
@@ -433,9 +436,9 @@ def reprocessar_cidades_lote(lote: LoteImportacao) -> int:
     RelatorioFPDCidade.objects.filter(lote=lote).delete()
     gerados_cidades = 0
     
-    df_cid_group = df.dropna(subset=[col_cidade, "_parceiro_id"]).groupby([col_cidade, "_parceiro_id"])
+    df_cid_group = df.dropna(subset=[col_cidade, "_parceiro_id", "_mes_venc"]).groupby([col_cidade, "_parceiro_id", "_mes_venc"])
     
-    for (cidade_nome, parceiro_id), df_cid in df_cid_group:
+    for (cidade_nome, parceiro_id, mes_venc), df_cid in df_cid_group:
         nome_limpo = str(cidade_nome).strip()
         if not nome_limpo:
             continue
@@ -460,6 +463,7 @@ def reprocessar_cidades_lote(lote: LoteImportacao) -> int:
                     lote=lote,
                     parceiro_id=parceiro_id,
                     cidade=nome_limpo,
+                    mes=mes_venc,
                     indicador=indicador,
                     segmento=segmento,
                     percentual=perc,
