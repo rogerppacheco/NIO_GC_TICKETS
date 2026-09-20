@@ -92,6 +92,7 @@ from .models import (
     PracaBTU,
     RelatorioComissionamento,
     RelatorioFPD,
+    RelatorioFPDCidade,
     RelatorioRecompra,
     RelatorioTarefa,
     RelatorioVendaIndevida,
@@ -1314,6 +1315,20 @@ def fpd_view(request: HttpRequest) -> HttpResponse:
                 ),
             )
             return _voltar(request, "gestao_fpd", extra=_fpd_extra(request))
+            
+        if action == "reprocessar_cidades" and _pode_importar(request):
+            from .pipelines.fpd import reprocessar_cidades_lote
+            ultimo_lote = LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.FPD, ok=True).first()
+            if ultimo_lote:
+                try:
+                    qtd = reprocessar_cidades_lote(ultimo_lote)
+                    messages.success(request, f"Ranking de cidades reprocessado: {qtd} registros consolidados do lote {ultimo_lote.arquivo_nome}.")
+                except Exception as exc:
+                    messages.error(request, f"Falha ao reprocessar cidades: {exc}")
+            else:
+                messages.warning(request, "Nenhum lote FPD encontrado para reprocessar.")
+            return _voltar(request, "gestao_fpd", extra=_fpd_extra(request) + "&agrupamento=cidade")
+            
         if action == "enviar_email_pdv" and _pode_email_fpd(request):
             parceiro = get_object_or_404(visiveis, pk=request.POST.get("parceiro"))
             _flash_resumo(
@@ -1387,6 +1402,25 @@ def _render_fpd(request, form):
             visiveis_rel = com_visao
     else:
         visiveis_rel = com_visao
+        
+    agrupamento = request.GET.get("agrupamento", "pdv")
+    relatorios_cidade = []
+    if agrupamento == "cidade":
+        ultimas_cidades_ids = (
+            RelatorioFPDCidade.objects.filter(
+                indicador=indicador,
+                segmento=segmento,
+            )
+            .values("cidade")
+            .annotate(ultimo_id=Max("id"))
+            .values_list("ultimo_id", flat=True)
+        )
+        relatorios_cidade = list(
+            RelatorioFPDCidade.objects.select_related("lote")
+            .filter(id__in=ultimas_cidades_ids)
+            .order_by("-percentual", "cidade")
+        )
+
     if form is not None:
         form.fields["arquivo"].label = ""
         form.fields["arquivo"].widget.attrs.update(
@@ -1397,7 +1431,9 @@ def _render_fpd(request, form):
         "gestao/fpd.html",
         {
             "form": form,
+            "agrupamento": agrupamento,
             "relatorios": visiveis_rel,
+            "relatorios_cidade": relatorios_cidade,
             "relatorios_opcoes": relatorios,
             "pdv_filtro": pdv_filtro,
             "indicador": indicador,

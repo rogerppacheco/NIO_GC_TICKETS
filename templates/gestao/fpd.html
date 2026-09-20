@@ -18,6 +18,7 @@
         {{ form.arquivo.errors }}
       </label>
       <button class="btn btn-primary" type="submit">Importar FPD</button>
+      <button class="btn btn-secondary" type="submit" name="action" value="reprocessar_cidades" formnovalidate>Reprocessar Cidades</button>
     </form>
     {% endif %}
 
@@ -53,6 +54,10 @@
       {% for seg, rotulo in segmentos %}
       <a class="page-tab{% if segmento == seg %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ indicador }}&amp;segmento={{ seg }}&amp;mes={{ mes_venc }}{% if pdv_filtro %}&amp;pdv={{ pdv_filtro }}{% endif %}">{{ rotulo }}</a>
       {% endfor %}
+    </nav>
+    <nav class="fpd-pills" aria-label="Agrupamento">
+      <a class="page-tab{% if agrupamento != 'cidade' %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ indicador }}&amp;segmento={{ segmento }}&amp;mes={{ mes_venc }}{% if pdv_filtro %}&amp;pdv={{ pdv_filtro }}{% endif %}&amp;agrupamento=pdv">Por Parceiro</a>
+      <a class="page-tab{% if agrupamento == 'cidade' %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ indicador }}&amp;segmento={{ segmento }}&amp;mes={{ mes_venc }}{% if pdv_filtro %}&amp;pdv={{ pdv_filtro }}{% endif %}&amp;agrupamento=cidade">Por Cidade</a>
     </nav>
 
     <div class="fpd-send">
@@ -94,14 +99,36 @@
         <thead>
           <tr>
             <th class="num">%</th>
+            {% if agrupamento == 'cidade' %}
+            <th>CIDADE</th>
+            <th class="num">Abertas</th>
+            <th class="num">Total</th>
+            {% else %}
             <th>PDV</th>
             <th>Especialista</th>
             <th class="num">Abertas</th>
             <th class="num">Total</th>
             <th class="col-acoes">Ações</th>
+            {% endif %}
           </tr>
         </thead>
         <tbody>
+          {% if agrupamento == 'cidade' %}
+          {% for r in relatorios_cidade %}
+          <tr>
+            <td class="num">
+              <span class="fpd-pct{% if r.percentual >= fpd_limite %} is-crit{% elif r.percentual >= 15 %} is-warn{% endif %}">{{ r.percentual|floatformat:2 }}%</span>
+            </td>
+            <td><strong style="color:var(--c-primary)">{{ r.cidade|upper }}</strong></td>
+            <td class="num">{{ r.total_abertas }}</td>
+            <td class="num">{{ r.total_faturas }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="4" style="text-align:center;padding:2rem;">Nenhuma cidade encontrada no lote atual.</td>
+          </tr>
+          {% endfor %}
+          {% else %}
           {% for r in relatorios %}
           <tr{% if pdv_filtro == r.parceiro_id %} class="is-on"{% endif %}>
             <td class="num">
@@ -149,6 +176,7 @@
             <td colspan="6" class="help">Nenhum relatório {{ indicador }}{% if segmento != "todos" %} · {{ rotulo_segmento }}{% endif %} · MES_VENC {{ rotulo_mes }} neste recorte. Importe a planilha para gerar FPD, SPD, TPD e os recortes de segmento.</td>
           </tr>
           {% endfor %}
+          {% endif %}
         </tbody>
       </table>
     </div>

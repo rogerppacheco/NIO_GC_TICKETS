@@ -67,6 +67,19 @@ FPD_CAMPOS: dict[str, list[str]] = {
     "FAIXA": ["FAIXA"],
     "INDICADOR": ["INDICADOR"],
     "NM_SEG": ["NM_SEG", "nm_seg", "NM_SEGMENTO", "SEGMENTO"],
+    "LOCALIDADE": [
+        "LOCALIDADE",
+        "NM_LOCALIDADE",
+        "MUNICIPIO",
+        "NM_MUNICIPIO",
+        "CIDADE",
+        "MUNICÍPIO",
+        "NM_MUNICIPIO_INSTALACAO",
+        "CIDADE_INSTALACAO",
+        "PRACA",
+        "PRAÇA",
+        "NM_PRACA",
+    ],
 }
 
 
