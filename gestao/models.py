@@ -435,6 +435,13 @@ class RelatorioFPDCidade(models.Model):
         on_delete=models.CASCADE,
         related_name="relatorios_fpd_cidade",
     )
+    parceiro = models.ForeignKey(
+        "tickets.Parceiro",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="relatorios_fpd_cidade",
+    )
     cidade = models.CharField(max_length=150)
     indicador = models.CharField(
         max_length=8,

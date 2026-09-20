@@ -346,13 +346,15 @@ def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
             gerados_pdvs += 1
 
     gerados_cidades = 0
-    if col_cidade:
+    if col_cidade and col_rede:
         RelatorioFPDCidade.objects.filter(lote=lote).delete()
-        for cidade_nome in df[col_cidade].dropna().unique():
-            df_cid = df[df[col_cidade] == cidade_nome]
+        df_cid_group = df.dropna(subset=[col_cidade, col_rede]).groupby([col_cidade, col_rede])
+        for (cidade_nome, rede_nome), df_cid in df_cid_group:
             nome_limpo = str(cidade_nome).strip()
             if not nome_limpo:
                 continue
+            
+            parceiro_id = resolver_parceiro_id(rede_nome, None, indice_pdvs)
             
             criou = False
             for indicador in INDICADORES:
@@ -372,6 +374,7 @@ def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
                     
                     RelatorioFPDCidade.objects.create(
                         lote=lote,
+                        parceiro_id=parceiro_id,
                         cidade=nome_limpo,
                         indicador=indicador,
                         segmento=segmento,
@@ -396,7 +399,9 @@ def reprocessar_cidades_lote(lote: LoteImportacao) -> int:
     dfs = []
     for r in relatorios:
         if "base" in r.detalhes:
-            dfs.append(base_para_dataframe(r.detalhes))
+            df_part = base_para_dataframe(r.detalhes)
+            df_part["_parceiro_id"] = r.parceiro_id
+            dfs.append(df_part)
             
     if not dfs:
         return 0
@@ -428,8 +433,9 @@ def reprocessar_cidades_lote(lote: LoteImportacao) -> int:
     RelatorioFPDCidade.objects.filter(lote=lote).delete()
     gerados_cidades = 0
     
-    for cidade_nome in df[col_cidade].dropna().unique():
-        df_cid = df[df[col_cidade] == cidade_nome]
+    df_cid_group = df.dropna(subset=[col_cidade, "_parceiro_id"]).groupby([col_cidade, "_parceiro_id"])
+    
+    for (cidade_nome, parceiro_id), df_cid in df_cid_group:
         nome_limpo = str(cidade_nome).strip()
         if not nome_limpo:
             continue
@@ -452,6 +458,7 @@ def reprocessar_cidades_lote(lote: LoteImportacao) -> int:
                 
                 RelatorioFPDCidade.objects.create(
                     lote=lote,
+                    parceiro_id=parceiro_id,
                     cidade=nome_limpo,
                     indicador=indicador,
                     segmento=segmento,

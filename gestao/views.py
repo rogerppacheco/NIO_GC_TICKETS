@@ -1418,7 +1418,7 @@ def _render_fpd(request, form):
             .values_list("ultimo_id", flat=True)
         )
         relatorios_cidade = list(
-            RelatorioFPDCidade.objects.select_related("lote")
+            RelatorioFPDCidade.objects.select_related("lote", "parceiro__especialista__perfil_staff")
             .filter(id__in=ultimas_cidades_ids)
             .order_by("-percentual", "cidade")
         )
