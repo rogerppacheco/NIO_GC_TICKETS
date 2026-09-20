@@ -103,9 +103,6 @@
             <th class="num">%</th>
             {% if agrupamento == 'cidade' %}
             <th>CIDADE</th>
-            <th>PARCEIRO</th>
-            <th>ESPECIALISTA</th>
-            <th>GERÊNCIA</th>
             <th class="num">Abertas</th>
             <th class="num">Total</th>
             {% elif agrupamento == 'especialista' %}
@@ -133,9 +130,6 @@
               <span class="fpd-pct{% if r.percentual >= fpd_limite %} is-crit{% elif r.percentual >= 15 %} is-warn{% endif %}">{{ r.percentual|floatformat:2 }}%</span>
             </td>
             <td><strong style="color:var(--c-primary)">{{ r.cidade|upper }}</strong></td>
-            <td>{{ r.parceiro.nome|default:"—" }}</td>
-            <td>{{ r.parceiro.especialista.get_full_name|default:r.parceiro.especialista.username|default:"—" }}</td>
-            <td>{{ r.parceiro.especialista.perfil_staff.gerencia|default:"—" }}</td>
             <td class="num">{{ r.total_abertas }}</td>
             <td class="num">{{ r.total_faturas }}</td>
           </tr>

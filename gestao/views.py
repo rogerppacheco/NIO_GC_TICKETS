@@ -1427,7 +1427,7 @@ def _render_fpd(request, form=None) -> HttpResponse:
     
     if agrupamento == "cidade":
         from collections import defaultdict
-        from django.db.models import Q
+        from django.db.models import Q, Sum
         
         lote_parceiros = defaultdict(list)
         for r in visiveis_rel:
@@ -1439,16 +1439,32 @@ def _render_fpd(request, form=None) -> HttpResponse:
             q_objects |= Q(lote_id=lote_id, parceiro_id__in=parceiros_ids)
             
         if q_objects:
-            relatorios_cidade = list(
-                RelatorioFPDCidade.objects.select_related("lote", "parceiro__especialista__perfil_staff")
+            cidades_qs = (
+                RelatorioFPDCidade.objects
                 .filter(q_objects)
                 .filter(
                     indicador=indicador,
                     segmento=segmento,
                     mes=mes_venc,
                 )
-                .order_by("-percentual", "cidade")
+                .values("cidade")
+                .annotate(
+                    total_f=Sum("total_faturas"),
+                    total_a=Sum("total_abertas"),
+                )
             )
+            relatorios_cidade = []
+            for item in cidades_qs:
+                total_f = item["total_f"] or 0
+                total_a = item["total_a"] or 0
+                perc = (total_a / total_f * 100) if total_f else 0
+                relatorios_cidade.append({
+                    "cidade": item["cidade"],
+                    "total_faturas": total_f,
+                    "total_abertas": total_a,
+                    "percentual": perc,
+                })
+            relatorios_cidade.sort(key=lambda x: (-x["percentual"], x["cidade"]))
         else:
             relatorios_cidade = []
     elif agrupamento in ("especialista", "gerencia"):
