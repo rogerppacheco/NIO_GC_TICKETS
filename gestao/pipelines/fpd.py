@@ -398,7 +398,7 @@ def reprocessar_cidades_lote(lote: LoteImportacao) -> int:
         
     dfs = []
     for r in relatorios:
-        if "base" in r.detalhes:
+        if r.segmento == "todos" and "base" in r.detalhes:
             df_part = base_para_dataframe(r.detalhes)
             df_part["_parceiro_id"] = r.parceiro_id
             dfs.append(df_part)
