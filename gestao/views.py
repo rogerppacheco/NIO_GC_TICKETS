@@ -1383,6 +1383,7 @@ def _parceiros_fpd(request):
 
 
 def _render_fpd(request, form=None) -> HttpResponse:
+    from django.conf import settings
     from tickets.models import Parceiro
 
     visiveis = _parceiros_fpd(request)
