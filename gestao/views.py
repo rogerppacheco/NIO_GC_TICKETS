@@ -1426,24 +1426,31 @@ def _render_fpd(request, form=None) -> HttpResponse:
     visiveis_parceiros_ids = [r.parceiro_id for r in visiveis_rel if r.parceiro_id]
     
     if agrupamento == "cidade":
-        ultimas_cidades_ids = (
-            RelatorioFPDCidade.objects.filter(
-                indicador=indicador,
-                segmento=segmento,
-                mes=mes_venc,
+        from collections import defaultdict
+        from django.db.models import Q
+        
+        lote_parceiros = defaultdict(list)
+        for r in visiveis_rel:
+            if r.parceiro_id:
+                lote_parceiros[r.lote_id].append(r.parceiro_id)
+                
+        q_objects = Q()
+        for lote_id, parceiros_ids in lote_parceiros.items():
+            q_objects |= Q(lote_id=lote_id, parceiro_id__in=parceiros_ids)
+            
+        if q_objects:
+            relatorios_cidade = list(
+                RelatorioFPDCidade.objects.select_related("lote", "parceiro__especialista__perfil_staff")
+                .filter(q_objects)
+                .filter(
+                    indicador=indicador,
+                    segmento=segmento,
+                    mes=mes_venc,
+                )
+                .order_by("-percentual", "cidade")
             )
-            .values("cidade", "parceiro")
-            .annotate(ultimo_id=Max("id"))
-            .values_list("ultimo_id", flat=True)
-        )
-        relatorios_cidade = list(
-            RelatorioFPDCidade.objects.select_related("lote", "parceiro__especialista__perfil_staff")
-            .filter(
-                id__in=ultimas_cidades_ids,
-                parceiro_id__in=visiveis_parceiros_ids
-            )
-            .order_by("-percentual", "cidade")
-        )
+        else:
+            relatorios_cidade = []
     elif agrupamento in ("especialista", "gerencia"):
         from collections import defaultdict
         
