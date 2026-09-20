@@ -1318,11 +1318,13 @@ def fpd_view(request: HttpRequest) -> HttpResponse:
             
         if action == "reprocessar_cidades" and _pode_importar(request):
             from .pipelines.fpd import reprocessar_cidades_lote
-            ultimo_lote = LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.FPD, ok=True).first()
-            if ultimo_lote:
+            lotes = LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.FPD, ok=True)
+            if lotes.exists():
                 try:
-                    qtd = reprocessar_cidades_lote(ultimo_lote)
-                    messages.success(request, f"Ranking de cidades reprocessado: {qtd} registros consolidados do lote {ultimo_lote.arquivo_nome}.")
+                    qtd = 0
+                    for lote in lotes:
+                        qtd += reprocessar_cidades_lote(lote)
+                    messages.success(request, f"Ranking de cidades reprocessado: {qtd} registros consolidados em {lotes.count()} arquivos.")
                 except Exception as exc:
                     messages.error(request, f"Falha ao reprocessar cidades: {exc}")
             else:
