@@ -1298,7 +1298,7 @@ def fpd_view(request: HttpRequest) -> HttpResponse:
         action = request.POST.get("action") or ""
         ind, seg = _fpd_filtro(request)
         mes = _fpd_mes(request)
-        visiveis = _parceiros(request)
+        visiveis = _parceiros_fpd(request)
         rotulo_seg = ROTULO_SEGMENTO.get(seg, seg)
         if action == "enviar_pdv" and _pode_enviar(request):
             parceiro = get_object_or_404(visiveis, pk=request.POST.get("parceiro"))
@@ -1369,10 +1369,23 @@ def fpd_view(request: HttpRequest) -> HttpResponse:
     return _render_fpd(request, UploadBaseForm() if _pode_importar(request) else None)
 
 
-def _render_fpd(request, form):
-    from django.conf import settings
+def _parceiros_fpd(request):
+    """Para o FPD, permitimos ver todos os parceiros independente da gerência, para comparar FPD entre gerências."""
+    from tickets.acesso import escopo_gestao
+    from tickets.models import Parceiro
+    escopo = escopo_gestao(request)
+    qs = Parceiro.objects.filter(ativo=True).select_related("especialista", "especialista__perfil_staff")
+    if escopo == "todos":
+        return qs.order_by("nome")
+    elif escopo == "outros":
+        return qs.exclude(especialista=request.user).order_by("nome")
+    return qs.filter(especialista=request.user).order_by("nome")
 
-    visiveis = _parceiros(request)
+
+def _render_fpd(request, form=None) -> HttpResponse:
+    from tickets.models import Parceiro
+
+    visiveis = _parceiros_fpd(request)
     indicador, segmento = _fpd_filtro(request)
     ultimos_ids = (
         RelatorioFPD.objects.filter(
@@ -1407,6 +1420,8 @@ def _render_fpd(request, form):
     relatorios_cidade = []
     relatorios_agrupados = []
     
+    visiveis_parceiros_ids = [r.parceiro_id for r in visiveis_rel if r.parceiro_id]
+    
     if agrupamento == "cidade":
         ultimas_cidades_ids = (
             RelatorioFPDCidade.objects.filter(
@@ -1419,7 +1434,10 @@ def _render_fpd(request, form):
         )
         relatorios_cidade = list(
             RelatorioFPDCidade.objects.select_related("lote", "parceiro__especialista__perfil_staff")
-            .filter(id__in=ultimas_cidades_ids)
+            .filter(
+                id__in=ultimas_cidades_ids,
+                parceiro_id__in=visiveis_parceiros_ids
+            )
             .order_by("-percentual", "cidade")
         )
     elif agrupamento in ("especialista", "gerencia"):
