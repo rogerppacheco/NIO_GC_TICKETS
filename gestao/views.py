@@ -1385,7 +1385,7 @@ def _render_fpd(request, form):
         .values_list("ultimo_id", flat=True)
     )
     relatorios = list(
-        RelatorioFPD.objects.select_related("parceiro__especialista", "lote")
+        RelatorioFPD.objects.select_related("parceiro__especialista__perfil_staff", "lote")
         .filter(id__in=ultimos_ids)
         .order_by("-percentual", "pdv_nome")
     )
@@ -1405,6 +1405,8 @@ def _render_fpd(request, form):
         
     agrupamento = request.GET.get("agrupamento", "pdv")
     relatorios_cidade = []
+    relatorios_agrupados = []
+    
     if agrupamento == "cidade":
         ultimas_cidades_ids = (
             RelatorioFPDCidade.objects.filter(
@@ -1420,6 +1422,26 @@ def _render_fpd(request, form):
             .filter(id__in=ultimas_cidades_ids)
             .order_by("-percentual", "cidade")
         )
+    elif agrupamento in ("especialista", "gerencia"):
+        from collections import defaultdict
+        
+        grupos = defaultdict(lambda: {"total_abertas": 0, "total_faturas": 0})
+        for r in visiveis_rel:
+            esp = r.parceiro.especialista
+            if agrupamento == "especialista":
+                chave = esp.get_full_name() if esp else (esp.username if esp else "Sem Especialista")
+            else:
+                chave = esp.perfil_staff.gerencia if esp and hasattr(esp, 'perfil_staff') and esp.perfil_staff.gerencia else "Sem Gerência"
+            
+            grupos[chave]["nome"] = chave
+            grupos[chave]["total_abertas"] += r.visao_abertas
+            grupos[chave]["total_faturas"] += r.visao_total
+            
+        for data in grupos.values():
+            data["percentual"] = (data["total_abertas"] / data["total_faturas"] * 100) if data["total_faturas"] else 0
+            relatorios_agrupados.append(data)
+            
+        relatorios_agrupados.sort(key=lambda x: (-x["percentual"], x["nome"]))
 
     if form is not None:
         form.fields["arquivo"].label = ""
@@ -1434,6 +1456,7 @@ def _render_fpd(request, form):
             "agrupamento": agrupamento,
             "relatorios": visiveis_rel,
             "relatorios_cidade": relatorios_cidade,
+            "relatorios_agrupados": relatorios_agrupados,
             "relatorios_opcoes": relatorios,
             "pdv_filtro": pdv_filtro,
             "indicador": indicador,

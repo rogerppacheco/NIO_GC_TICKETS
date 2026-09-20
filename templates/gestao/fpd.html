@@ -56,7 +56,9 @@
       {% endfor %}
     </nav>
     <nav class="fpd-pills" aria-label="Agrupamento">
-      <a class="page-tab{% if agrupamento != 'cidade' %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ indicador }}&amp;segmento={{ segmento }}&amp;mes={{ mes_venc }}{% if pdv_filtro %}&amp;pdv={{ pdv_filtro }}{% endif %}&amp;agrupamento=pdv">Por Parceiro</a>
+      <a class="page-tab{% if agrupamento == 'pdv' or not agrupamento %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ indicador }}&amp;segmento={{ segmento }}&amp;mes={{ mes_venc }}{% if pdv_filtro %}&amp;pdv={{ pdv_filtro }}{% endif %}&amp;agrupamento=pdv">Por Parceiro</a>
+      <a class="page-tab{% if agrupamento == 'especialista' %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ indicador }}&amp;segmento={{ segmento }}&amp;mes={{ mes_venc }}{% if pdv_filtro %}&amp;pdv={{ pdv_filtro }}{% endif %}&amp;agrupamento=especialista">Por Especialista</a>
+      <a class="page-tab{% if agrupamento == 'gerencia' %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ indicador }}&amp;segmento={{ segmento }}&amp;mes={{ mes_venc }}{% if pdv_filtro %}&amp;pdv={{ pdv_filtro }}{% endif %}&amp;agrupamento=gerencia">Por Gerência</a>
       <a class="page-tab{% if agrupamento == 'cidade' %} is-on{% endif %}" href="?escopo={{ gestao_escopo|default:'meus' }}&amp;indicador={{ indicador }}&amp;segmento={{ segmento }}&amp;mes={{ mes_venc }}{% if pdv_filtro %}&amp;pdv={{ pdv_filtro }}{% endif %}&amp;agrupamento=cidade">Por Cidade</a>
     </nav>
 
@@ -103,6 +105,14 @@
             <th>CIDADE</th>
             <th class="num">Abertas</th>
             <th class="num">Total</th>
+            {% elif agrupamento == 'especialista' %}
+            <th>ESPECIALISTA</th>
+            <th class="num">Abertas</th>
+            <th class="num">Total</th>
+            {% elif agrupamento == 'gerencia' %}
+            <th>GERÊNCIA</th>
+            <th class="num">Abertas</th>
+            <th class="num">Total</th>
             {% else %}
             <th>PDV</th>
             <th>Especialista</th>
@@ -126,6 +136,21 @@
           {% empty %}
           <tr>
             <td colspan="4" style="text-align:center;padding:2rem;">Nenhuma cidade encontrada no lote atual.</td>
+          </tr>
+          {% endfor %}
+          {% elif agrupamento in 'especialista gerencia' %}
+          {% for r in relatorios_agrupados %}
+          <tr>
+            <td class="num">
+              <span class="fpd-pct{% if r.percentual >= fpd_limite %} is-crit{% elif r.percentual >= 15 %} is-warn{% endif %}">{{ r.percentual|floatformat:2 }}%</span>
+            </td>
+            <td><strong style="color:var(--c-primary)">{{ r.nome|upper }}</strong></td>
+            <td class="num">{{ r.total_abertas }}</td>
+            <td class="num">{{ r.total_faturas }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="4" style="text-align:center;padding:2rem;">Nenhum registro encontrado.</td>
           </tr>
           {% endfor %}
           {% else %}
