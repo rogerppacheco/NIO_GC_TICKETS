@@ -1413,7 +1413,7 @@ def _render_fpd(request, form):
                 indicador=indicador,
                 segmento=segmento,
             )
-            .values("cidade")
+            .values("cidade", "parceiro")
             .annotate(ultimo_id=Max("id"))
             .values_list("ultimo_id", flat=True)
         )
@@ -1426,12 +1426,28 @@ def _render_fpd(request, form):
         from collections import defaultdict
         
         grupos = defaultdict(lambda: {"total_abertas": 0, "total_faturas": 0})
+        col_gerencia = None
+        
         for r in visiveis_rel:
             esp = r.parceiro.especialista
             if agrupamento == "especialista":
                 chave = esp.get_full_name() if esp else (esp.username if esp else "Sem Especialista")
             else:
-                chave = esp.perfil_staff.gerencia if esp and hasattr(esp, 'perfil_staff') and esp.perfil_staff.gerencia else "Sem Gerência"
+                if col_gerencia is None:
+                    cols = r.detalhes.get("base_colunas", [])
+                    for c in cols:
+                        if c.upper() in ("GERENCIA", "GERÊNCIA", "NM_GC", "NOME_GC"):
+                            col_gerencia = c
+                            break
+                    if col_gerencia is None:
+                        col_gerencia = "_not_found"
+                
+                if col_gerencia != "_not_found" and "base" in r.detalhes and r.detalhes["base"]:
+                    chave = str(r.detalhes["base"][0].get(col_gerencia, "Sem Gerência")).strip()
+                    if not chave or chave.lower() == "nan":
+                        chave = "Sem Gerência"
+                else:
+                    chave = "Sem Gerência"
             
             grupos[chave]["nome"] = chave
             grupos[chave]["total_abertas"] += r.visao_abertas
