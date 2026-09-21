@@ -216,22 +216,29 @@
         <div class="parcial-aside-envio">
           <p class="help" style="margin:0">Parceiro + especialista · zerados em A–Z · linha <strong>TOTAL {{ gerencia_atual|default:'PP'|upper }}</strong> no rodapé.</p>
           {% if pode_enviar %}
-          {% if ranking_grupo_padrao %}
+          {% if grupos_ranking %}
           <form method="post" data-parcial-envio style="margin-bottom:0.5rem">
             {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
             <input type="hidden" name="parcial_sub" value="consolidado">
-            <input type="hidden" name="destinatario" value="{{ ranking_grupo_padrao.id }}">
-            <button class="btn btn-primary" type="submit" name="action" value="enviar_parcial_consolidado">
-              Enviar no {{ ranking_grupo_padrao.nome }}
+            <select name="destinatario" required style="width:100%; margin-bottom:0.5rem;">
+              <option value="">Escolha o grupo…</option>
+              {% for g in grupos_ranking %}
+                <option value="{{ g.id }}"{% if ranking_grupo_padrao and g.id == ranking_grupo_padrao.id %} selected{% endif %}>
+                  {% if g.ranking_consolidado %}{{ g.nome }} (consolidado){% else %}{{ g.parceiro.nome }} — {{ g.nome }}{% endif %}
+                </option>
+              {% endfor %}
+            </select>
+            <button class="btn btn-primary" type="submit" name="action" value="enviar_parcial_consolidado" style="width:100%">
+              Enviar neste grupo
             </button>
           </form>
           {% else %}
-          <p class="help err" style="margin:0 0 0.5rem">Cadastre/ative o grupo Parceiros_{{ gerencia_atual|default:'PP'|upper }}_Nio em Destinatários (Ranking consolidado + Resultados).</p>
+          <p class="help err" style="margin:0 0 0.5rem">Cadastre/ative grupos em Destinatários (Ranking consolidado + Resultados).</p>
           {% endif %}
           <form method="post" data-parcial-envio>
             {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
             <input type="hidden" name="parcial_sub" value="consolidado">
-            <button class="btn btn-secondary" type="submit" name="action" value="enviar_parcial_grupos">Enviar a todos os grupos</button>
+            <button class="btn btn-secondary" type="submit" name="action" value="enviar_parcial_grupos" style="width:100%">Enviar a todos os grupos</button>
           </form>
           {% endif %}
         </div>
