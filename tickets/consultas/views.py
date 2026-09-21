@@ -39,7 +39,6 @@ def _dfv_habilitado() -> bool:
     return bool(getattr(settings, "DFV_POWERBI_ENABLED", True))
 
 
-@login_required
 @require_GET
 def consultas_hub(request: HttpRequest) -> HttpResponse:
     return render(
@@ -52,7 +51,6 @@ def consultas_hub(request: HttpRequest) -> HttpResponse:
     )
 
 
-@login_required
 @require_http_methods(["GET", "POST"])
 def consulta_dfv(request: HttpRequest) -> HttpResponse:
     ctx: dict = {
@@ -87,7 +85,6 @@ def consulta_dfv(request: HttpRequest) -> HttpResponse:
     return render(request, "tickets/consultas/dfv.html", ctx)
 
 
-@login_required
 @require_http_methods(["GET", "POST"])
 def consulta_cdoe(request: HttpRequest) -> HttpResponse:
     """
@@ -210,7 +207,6 @@ def consulta_cdoe(request: HttpRequest) -> HttpResponse:
     return render(request, "tickets/consultas/cdoe.html", ctx)
 
 
-@login_required
 @require_http_methods(["GET"])
 def consulta_viabilidade(request: HttpRequest) -> HttpResponse:
     """Consulta read-only à base VTAL (forms) por CEP + fachada."""

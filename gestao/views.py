@@ -92,6 +92,7 @@ from .models import (
     PracaBTU,
     RelatorioComissionamento,
     RelatorioFPD,
+    RelatorioFPDCidade,
     RelatorioRecompra,
     RelatorioTarefa,
     RelatorioVendaIndevida,
@@ -702,9 +703,11 @@ def _grupos_ranking(parceiros: list[Parceiro]):
     )
 
 
-def _grupo_ranking_padrao(grupos) -> Destinatario | None:
+def _grupo_ranking_padrao(grupos, gerencia_ativa: str = "PP") -> Destinatario | None:
+    ger = (gerencia_ativa or "PP").casefold()
+    slug = f"parceiros_{ger}"
     for g in grupos:
-        if g.ranking_consolidado and "parceiros_pp" in (g.nome or "").casefold():
+        if g.ranking_consolidado and slug in (g.nome or "").casefold():
             return g
     for g in grupos:
         if g.ranking_consolidado:
@@ -862,7 +865,8 @@ def parcial_preview(request: HttpRequest) -> HttpResponse:
         sub = sub_parcial(linhas or dados["linhas"], dados, titulo="Minha carteira")
         png, _ = imagem_parcial_especialistas(sub, titulo="Minha carteira")
     else:
-        png, _ = imagem_parcial_gerencia(dados)
+        gerencia = _gerencia_lote(request) or "PP"
+        png, _ = imagem_parcial_gerencia(dados, titulo=f"Parceiros {gerencia}")
     del cache
     return HttpResponse(png, content_type="image/png")
 
@@ -1017,7 +1021,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                 dest_raw = (request.POST.get("destinatario") or "").strip()
                 dest_id = int(dest_raw) if dest_raw.isdigit() else None
                 if dest_id is None:
-                    padrao = _grupo_ranking_padrao(_grupos_parcial(visiveis))
+                    padrao = _grupo_ranking_padrao(_grupos_parcial(visiveis), _gerencia_lote(request) or "PP")
                     dest_id = padrao.pk if padrao else None
                 _flash_resumo(
                     request,
@@ -1164,7 +1168,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             "parcial_turno": rotulo_turno,
             "parcial_horarios": HORARIOS_PARCIAL,
             "ultimo_parcial": ultimo_parcial,
-            "ranking_grupo_padrao": _grupo_ranking_padrao(grupos_ranking),
+            "ranking_grupo_padrao": _grupo_ranking_padrao(grupos_ranking, _gerencia_lote(request) or "PP"),
             "grupo_pp_wa": grupo_pp_wa,
             "pracas_btu": pracas_ativas,
             "pracas_btu_mg": pracas_ativas.filter(uf="MG").count(),
@@ -1294,7 +1298,7 @@ def fpd_view(request: HttpRequest) -> HttpResponse:
         action = request.POST.get("action") or ""
         ind, seg = _fpd_filtro(request)
         mes = _fpd_mes(request)
-        visiveis = _parceiros(request)
+        visiveis = _parceiros_fpd(request)
         rotulo_seg = ROTULO_SEGMENTO.get(seg, seg)
         if action == "enviar_pdv" and _pode_enviar(request):
             parceiro = get_object_or_404(visiveis, pk=request.POST.get("parceiro"))
@@ -1311,6 +1315,22 @@ def fpd_view(request: HttpRequest) -> HttpResponse:
                 ),
             )
             return _voltar(request, "gestao_fpd", extra=_fpd_extra(request))
+            
+        if action == "reprocessar_cidades" and _pode_importar(request):
+            from .pipelines.fpd import reprocessar_cidades_lote
+            lotes = LoteImportacao.objects.filter(tipo=LoteImportacao.Tipo.FPD, ok=True)
+            if lotes.exists():
+                try:
+                    qtd = 0
+                    for lote in lotes:
+                        qtd += reprocessar_cidades_lote(lote)
+                    messages.success(request, f"Ranking de cidades reprocessado: {qtd} registros consolidados em {lotes.count()} arquivos.")
+                except Exception as exc:
+                    messages.error(request, f"Falha ao reprocessar cidades: {exc}")
+            else:
+                messages.warning(request, "Nenhum lote FPD encontrado para reprocessar.")
+            return _voltar(request, "gestao_fpd", extra=_fpd_extra(request) + "&agrupamento=cidade")
+            
         if action == "enviar_email_pdv" and _pode_email_fpd(request):
             parceiro = get_object_or_404(visiveis, pk=request.POST.get("parceiro"))
             _flash_resumo(
@@ -1351,10 +1371,24 @@ def fpd_view(request: HttpRequest) -> HttpResponse:
     return _render_fpd(request, UploadBaseForm() if _pode_importar(request) else None)
 
 
-def _render_fpd(request, form):
-    from django.conf import settings
+def _parceiros_fpd(request):
+    """Para o FPD, permitimos ver todos os parceiros independente da gerência, para comparar FPD entre gerências."""
+    from tickets.acesso import escopo_gestao
+    from tickets.models import Parceiro
+    escopo = escopo_gestao(request)
+    qs = Parceiro.objects.filter(ativo=True).select_related("especialista", "especialista__perfil_staff")
+    if escopo == "todos":
+        return qs.order_by("nome")
+    elif escopo == "outros":
+        return qs.exclude(especialista=request.user).order_by("nome")
+    return qs.filter(especialista=request.user).order_by("nome")
 
-    visiveis = _parceiros(request)
+
+def _render_fpd(request, form=None) -> HttpResponse:
+    from django.conf import settings
+    from tickets.models import Parceiro
+
+    visiveis = _parceiros_fpd(request)
     indicador, segmento = _fpd_filtro(request)
     ultimos_ids = (
         RelatorioFPD.objects.filter(
@@ -1367,7 +1401,7 @@ def _render_fpd(request, form):
         .values_list("ultimo_id", flat=True)
     )
     relatorios = list(
-        RelatorioFPD.objects.select_related("parceiro__especialista", "lote")
+        RelatorioFPD.objects.select_related("parceiro__especialista__perfil_staff", "lote")
         .filter(id__in=ultimos_ids)
         .order_by("-percentual", "pdv_nome")
     )
@@ -1384,6 +1418,92 @@ def _render_fpd(request, form):
             visiveis_rel = com_visao
     else:
         visiveis_rel = com_visao
+        
+    agrupamento = request.GET.get("agrupamento", "pdv")
+    relatorios_cidade = []
+    relatorios_agrupados = []
+    
+    visiveis_parceiros_ids = [r.parceiro_id for r in visiveis_rel if r.parceiro_id]
+    
+    if agrupamento == "cidade":
+        from collections import defaultdict
+        from django.db.models import Q, Sum
+        
+        lote_parceiros = defaultdict(list)
+        for r in visiveis_rel:
+            if r.parceiro_id:
+                lote_parceiros[r.lote_id].append(r.parceiro_id)
+                
+        q_objects = Q()
+        for lote_id, parceiros_ids in lote_parceiros.items():
+            q_objects |= Q(lote_id=lote_id, parceiro_id__in=parceiros_ids)
+            
+        if q_objects:
+            cidades_qs = (
+                RelatorioFPDCidade.objects
+                .filter(q_objects)
+                .filter(
+                    indicador=indicador,
+                    segmento=segmento,
+                    mes=mes_venc,
+                )
+                .values("cidade")
+                .annotate(
+                    total_f=Sum("total_faturas"),
+                    total_a=Sum("total_abertas"),
+                )
+            )
+            relatorios_cidade = []
+            for item in cidades_qs:
+                total_f = item["total_f"] or 0
+                total_a = item["total_a"] or 0
+                perc = (total_a / total_f * 100) if total_f else 0
+                relatorios_cidade.append({
+                    "cidade": item["cidade"],
+                    "total_faturas": total_f,
+                    "total_abertas": total_a,
+                    "percentual": perc,
+                })
+            relatorios_cidade.sort(key=lambda x: (-x["percentual"], x["cidade"]))
+        else:
+            relatorios_cidade = []
+    elif agrupamento in ("especialista", "gerencia"):
+        from collections import defaultdict
+        
+        grupos = defaultdict(lambda: {"total_abertas": 0, "total_faturas": 0})
+        col_gerencia = None
+        
+        for r in visiveis_rel:
+            esp = r.parceiro.especialista
+            if agrupamento == "especialista":
+                chave = esp.get_full_name() if esp else (esp.username if esp else "Sem Especialista")
+            else:
+                if col_gerencia is None:
+                    cols = r.detalhes.get("base_colunas", [])
+                    for c in cols:
+                        if c.upper() in ("GERENCIA", "GERÊNCIA", "NM_GC", "NOME_GC"):
+                            col_gerencia = c
+                            break
+                    if col_gerencia is None:
+                        col_gerencia = "_not_found"
+                
+                if col_gerencia != "_not_found" and "base" in r.detalhes and r.detalhes["base"]:
+                    chave = str(r.detalhes["base"][0].get(col_gerencia, "Sem Gerência")).strip()
+                    if not chave or chave.lower() == "nan":
+                        chave = "Sem Gerência"
+                else:
+                    chave = "Sem Gerência"
+            
+            grupos[chave]["nome"] = chave
+            grupos[chave]["total_abertas"] += r.visao_abertas
+            grupos[chave]["total_faturas"] += r.visao_total
+            
+        for data in grupos.values():
+            data["percentual"] = (data["total_abertas"] / data["total_faturas"] * 100) if data["total_faturas"] else 0
+            relatorios_agrupados.append(data)
+            
+        relatorios_agrupados.sort(key=lambda x: (-x["percentual"], x["nome"]))
+
     if form is not None:
         form.fields["arquivo"].label = ""
         form.fields["arquivo"].widget.attrs.update(
@@ -1394,7 +1514,10 @@ def _render_fpd(request, form):
         "gestao/fpd.html",
         {
             "form": form,
+            "agrupamento": agrupamento,
             "relatorios": visiveis_rel,
+            "relatorios_cidade": relatorios_cidade,
+            "relatorios_agrupados": relatorios_agrupados,
             "relatorios_opcoes": relatorios,
             "pdv_filtro": pdv_filtro,
             "indicador": indicador,

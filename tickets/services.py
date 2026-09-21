@@ -96,7 +96,7 @@ def render_mascara(mascara: Mascara, ticket: Ticket) -> str:
 
     def repl(match: re.Match) -> str:
         key = match.group(1)
-        return str(ctx.get(key, ""))
+        return str(ctx.get(key, "")).upper()
 
     return _VAR.sub(repl, mascara.template)
 

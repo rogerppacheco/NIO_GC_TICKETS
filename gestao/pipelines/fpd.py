@@ -5,7 +5,7 @@ import pandas as pd
 from ..colunas_relatorio import normalizar_fpd
 from ..excel import ler_planilha, resolver_coluna
 from ..fpd_format import dataframe_para_base, mes_para_yyyymm
-from ..models import LoteImportacao, RelatorioFPD
+from ..models import LoteImportacao, RelatorioFPD, RelatorioFPDCidade
 from ..parceiros import indice_parceiros, resolver_parceiro_id
 from ..periodo import hoje
 
@@ -269,6 +269,11 @@ def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
     col_ind = resolver_coluna(df, ["INDICADOR"])
     col_seg = resolver_coluna(df, ["NM_SEG", "nm_seg", "NM_SEGMENTO", "SEGMENTO"])
     col_rede = resolver_coluna(df, ["cd_rede", "CD_REDE", "cd_sap_original", "CD_SAP_ORIGINAL"])
+    col_cidade = resolver_coluna(df, [
+        "LOCALIDADE", "NM_LOCALIDADE", "MUNICIPIO", "NM_MUNICIPIO", 
+        "CIDADE", "MUNICÍPIO", "NM_MUNICIPIO_INSTALACAO", 
+        "CIDADE_INSTALACAO", "PRACA", "PRAÇA", "NM_PRACA"
+    ])
     faltantes = []
     if not col_pdv:
         faltantes.append("APELIDO/nm_pdv_rel")
@@ -340,4 +345,133 @@ def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
         if criou:
             gerados_pdvs += 1
 
-    return {"pdvs": gerados_pdvs, "relatorios": gerados, "sem_parceiro": sem_parceiro}
+    gerados_cidades = 0
+    if col_cidade and col_rede:
+        RelatorioFPDCidade.objects.filter(lote=lote).delete()
+        df_cid_group = df.dropna(subset=[col_cidade, col_rede]).groupby([col_cidade, col_rede])
+        for (cidade_nome, rede_nome), df_cid in df_cid_group:
+            nome_limpo = str(cidade_nome).strip()
+            if not nome_limpo:
+                continue
+            
+            parceiro_id = resolver_parceiro_id(rede_nome, None, indice_pdvs)
+            
+            criou = False
+            for indicador in INDICADORES:
+                df_ind = df_cid[df_cid[_COL_IND] == indicador]
+                if df_ind.empty:
+                    continue
+                segmentos = SEGMENTOS if col_seg else ("todos",)
+                for segmento in segmentos:
+                    bloco = _filtrar_segmento(df_ind, segmento)
+                    if bloco.empty:
+                        continue
+                        
+                    total = len(bloco)
+                    status = bloco[col_sit].fillna("").astype(str)
+                    abertas = int(status.apply(_status_aberta).sum())
+                    perc = (abertas / total * 100) if total else 0
+                    
+                    RelatorioFPDCidade.objects.create(
+                        lote=lote,
+                        parceiro_id=parceiro_id,
+                        cidade=nome_limpo,
+                        indicador=indicador,
+                        segmento=segmento,
+                        percentual=perc,
+                        total_faturas=total,
+                        total_abertas=abertas,
+                    )
+                    criou = True
+            if criou:
+                gerados_cidades += 1
+
+    return {"pdvs": gerados_pdvs, "relatorios": gerados, "cidades": gerados_cidades, "sem_parceiro": sem_parceiro}
+
+
+def reprocessar_cidades_lote(lote: LoteImportacao) -> int:
+    from ..fpd_format import base_para_dataframe
+    
+    relatorios = lote.relatorios_fpd.all()
+    if not relatorios.exists():
+        return 0
+        
+    dfs = []
+    for r in relatorios:
+        if r.segmento == "todos" and "base" in r.detalhes:
+            df_part = base_para_dataframe(r.detalhes)
+            df_part["_parceiro_id"] = r.parceiro_id
+            dfs.append(df_part)
+            
+    if not dfs:
+        return 0
+        
+    df = pd.concat(dfs, ignore_index=True)
+    
+    col_sit = resolver_coluna(df, ["SITUACAO_FATURA_MENSAL", "DS_SIT_FATURA", "DS_STATUS_FATURA"])
+    col_cidade = resolver_coluna(df, [
+        "LOCALIDADE", "NM_LOCALIDADE", "MUNICIPIO", "NM_MUNICIPIO", 
+        "CIDADE", "MUNICÍPIO", "NM_MUNICIPIO_INSTALACAO", 
+        "CIDADE_INSTALACAO", "PRACA", "PRAÇA", "NM_PRACA"
+    ])
+    col_ind = resolver_coluna(df, ["INDICADOR"])
+    col_seg = resolver_coluna(df, ["NM_SEG", "nm_seg", "NM_SEGMENTO", "SEGMENTO"])
+    col_ref = resolver_coluna(df, ["REF_VENCTO", "MES_VENC", "MES_VENCIMENTO"])
+    
+    if not col_cidade or not col_sit or not col_ref:
+        return 0
+    
+    df["_mes_venc"] = df[col_ref].apply(lambda x: mes_para_yyyymm(str(x)))
+        
+    if col_ind:
+        df[_COL_IND] = df[col_ind].map(_normalizar_indicador)
+    else:
+        df[_COL_IND] = "FPD"
+
+    if col_seg:
+        df[_COL_SEG] = df[col_seg].map(_segmento_linha)
+    else:
+        df[_COL_SEG] = None
+        
+    RelatorioFPDCidade.objects.filter(lote=lote).delete()
+    gerados_cidades = 0
+    
+    df_cid_group = df.dropna(subset=[col_cidade, "_parceiro_id", "_mes_venc"]).groupby([col_cidade, "_parceiro_id", "_mes_venc"])
+    
+    for (cidade_nome, parceiro_id, mes_venc), df_cid in df_cid_group:
+        nome_limpo = str(cidade_nome).strip()
+        if not nome_limpo:
+            continue
+        
+        criou = False
+        for indicador in INDICADORES:
+            df_ind = df_cid[df_cid[_COL_IND] == indicador]
+            if df_ind.empty:
+                continue
+            segmentos = SEGMENTOS if col_seg else ("todos",)
+            for segmento in segmentos:
+                bloco = _filtrar_segmento(df_ind, segmento)
+                if bloco.empty:
+                    continue
+                    
+                total = len(bloco)
+                status = bloco[col_sit].fillna("").astype(str)
+                abertas = int(status.apply(_status_aberta).sum())
+                perc = (abertas / total * 100) if total else 0
+                
+                RelatorioFPDCidade.objects.create(
+                    lote=lote,
+                    parceiro_id=parceiro_id,
+                    cidade=nome_limpo,
+                    mes=mes_venc,
+                    indicador=indicador,
+                    segmento=segmento,
+                    percentual=perc,
+                    total_faturas=total,
+                    total_abertas=abertas,
+                )
+                criou = True
+        if criou:
+            gerados_cidades += 1
+            
+    return gerados_cidades

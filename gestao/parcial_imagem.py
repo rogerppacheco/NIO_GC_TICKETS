@@ -272,6 +272,7 @@ def _desenhar_total_pp(
     dados: dict,
     cols: list[tuple[str, int]],
     font_head,
+    rotulo: str = "TOTAL PP",
 ) -> int:
     largura = _largura_cols(cols)
     altura = ALT_LINHA + 16
@@ -282,7 +283,7 @@ def _desenhar_total_pp(
         y=y + 6,
         largura=largura,
         item={
-            "pdv": "TOTAL PP",
+            "pdv": rotulo,
             "vendas": dados.get("total_pp", 0),
             "plano": dados.get("total_plano"),
             "pct_plano": dados.get("pct_pp"),
@@ -294,7 +295,7 @@ def _desenhar_total_pp(
     return y + altura
 
 
-def imagem_parcial_gerencia(dados: dict) -> tuple[bytes, str]:
+def imagem_parcial_gerencia(dados: dict, *, titulo: str = "Parceiros PP") -> tuple[bytes, str]:
     font_banner = _fonte(24, negrito=True)
     font_sub = _fonte(13)
     font_titulo = _fonte(14, negrito=True)
@@ -321,7 +322,7 @@ def imagem_parcial_gerencia(dados: dict) -> tuple[bytes, str]:
     _desenhar_header(
         draw,
         largura=largura,
-        titulo="Parcial de vendas · Parceiros PP",
+        titulo=f"Parcial de vendas · {titulo}",
         subtitulo=_subtitulo(dados),
         font_banner=font_banner,
         font_sub=font_sub,
@@ -354,7 +355,7 @@ def imagem_parcial_gerencia(dados: dict) -> tuple[bytes, str]:
         sem_cabecalho_cols=True,
     )
     y += 12
-    _desenhar_total_pp(draw, x=PAD, y=y, dados=dados, cols=cols, font_head=font_head)
+    _desenhar_total_pp(draw, x=PAD, y=y, dados=dados, cols=cols, font_head=font_head, rotulo=f"TOTAL {titulo.replace('Parceiros ', '')}")
 
     return _salvar_png(img, dados, "Gerencia")
 

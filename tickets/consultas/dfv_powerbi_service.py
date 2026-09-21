@@ -44,6 +44,11 @@ SELECT_COLS: list[str] = [
     "UF",
     "VIABILIDADE_ATUAL",
     "CODIGO_CDO",
+    "HP_LIVRE",
+    "HP_TOT",
+    "HC_TOT",
+    "CLASSIFICACAO",
+    "ds_faixa_aprovacao_credito_total",
 ]
 
 # Colunas extras para o card Rota (agregação por bairro).
@@ -863,6 +868,14 @@ def _filtrar_e_deduplicar(
     usou_viaveis = bool(viaveis)
     base = viaveis if usou_viaveis else list(registros)
 
+    def _parse_num(v: Any) -> float:
+        if v is None or v == "": return 0.0
+        if isinstance(v, (int, float)): return float(v)
+        try:
+            return float(str(v).strip().replace("%", "").replace(",", "."))
+        except ValueError:
+            return 0.0
+
     vistos: set[tuple[str, str]] = set()
     unicos: list[dict[str, Any]] = []
     for row in base:
@@ -872,9 +885,20 @@ def _filtrar_e_deduplicar(
         if chave in vistos:
             continue
         vistos.add(chave)
+        
+        hc = _parse_num(row.get("HC_TOT"))
+        hp_tot = _parse_num(row.get("HP_TOT"))
+        hp_livre = _parse_num(row.get("HP_LIVRE"))
+        ocupado = (hc > 0) or (hp_livre == 0 and hp_tot > 0)
+
         enriched = dict(row)
         enriched["_complemento"] = compl
-        enriched["_linha"] = f"{num} ({compl})" if compl else num
+        
+        texto_linha = f"{num} ({compl})" if compl else num
+        if ocupado:
+            texto_linha = f"~~{texto_linha}~~"
+            
+        enriched["_linha"] = texto_linha
         unicos.append(enriched)
 
     unicos.sort(key=lambda r: _ordenar_chave_fachada(r.get("NO_FACHADA")))
@@ -976,12 +1000,37 @@ def formatar_resposta_dfv_powerbi(
             f"\n⚠️ *Sem fachadas viáveis* neste CEP — exibindo status: {status_txt}\n"
         )
 
+    def _parse_num(v: Any) -> float:
+        if v is None or v == "": return 0.0
+        if isinstance(v, (int, float)): return float(v)
+        try:
+            return float(str(v).strip().replace("%", "").replace(",", "."))
+        except ValueError:
+            return 0.0
+
+    hp_tot = int(round(sum(_parse_num(r.get("HP_TOT")) for r in filtrados)))
+    hc_tot = int(round(sum(_parse_num(r.get("HC_TOT")) for r in filtrados)))
+    hp_livre = int(round(sum(_parse_num(r.get("HP_LIVRE")) for r in filtrados)))
+    
+    classificacao = str(primeiro.get("CLASSIFICACAO") or "—").strip()
+    faixa_cred = str(primeiro.get("ds_faixa_aprovacao_credito_total") or "—").strip()
+
+    info_rota = ""
+    if hp_tot > 0 or hp_livre > 0:
+        info_rota = (
+            f"📊 *Perfil da Rota:*\n"
+            f"• HPs (Total): {hp_tot} | Livres: {hp_livre} | Ocupados (HC): {hc_tot}\n"
+            f"• Classificação: {classificacao}\n"
+            f"• Faixa de Aprovação: {faixa_cred}\n"
+        )
+
     cabecalho = (
         f"🏢 *DFV (Power BI ao vivo{titulo_fonte})*\n\n"
         f"📍 *Endereço:* {logradouro}\n"
         f"🏙️ *Bairro:* {bairro} | *Cidade/UF:* {cidade_uf}\n"
         f"📡 *CDO(s):* {cdos_str}\n"
-        f"✅ *Total de fachadas:* {len(filtrados)}"
+        f"{info_rota}"
+        f"✅ *Total de fachadas listadas:* {len(filtrados)}"
         f"{aviso_status}\n"
         f"🔢 *Números Disponíveis (com complemento):*\n"
         f"{lista_str}"
@@ -1303,6 +1352,36 @@ def _consultar_bairro_com_fallback(
     if last_error:
         raise last_error
     return [], list(SELECT_COLS), False
+
+
+def listar_cidades_dfv(uf: str) -> list[str]:
+    """Lista municípios distintos no DFV para uma UF."""
+    uf_limpo = limpar_uf(uf)
+    if not uf_limpo:
+        raise DfvPowerBiError("UF é obrigatório.")
+
+    regiao = regiao_por_uf(uf_limpo)
+    if regiao is None:
+        raise DfvPowerBiError(f"UF {uf_limpo} sem região DFV configurada.")
+
+    cache_base = f"dfv_pbi:cidades:{uf_limpo}"
+    max_pages = int(_cfg("DFV_POWERBI_ROTA_CIDADES_MAX_PAGES", 10) or 10)
+
+    rows = _consultar_por_filtro(
+        filters=[("UF", uf_limpo)],
+        cache_key=f"{cache_base}:list",
+        log_label=f"CIDADES uf={uf_limpo}",
+        region=regiao,
+        select_cols=["UF", "MUNICIPIO"],
+        max_pages=max_pages,
+    )
+
+    cidades: set[str] = set()
+    for row in rows:
+        nome = str(row.get("MUNICIPIO") or "").strip()
+        if nome and nome.lower() not in ("none", "null", "nan"):
+            cidades.add(nome)
+    return sorted(cidades, key=lambda x: _norm_local(x))
 
 
 def listar_bairros_dfv(uf: str, cidade: str) -> list[str]:

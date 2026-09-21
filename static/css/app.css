@@ -1337,8 +1337,21 @@ body.page-fila .app-frame { height: 100vh; min-height: 0; overflow: hidden; }
 /* Consultas operacionais (DFV / CDOE) */
 .consultas-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 1rem;
+}
+@media (max-width: 1024px) {
+  .consultas-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.consulta-input-lg {
+  font-size: 1.5rem !important;
+  padding: 1rem !important;
+  height: auto !important;
+  text-align: center;
+  font-weight: 800;
+  letter-spacing: 2px;
 }
 .portal-cards {
   margin-top: 0.25rem;
@@ -2523,3 +2536,9 @@ body.page-fpd .gestao-escopo + .help { display: none; }
 .aviso-item.is-unread { border-left: 3px solid var(--accent); }
 .aviso-item strong { display: block; }
 .aviso-item .help { display: block; margin-top: 0.15rem; }
+
+.wrap-fluid { max-width: none; width: 100%; }
+
+.form-grid-fluid { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+
+.form-actions-sticky { position: sticky; bottom: 0; background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(8px); padding: 0.85rem 1.5rem; border-top: 1px solid var(--line); margin: 1.5rem -1.5rem -1.5rem; border-bottom-left-radius: inherit; border-bottom-right-radius: inherit; display: flex; justify-content: flex-end; gap: 0.65rem; z-index: 20; }

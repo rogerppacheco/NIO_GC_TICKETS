@@ -22,18 +22,18 @@
 <div class="panel">
   <div class="panel-h"><h2>1. Código CDOE</h2></div>
   <div class="panel-b">
-    <form method="post">
-      {% csrf_token %}
-      <div style="margin-bottom:0.85rem">
-        <label for="codigo">Código</label>
-        <input type="text" name="codigo" id="codigo" class="mono" value="{{ codigo }}"
-               placeholder="28005 ou CDOE-28005" required autocomplete="off"
-               {% if not dfv_enabled %}disabled{% endif %}>
-      </div>
-      <button class="btn btn-primary" type="submit" {% if not dfv_enabled %}disabled{% endif %}>
-        Continuar
-      </button>
-    </form>
+      <form method="post">
+        {% csrf_token %}
+        <div style="margin-bottom:1.5rem">
+          <label for="codigo" style="font-size: 1.1rem; font-weight: 700;">Código</label>
+          <input type="text" name="codigo" id="codigo" class="mono consulta-input-lg" value="{{ codigo }}"
+                 placeholder="28005 ou CDOE-28005" required autocomplete="off"
+                 {% if not dfv_enabled %}disabled{% endif %} style="margin-top: 0.5rem">
+        </div>
+        <button class="btn btn-primary" type="submit" {% if not dfv_enabled %}disabled{% endif %} style="width: 100%; padding: 1.2rem; font-size: 1.3rem; border-radius: 12px; font-weight: 800;">
+          Continuar
+        </button>
+      </form>
   </div>
 </div>
 
@@ -107,7 +107,7 @@
 </div>
 
 {% elif passo == "resultado" %}
-<div class="grid-2">
+<div class="consultas-grid">
   {% include "tickets/consultas/_preview_wpp.html" with titulo="Números da rua (como no WhatsApp)" %}
   <div class="panel">
     <div class="panel-h"><h2>Nova consulta</h2></div>

@@ -429,6 +429,47 @@ class RelatorioFPD(models.Model):
         ]
 
 
+class RelatorioFPDCidade(models.Model):
+    lote = models.ForeignKey(
+        LoteImportacao,
+        on_delete=models.CASCADE,
+        related_name="relatorios_fpd_cidade",
+    )
+    parceiro = models.ForeignKey(
+        "tickets.Parceiro",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="relatorios_fpd_cidade",
+    )
+    cidade = models.CharField(max_length=150)
+    mes = models.CharField(max_length=6, default="", db_index=True)
+    indicador = models.CharField(
+        max_length=8,
+        choices=RelatorioFPD.Indicador.choices,
+        default=RelatorioFPD.Indicador.FPD,
+        db_index=True,
+    )
+    segmento = models.CharField(
+        max_length=16,
+        choices=RelatorioFPD.Segmento.choices,
+        default=RelatorioFPD.Segmento.TODOS,
+        db_index=True,
+    )
+    percentual = models.FloatField()
+    total_faturas = models.IntegerField()
+    total_abertas = models.IntegerField()
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-percentual", "cidade"]
+        verbose_name = "Relatório FPD Cidade"
+        verbose_name_plural = "Relatórios FPD Cidade"
+        indexes = [
+            models.Index(fields=["cidade", "mes", "indicador", "segmento"]),
+        ]
+
+
 class RelatorioComissionamento(models.Model):
     lote = models.ForeignKey(
         LoteImportacao,
