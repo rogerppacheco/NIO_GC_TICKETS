@@ -700,12 +700,12 @@ def _grupos_ranking(parceiros: list[Parceiro], user):
     )
     if owner is None:
         qs = qs.filter(owner__isnull=True)
+        qs = qs.filter(Q(ranking_consolidado=True) | Q(parceiro_id__in=ids))
     else:
         qs = qs.filter(owner=owner)
         
     return (
-        qs.filter(Q(ranking_consolidado=True) | Q(parceiro_id__in=ids))
-        .select_related("parceiro")
+        qs.select_related("parceiro")
         .order_by("-ranking_consolidado", "parceiro__nome", "prioridade", "nome")
     )
 
