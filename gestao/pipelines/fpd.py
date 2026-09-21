@@ -354,7 +354,7 @@ def processar_fpd(arquivo, nome_arquivo: str, lote: LoteImportacao) -> dict:
             if not nome_limpo:
                 continue
             
-            parceiro_id = resolver_parceiro_id(rede_nome, None, indice_pdvs)
+            parceiro_id = resolver_parceiro_id(rede_nome, indice)
             
             criou = False
             for indicador in INDICADORES:
