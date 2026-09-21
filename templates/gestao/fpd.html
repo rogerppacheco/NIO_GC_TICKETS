@@ -38,6 +38,7 @@
       <div class="fpd-pick-field">
         <label class="help" style="margin:0" for="fpd-mes">MES_VENC</label>
         <select id="fpd-mes" name="mes" class="fila-pick" onchange="this.form.submit()">
+          <option value="todos"{% if not mes_venc or mes_venc == "todos" %} selected{% endif %}>Todos os meses</option>
           {% for yyyymm, rotulo in meses_opcoes %}
           <option value="{{ yyyymm }}" {% if mes_venc == yyyymm %}selected{% endif %}>{{ rotulo }}{% if yyyymm == mes_tratar %} · vigente{% endif %}</option>
           {% endfor %}
@@ -216,4 +217,62 @@
     {% endif %}
   </div>
 </div>
+
+<div id="modal-envio-fpd" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:white;padding:2rem;border-radius:8px;max-width:400px;width:100%;box-shadow:0 4px 12px rgba(0,0,0,0.15)">
+    <h3 style="margin-top:0">Meses para o Envio</h3>
+    <p style="color:#555">Quais meses você deseja incluir na mensagem?</p>
+    <div style="margin:1.5rem 0;display:flex;flex-direction:column;gap:0.5rem">
+      {% for yyyymm, rotulo in meses_opcoes %}
+      <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+        <input type="checkbox" name="modal_mes" value="{{ yyyymm }}" checked>
+        {{ rotulo }}
+      </label>
+      {% endfor %}
+    </div>
+    <div style="display:flex;gap:1rem;justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="document.getElementById('modal-envio-fpd').style.display='none'">Cancelar</button>
+      <button class="btn btn-primary" id="btn-confirmar-envio">Confirmar Envio</button>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const modal = document.getElementById('modal-envio-fpd');
+  const btnConfirmar = document.getElementById('btn-confirmar-envio');
+  let currentForm = null;
+
+  document.querySelectorAll('form').forEach(form => {
+    const actionInput = form.querySelector('input[name="action"]');
+    if (actionInput && actionInput.value.startsWith('enviar_')) {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        currentForm = this;
+        modal.style.display = 'flex';
+      });
+    }
+  });
+
+  btnConfirmar.addEventListener('click', function() {
+    if (!currentForm) return;
+    const checkboxes = document.querySelectorAll('input[name="modal_mes"]:checked');
+    const meses = Array.from(checkboxes).map(cb => cb.value).join(',');
+    
+    const mesInput = currentForm.querySelector('input[name="mes"]');
+    if (mesInput) {
+      mesInput.value = meses;
+    } else {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'mes';
+      input.value = meses;
+      currentForm.appendChild(input);
+    }
+    
+    modal.style.display = 'none';
+    currentForm.submit();
+  });
+});
+</script>
 {% endblock %}

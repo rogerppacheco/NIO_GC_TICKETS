@@ -163,9 +163,11 @@ def _meses_do_recorte(rel: RelatorioFPD, mes_venc: str | None) -> list[dict] | N
     meses = _meses_ordenados(rel.detalhes or {})
     if not mes_venc:
         return meses
-    alvo = mes_para_yyyymm(mes_venc)
+    alvos = [mes_para_yyyymm(m.strip()) for m in mes_venc.split(",") if m.strip()]
+    if not alvos:
+        return meses
     filtrados = [
-        m for m in meses if mes_para_yyyymm(m.get("mes_yyyymm") or m.get("mes")) == alvo
+        m for m in meses if mes_para_yyyymm(m.get("mes_yyyymm") or m.get("mes")) in alvos
     ]
     if filtrados:
         return filtrados

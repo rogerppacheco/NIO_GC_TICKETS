@@ -1197,10 +1197,12 @@ def _fpd_pdv_id(request) -> str:
 
 def _fpd_mes(request) -> str:
     raw = (request.GET.get("mes") or request.POST.get("mes") or "").strip()
+    if raw.lower() == "todos" or not raw:
+        return ""
     chave = mes_para_yyyymm(raw)
     if len(chave) == 6 and chave.isdigit():
         return chave
-    return mes_tratar_yyyymm()
+    return ""
 
 
 def _fpd_meses_opcoes(relatorios) -> list[tuple[str, str]]:
