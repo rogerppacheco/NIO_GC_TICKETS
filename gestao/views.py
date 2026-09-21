@@ -722,11 +722,16 @@ def _grupo_ranking_padrao(grupos, gerencia_ativa: str = "PP") -> Destinatario | 
     return grupos[0] if grupos else None
 
 
-def _buscar_grupo_pp_wa(gerencia_ativa: str = "PP") -> dict | None:
+def _buscar_grupo_pp_wa(gerencia_ativa: str = "PP", user=None) -> dict | None:
     """Localiza Parceiros_<GER>_Nio na sessão Evolution (WhatsApp pareado)."""
     if not syncwa_configurado():
         return None
-    res = listar_grupos()
+    try:
+        from .messaging.instancia import instancia_para_envio
+        inst = instancia_para_envio(user) if user else None
+    except Exception:
+        inst = None
+    res = listar_grupos(instance=inst)
     if not res.get("ok"):
         return None
     ger = (gerencia_ativa or "PP").casefold()
@@ -1110,7 +1115,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             gerencia_atual = _gerencia_lote(request) or "PP"
             if gerencia_atual == "***":
                 gerencia_atual = "PP"
-            grupo_wa = _buscar_grupo_pp_wa(gerencia_atual)
+            grupo_wa = _buscar_grupo_pp_wa(gerencia_atual, request.user)
             jid = (request.POST.get("jid") or "").strip() or (grupo_wa or {}).get("jid", "")
             nome = (request.POST.get("nome") or "").strip() or (grupo_wa or {}).get("name") or f"Parceiros_{gerencia_atual.upper()}_Nio"
             if not jid or "@g.us" not in jid:
@@ -1145,7 +1150,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
     if gerencia_atual == "***":
         gerencia_atual = "PP"
     grupos_ranking = list(_grupos_ranking(visiveis, request.user))
-    grupo_pp_wa = _buscar_grupo_pp_wa(gerencia_atual) if not grupos_ranking else None
+    grupo_pp_wa = _buscar_grupo_pp_wa(gerencia_atual, request.user) if not grupos_ranking else None
     parcial_sub = _parcial_sub(request)
     parcial_especialistas = []
     parcial_pdvs = []
