@@ -715,18 +715,20 @@ def _grupo_ranking_padrao(grupos, gerencia_ativa: str = "PP") -> Destinatario | 
     return grupos[0] if grupos else None
 
 
-def _buscar_grupo_pp_wa() -> dict | None:
-    """Localiza Parceiros_PP_Nio na sessão Evolution (WhatsApp pareado)."""
+def _buscar_grupo_pp_wa(gerencia_ativa: str = "PP") -> dict | None:
+    """Localiza Parceiros_<GER>_Nio na sessão Evolution (WhatsApp pareado)."""
     if not syncwa_configurado():
         return None
     res = listar_grupos()
     if not res.get("ok"):
         return None
+    ger = (gerencia_ativa or "PP").casefold()
+    prefix = f"parceiros_{ger}"
     candidatos: list[dict] = []
     for g in res.get("groups") or []:
         nome = (g.get("name") or "").strip()
         chave = nome.casefold().replace(" ", "_")
-        if "parceiros_pp" in chave:
+        if prefix in chave:
             candidatos.append(
                 {
                     "jid": g.get("jid") or "",
@@ -736,8 +738,9 @@ def _buscar_grupo_pp_wa() -> dict | None:
             )
     if not candidatos:
         return None
+    target = f"parceiros_{ger}_nio"
     for c in candidatos:
-        if c["name"].casefold().replace(" ", "_") == "parceiros_pp_nio":
+        if c["name"].casefold().replace(" ", "_") == target:
             return c
     return candidatos[0]
 
@@ -833,8 +836,12 @@ def parcial_preview(request: HttpRequest) -> HttpResponse:
     cache = request.GET.get("_") or ""
 
     if visao == "consolidado":
-        sub = sub_parcial(dados["linhas"], dados, titulo="Carteira PP")
-        png, _ = imagem_parcial_especialistas(sub, titulo="Carteira PP")
+        gerencia_atual = _gerencia_lote(request) or "PP"
+        if gerencia_atual == "***":
+            gerencia_atual = "PP"
+        titulo = f"Carteira {gerencia_atual.upper()}"
+        sub = sub_parcial(dados["linhas"], dados, titulo=titulo)
+        png, _ = imagem_parcial_especialistas(sub, titulo=titulo)
     elif visao == "especialista":
         esp_raw = (request.GET.get("esp") or "").strip()
         if not esp_raw.isdigit():
@@ -1020,18 +1027,23 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             elif action == "enviar_parcial_consolidado":
                 dest_raw = (request.POST.get("destinatario") or "").strip()
                 dest_id = int(dest_raw) if dest_raw.isdigit() else None
+                gerencia_atual = _gerencia_lote(request) or "PP"
+                if gerencia_atual == "***":
+                    gerencia_atual = "PP"
+                titulo = f"Carteira {gerencia_atual.upper()}"
                 if dest_id is None:
-                    padrao = _grupo_ranking_padrao(_grupos_parcial(visiveis), _gerencia_lote(request) or "PP")
+                    padrao = _grupo_ranking_padrao(_grupos_parcial(visiveis), gerencia_atual)
                     dest_id = padrao.pk if padrao else None
                 _flash_resumo(
                     request,
-                    "Carteira PP (grupo)",
+                    f"{titulo} (grupo)",
                     enviar_parcial_consolidado(
                         dados,
                         request.user,
                         destinatario_id=dest_id,
                         parceiros=visiveis,
                         nota=nota_envio,
+                        titulo=titulo,
                     ),
                 )
             elif action == "enviar_parcial_carteira":
@@ -1088,9 +1100,12 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             )
             return _voltar(request, "gestao_resultados")
         if action == "ativar_grupo_ranking_pp" and tem_acesso_interno(request.user):
-            grupo_wa = _buscar_grupo_pp_wa()
+            gerencia_atual = _gerencia_lote(request) or "PP"
+            if gerencia_atual == "***":
+                gerencia_atual = "PP"
+            grupo_wa = _buscar_grupo_pp_wa(gerencia_atual)
             jid = (request.POST.get("jid") or "").strip() or (grupo_wa or {}).get("jid", "")
-            nome = (request.POST.get("nome") or "").strip() or (grupo_wa or {}).get("name") or "Parceiros_PP_Nio"
+            nome = (request.POST.get("nome") or "").strip() or (grupo_wa or {}).get("name") or f"Parceiros_{gerencia_atual.upper()}_Nio"
             if not jid or "@g.us" not in jid:
                 messages.error(
                     request,
@@ -1119,8 +1134,11 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
     aba = (request.GET.get("aba") or "parcial").strip().lower()
     if aba not in {"parcial", "acumulado", "ranking"}:
         aba = "parcial"
+    gerencia_atual = _gerencia_lote(request) or "PP"
+    if gerencia_atual == "***":
+        gerencia_atual = "PP"
     grupos_ranking = list(_grupos_ranking(visiveis))
-    grupo_pp_wa = _buscar_grupo_pp_wa() if not grupos_ranking else None
+    grupo_pp_wa = _buscar_grupo_pp_wa(gerencia_atual) if not grupos_ranking else None
     parcial_sub = _parcial_sub(request)
     parcial_especialistas = []
     parcial_pdvs = []
@@ -1168,8 +1186,9 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             "parcial_turno": rotulo_turno,
             "parcial_horarios": HORARIOS_PARCIAL,
             "ultimo_parcial": ultimo_parcial,
-            "ranking_grupo_padrao": _grupo_ranking_padrao(grupos_ranking, _gerencia_lote(request) or "PP"),
+            "ranking_grupo_padrao": _grupo_ranking_padrao(grupos_ranking, gerencia_atual),
             "grupo_pp_wa": grupo_pp_wa,
+            "gerencia_atual": gerencia_atual,
             "pracas_btu": pracas_ativas,
             "pracas_btu_mg": pracas_ativas.filter(uf="MG").count(),
             "ultimo_gdp": _ultimo_lote_ok(LoteImportacao.Tipo.GDP, request),

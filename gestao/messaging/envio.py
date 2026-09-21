@@ -1658,6 +1658,7 @@ def enviar_parcial_consolidado(
     destinatario_id: int | None = None,
     parceiros: list[Parceiro] | None = None,
     nota: str = "",
+    titulo: str = "Carteira PP",
 ) -> ResumoEnvio:
     """Envia a imagem Carteira PP (todos os PDVs) para o grupo Parceiros_PP_Nio."""
     from ..parcial_imagem import imagem_parcial_especialistas
@@ -1666,12 +1667,12 @@ def enviar_parcial_consolidado(
     if not dados or not dados.get("linhas"):
         return ResumoEnvio(erros=1, detalhes=["Importe a base Excel antes de enviar."])
     if not destinatario_id:
-        return ResumoEnvio(erros=1, detalhes=["Grupo Parceiros_PP_Nio não encontrado nos Destinatários."])
+        return ResumoEnvio(erros=1, detalhes=["Grupo consolidado não encontrado nos Destinatários."])
     destinos = _destino_grupo(destinatario_id, parceiros)
     if not destinos:
         return ResumoEnvio(erros=1, detalhes=["Grupo inválido ou sem flag Resultados."])
-    png, nome = imagem_parcial_especialistas(dados, titulo="Carteira PP")
-    caption = caption_imagem_parcial(dados, sufixo="Carteira PP", nota=nota)
+    png, nome = imagem_parcial_especialistas(dados, titulo=titulo)
+    caption = caption_imagem_parcial(dados, sufixo=titulo, nota=nota)
     return _enviar_parcial_imagem(
         png=png,
         nome=nome,
