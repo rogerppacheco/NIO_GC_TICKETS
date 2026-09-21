@@ -290,6 +290,97 @@ def fila(request: HttpRequest) -> HttpResponse:
         (request.GET.get(k) or "").strip()
         for k in ("q", "status", "tipo", "parceiro", "especialista", "situacao_osab")
     )
+
+    if request.GET.get("export") == "excel":
+        import openpyxl
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Tickets Abertos"
+        
+        headers = [
+            "Protocolo", "Parceiro", "Contato", "Tipo", "Fila (Status)", "Prioridade",
+            "Solicitante", "Tel/WhatsApp", "Pedido", "Pedidos Extras",
+            "Situação OSAB", "Atualização OSAB",
+            "CPF/CNPJ", "TT", "TT Vendedor", "TT Backoffice", 
+            "CEP", "Logradouro", "Nº", "Complemento", "Bairro", "Cidade", "UF",
+            "Data Desejada", "Turno", "Nome do Cliente", "Data Instalação", 
+            "Data Alternativa", "Turno Alternativo", "SA", "Tipo Pendência", 
+            "Recorrência", "Situação do Pedido", "Cargo", "RG", "E-mail", 
+            "Descrição", "Observações",
+            "STATUS (Resultado)", "Resposta Pública", "Nota Interna", "Destino Encaminhamento", 
+            "Atendente", "Criado Em", "Atualizado Em", "Primeiro Atendimento", "Resolvido Em", 
+            "Tempo de Retorno"
+        ]
+        ws.append(headers)
+        
+        export_list = list(abertos)
+        _anexar_osab_fila(export_list)
+        
+        for t in export_list:
+            def fmt_date(dt):
+                return dt.strftime("%d/%m/%Y %H:%M") if dt else ""
+                
+            def fmt_date_only(dt):
+                return dt.strftime("%d/%m/%Y") if dt else ""
+
+            ws.append([
+                t.protocolo,
+                t.parceiro.nome if t.parceiro else "",
+                t.contato.nome if t.contato else "",
+                t.get_tipo_display(),
+                t.get_status_display(),
+                t.get_prioridade_display(),
+                t.solicitante_nome,
+                t.solicitante_contato,
+                t.pedido or "",
+                t.pedidos_extras or "",
+                getattr(t, 'osab_situacao', ''),
+                fmt_date(getattr(t, 'osab_atualizacao', None)),
+                t.documento_cliente,
+                t.tt,
+                t.tt_vendedor,
+                t.tt_backoffice,
+                t.cep,
+                t.logradouro,
+                t.numero_fachada,
+                t.complemento,
+                t.bairro,
+                t.cidade,
+                t.uf,
+                fmt_date_only(t.data_desejada),
+                t.get_turno_display() if t.turno else "",
+                t.nome_cliente,
+                fmt_date_only(t.data_instalacao),
+                fmt_date_only(t.data_alternativa),
+                t.get_turno_alternativo_display() if t.turno_alternativo else "",
+                t.sa,
+                t.tipo_pendencia,
+                t.get_recorrencia_display() if t.recorrencia else "",
+                t.get_variacao_sem_slot_display() if t.variacao_sem_slot else "",
+                t.cargo_acesso,
+                t.rg,
+                t.email_solicitante,
+                t.descricao or "",
+                t.observacoes or "",
+                t.resultado_status or "",
+                t.resposta_publica or "",
+                t.nota_interna or "",
+                t.destino_encaminhamento,
+                t.atendente.get_full_name() or t.atendente.username if t.atendente else "",
+                fmt_date(t.criado_em),
+                fmt_date(t.atualizado_em),
+                fmt_date(t.primeiro_atendimento_em),
+                fmt_date(t.resolvido_em),
+                t.tempo_retorno_tratamento or "",
+            ])
+            
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        filename = f"tickets_abertos_{timezone.localtime().strftime('%Y%m%d_%H%M')}.xlsx"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        wb.save(response)
+        return response
+
     tickets = list(qs[:200])
     _anexar_osab_fila(tickets)
     return render(
