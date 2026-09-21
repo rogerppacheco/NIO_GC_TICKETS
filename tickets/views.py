@@ -1065,9 +1065,20 @@ def parceiro_form(request: HttpRequest, pk: int | None = None) -> HttpResponse:
                 if not eh_gestor(request.user):
                     parceiro.especialista = request.user
                 parceiro.save()
-                if parceiro.usuario_id and parceiro.usuario.is_active != parceiro.ativo:
-                    parceiro.usuario.is_active = parceiro.ativo
-                    parceiro.usuario.save(update_fields=["is_active"])
+                if parceiro.usuario_id:
+                    update_fields = []
+                    if parceiro.usuario.is_active != parceiro.ativo:
+                        parceiro.usuario.is_active = parceiro.ativo
+                        update_fields.append("is_active")
+                    if parceiro.usuario.username != parceiro.codigo_pdv:
+                        parceiro.usuario.username = parceiro.codigo_pdv
+                        update_fields.append("username")
+                    if update_fields:
+                        from django.db import IntegrityError
+                        try:
+                            parceiro.usuario.save(update_fields=update_fields)
+                        except IntegrityError:
+                            messages.warning(request, "O login não pôde ser atualizado pois o código já está em uso por outro usuário.")
                 messages.success(request, "Parceiro salvo.")
                 return redirect("parceiro_editar", pk=parceiro.pk)
         elif action == "add_contato" and instance:
