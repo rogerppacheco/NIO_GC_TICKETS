@@ -648,8 +648,8 @@ def _parcial_extra(request) -> str:
     return f"aba=parcial&parcial_sub={_parcial_sub(request)}"
 
 
-def _grupos_parcial(parceiros: list[Parceiro]):
-    return _grupos_ranking(parceiros)
+def _grupos_parcial(parceiros: list[Parceiro], user):
+    return _grupos_ranking(parceiros, user)
 
 
 def _parceiros_parcial(request, *, visao: str | None = None) -> list[Parceiro]:
@@ -688,16 +688,23 @@ def _parcial_dados(request, *, visao: str | None = None) -> dict | None:
     return aplicar_escopo_parcial(lote.resumo, parceiros)
 
 
-def _grupos_ranking(parceiros: list[Parceiro]):
+def _grupos_ranking(parceiros: list[Parceiro], user):
     ids = [p.pk for p in parceiros]
+    from .destinatarios_especialista import owner_da_lista
+    owner = owner_da_lista(user)
+    
+    qs = Destinatario.objects.filter(
+        ativo=True,
+        tipo=Destinatario.TipoDestino.GRUPO,
+        envio_resultados=True,
+    )
+    if owner is None:
+        qs = qs.filter(owner__isnull=True)
+    else:
+        qs = qs.filter(owner=owner)
+        
     return (
-        Destinatario.objects.filter(
-            ativo=True,
-            owner__isnull=True,
-            tipo=Destinatario.TipoDestino.GRUPO,
-            envio_resultados=True,
-        )
-        .filter(Q(ranking_consolidado=True) | Q(parceiro_id__in=ids))
+        qs.filter(Q(ranking_consolidado=True) | Q(parceiro_id__in=ids))
         .select_related("parceiro")
         .order_by("-ranking_consolidado", "parceiro__nome", "prioridade", "nome")
     )
@@ -884,7 +891,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
     visiveis = list(_parceiros(request))
     _, rotulo_turno = turno_parcial()
     parcial_dados = _parcial_dados(request)
-    grupos_parcial = list(_grupos_parcial(visiveis))
+    grupos_parcial = list(_grupos_parcial(visiveis, request.user))
     form = ParcialResultadoForm(
         request.POST or None,
         request.FILES or None,
@@ -1032,7 +1039,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                     gerencia_atual = "PP"
                 titulo = f"Carteira {gerencia_atual.upper()}"
                 if dest_id is None:
-                    padrao = _grupo_ranking_padrao(_grupos_parcial(visiveis), gerencia_atual)
+                    padrao = _grupo_ranking_padrao(_grupos_parcial(visiveis, request.user), gerencia_atual)
                     dest_id = padrao.pk if padrao else None
                 _flash_resumo(
                     request,
@@ -1137,7 +1144,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
     gerencia_atual = _gerencia_lote(request) or "PP"
     if gerencia_atual == "***":
         gerencia_atual = "PP"
-    grupos_ranking = list(_grupos_ranking(visiveis))
+    grupos_ranking = list(_grupos_ranking(visiveis, request.user))
     grupo_pp_wa = _buscar_grupo_pp_wa(gerencia_atual) if not grupos_ranking else None
     parcial_sub = _parcial_sub(request)
     parcial_especialistas = []
