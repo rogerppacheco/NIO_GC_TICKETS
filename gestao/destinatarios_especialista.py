@@ -154,4 +154,4 @@ def qs_destinatarios_da_lista(user):
         return qs.filter(owner__isnull=True).filter(
             Q(parceiro__in=visiveis) | Q(parceiro__isnull=True)
         )
-    return qs.filter(owner=user, parceiro__in=visiveis)
+    return qs.filter(owner=user).filter(Q(parceiro__in=visiveis) | Q(parceiro__isnull=True))

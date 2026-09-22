@@ -167,8 +167,12 @@
 </div>
 
 <div class="panel">
-  <div class="table-scroll">
-    <table class="table">
+  <div class="panel-h"><h2>Destinatários vinculados ({{ destinatarios.count|default:0 }})</h2></div>
+  <div class="panel-b p-0 table-responsive">
+    <div style="padding: 1rem;">
+      <input type="search" id="filtro-destinatarios" class="fila-pick" placeholder="Pesquisar destinatário por nome ou PDV…" style="width:100%;max-width:28rem;">
+    </div>
+    <table class="table mb-0" id="tabela-destinatarios">
       <thead>
         <tr>
           <th>PDV</th>
@@ -237,6 +241,17 @@
       const q = (filtro.value || "").toLowerCase().trim();
       document.querySelectorAll("#tabela-grupos tbody tr[data-nome]").forEach(function (tr) {
         tr.style.display = !q || tr.getAttribute("data-nome").includes(q) ? "" : "none";
+      });
+    });
+  }
+  const filtroDest = document.getElementById("filtro-destinatarios");
+  if (filtroDest) {
+    filtroDest.addEventListener("input", function () {
+      const q = (filtroDest.value || "").toLowerCase().trim();
+      document.querySelectorAll("#tabela-destinatarios tbody tr").forEach(function (tr) {
+        if (tr.children.length === 1 && tr.children[0].colSpan > 1) return;
+        const text = tr.textContent.toLowerCase();
+        tr.style.display = !q || text.includes(q) ? "" : "none";
       });
     });
   }
