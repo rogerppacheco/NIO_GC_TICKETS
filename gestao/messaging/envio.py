@@ -1559,16 +1559,20 @@ def enviar_ranking(
     )
 
 
-def _destino_grupo(destinatario_id: int, parceiros: list[Parceiro] | None = None) -> list[DestinoEnvio]:
+def _destino_grupo(destinatario_id: int, parceiros: list[Parceiro] | None = None, user=None) -> list[DestinoEnvio]:
     from django.db.models import Q
+    from tickets.acesso import eh_gestor
 
     qs = Destinatario.objects.filter(
         pk=destinatario_id,
         ativo=True,
-        owner__isnull=True,
         tipo=Destinatario.TipoDestino.GRUPO,
         envio_resultados=True,
     )
+    if user and not eh_gestor(user):
+        qs = qs.filter(Q(owner__isnull=True) | Q(owner=user))
+    else:
+        qs = qs.filter(owner__isnull=True)
     if parceiros is not None:
         qs = qs.filter(Q(ranking_consolidado=True) | Q(parceiro__in=parceiros))
     dest = qs.select_related("parceiro").first()
@@ -1634,7 +1638,7 @@ def enviar_parcial_gerencia(
         return ResumoEnvio(erros=1, detalhes=["Importe a base Excel antes de enviar."])
     if not destinatario_id:
         return ResumoEnvio(erros=1, detalhes=["Escolha o grupo de gerência."])
-    destinos = _destino_grupo(destinatario_id, parceiros)
+    destinos = _destino_grupo(destinatario_id, parceiros, user)
     if not destinos:
         return ResumoEnvio(erros=1, detalhes=["Grupo inválido ou sem flag Resultados."])
     from tickets.acesso import gerencia_de
@@ -1668,7 +1672,7 @@ def enviar_parcial_consolidado(
         return ResumoEnvio(erros=1, detalhes=["Importe a base Excel antes de enviar."])
     if not destinatario_id:
         return ResumoEnvio(erros=1, detalhes=["Grupo consolidado não encontrado nos Destinatários."])
-    destinos = _destino_grupo(destinatario_id, parceiros)
+    destinos = _destino_grupo(destinatario_id, parceiros, user)
     if not destinos:
         return ResumoEnvio(erros=1, detalhes=["Grupo inválido ou sem flag Resultados."])
     png, nome = imagem_parcial_especialistas(dados, titulo=titulo)
