@@ -650,9 +650,9 @@ class Destinatario(models.Model):
     envio_recompra = models.BooleanField("Recompra", default=False)
     envio_resultados = models.BooleanField("Resultados", default=False)
     ranking_consolidado = models.BooleanField(
-        "Ranking consolidado",
+        "Grupo Consolidado / Resultados da Carteira",
         default=False,
-        help_text="Grupo único da gerência (ex.: Parceiros_PP_Nio) — aparece no Ranking VB sem depender de um PDV.",
+        help_text="Marque se este for um grupo geral da carteira (sem PDV fixo). Ele ficará disponível no select de envio na tela de Resultados.",
     )
     razoes_sociais_comissionamento = models.TextField(
         "Razões sociais (comissionamento)",

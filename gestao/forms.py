@@ -63,8 +63,6 @@ class DestinatarioForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.user = user
         self.fields["parceiro"].label_from_instance = self._rotulo_parceiro
-        if user is not None and not eh_gestor(user):
-            self.fields.pop("ranking_consolidado", None)
 
     @staticmethod
     def _rotulo_parceiro(obj: Parceiro) -> str:
