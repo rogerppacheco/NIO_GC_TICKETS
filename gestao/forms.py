@@ -157,7 +157,7 @@ class ParcialResultadoForm(forms.Form):
         label="Horário do parcial",
         choices=[(str(h), f"{ROTULOS_TURNO[h]} — parcial do turno") for h in HORARIOS_PARCIAL],
         required=False,
-        help_text="12h, 15h ou 18h. Se vazio, usa o turno atual.",
+        help_text="Se vazio, usa o turno mais próximo do horário atual.",
     )
     parceiro = forms.ModelChoiceField(
         queryset=Parceiro.objects.none(),

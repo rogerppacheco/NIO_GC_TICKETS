@@ -14,8 +14,8 @@ from ..parceiros import indice_parceiros, resolver_parceiro_id
 from ..periodo import hoje, periodo_ativo
 from .resultados import mensagem_parcial
 
-HORARIOS_PARCIAL = (12, 15, 18)
-ROTULOS_TURNO = {12: "12h", 15: "15h", 18: "18h"}
+HORARIOS_PARCIAL = tuple(range(8, 24))
+ROTULOS_TURNO = {h: f"{h}h" for h in HORARIOS_PARCIAL}
 # Só entra no Top/Bottom quem tem plano preenchido e ≥ este piso.
 MIN_PLANO = 2.0
 
@@ -45,16 +45,9 @@ ALIASES_PARCIAL = {
 
 
 def turno_parcial(hora: int | None = None) -> tuple[int, str]:
-    """Próximo turno do dia: 12h, 15h ou 18h (só rótulo de corte; não altera a métrica)."""
+    """Próximo turno do dia (só rótulo de corte; não altera a métrica)."""
     hora = hora if hora is not None else timezone.localtime().hour
-    if hora < 12:
-        escolhido = 12
-    elif hora < 15:
-        escolhido = 15
-    elif hora < 18:
-        escolhido = 18
-    else:
-        escolhido = 18
+    escolhido = max(8, min(23, hora))
     return escolhido, ROTULOS_TURNO[escolhido]
 
 
