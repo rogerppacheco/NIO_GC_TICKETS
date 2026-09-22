@@ -2327,6 +2327,8 @@ def _destinatario_ou_404(request: HttpRequest, pk: int) -> Destinatario:
         return dest
     if dest.owner_id != request.user.pk:
         raise Http404("Página não encontrada.")
+    if dest.ranking_consolidado:
+        return dest
     visiveis = parceiros_para_destinatarios(request.user)
     if not dest.parceiro_id or not visiveis.filter(pk=dest.parceiro_id).exists():
         raise Http404("Página não encontrada.")
@@ -2415,21 +2417,21 @@ def destinatario_do_grupo(request: HttpRequest) -> HttpResponse:
         messages.error(request, "Informe um JID de grupo válido (@g.us).")
         return redirect(f"{reverse('gestao_destinatarios')}?grupos=1")
     if ranking_consolidado:
-        if not eh_gestor(request.user):
-            raise Http404("Página não encontrada.")
+        # Se for gestor cria global (owner=None), se for especialista cria na sua lista (owner=user)
+        owner = None if eh_gestor(request.user) else request.user
         existente = Destinatario.objects.filter(
-            jid=jid, ranking_consolidado=True, owner__isnull=True
+            jid=jid, ranking_consolidado=True, owner=owner
         ).first()
         if existente:
             existente.nome = nome[:150]
             existente.envio_resultados = True
             existente.ativo = True
             existente.save(update_fields=["nome", "envio_resultados", "ativo", "atualizado_em"])
-            messages.success(request, f"Grupo «{nome}» atualizado para ranking consolidado.")
+            messages.success(request, f"Grupo «{nome}» atualizado para grupo consolidado.")
             return _voltar(request, "gestao_destinatarios")
         Destinatario.objects.create(
             parceiro=None,
-            owner=None,
+            owner=owner,
             nome=nome[:150],
             jid=jid,
             tipo=Destinatario.TipoDestino.GRUPO,
