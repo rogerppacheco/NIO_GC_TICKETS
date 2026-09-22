@@ -700,9 +700,10 @@ def _grupos_ranking(parceiros: list[Parceiro], user):
     )
     if owner is None:
         qs = qs.filter(owner__isnull=True)
-        qs = qs.filter(Q(ranking_consolidado=True) | Q(parceiro_id__in=ids))
     else:
-        qs = qs.filter(owner=owner)
+        qs = qs.filter(
+            Q(owner=owner) | (Q(owner__isnull=True) & (Q(ranking_consolidado=True) | Q(parceiro_id__in=ids)))
+        )
         
     return (
         qs.select_related("parceiro")
