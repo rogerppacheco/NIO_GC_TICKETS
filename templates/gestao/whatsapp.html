@@ -125,7 +125,7 @@
     $("wa-status-text").textContent = data.message || (data.connected ? "Sessão aberta na Evolution." : "Gere o QR para parear o chip.");
     setHidden($("wa-connected-msg"), !data.connected);
     setHidden($("wa-connecting-msg"), !(data.state === "connecting" && !data.connected));
-    setHidden($("btn-disconnect"), !(data.connected || data.state === "connecting"));
+    setHidden($("btn-disconnect"), data.state === "unconfigured");
     setHidden($("btn-qr"), !!data.connected);
     if (data.connected && poll) { clearInterval(poll); poll = null; }
   }
