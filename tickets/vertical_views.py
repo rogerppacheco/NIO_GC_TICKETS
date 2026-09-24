@@ -263,9 +263,6 @@ def vertical_api_solicitacao_resend(request: HttpRequest, pk: int) -> JsonRespon
     from tickets.vertical_services import enviar_whatsapp_criacao, enviar_email_criacao_vertical
     qs = qs_solicitacoes(request.user)
     item = get_object_or_404(qs, pk=pk)
-    gestao = pode_gestao_vertical(request.user)
-    if not gestao:
-        return _json_error("forbidden", "Acesso negado.", status=403)
     
     enviar_whatsapp_criacao(item)
     enviar_email_criacao_vertical(item)

@@ -167,6 +167,7 @@
         if (i.link_carta_sindico) fotos += '<a href="' + esc(i.link_carta_sindico) + '" target="_blank" rel="noopener">Carta</a>';
         if (!fotos) fotos = "—";
         var acoes = '<button type="button" class="btn btn-secondary" data-edit="' + i.id + '">Editar</button> ';
+        acoes += '<button type="button" class="btn btn-secondary" data-resend="' + i.id + '">Reenviar</button> ';
         if (i.can_edit) {
           acoes +=
             '<button type="button" class="btn btn-secondary" data-st="' +
@@ -176,7 +177,6 @@
             '" data-obs="' +
             esc(i.observacao) +
             '">Status</button> ';
-          acoes += '<button type="button" class="btn btn-secondary" data-resend="' + i.id + '">Reenviar</button> ';
           acoes += '<button type="button" class="btn btn-secondary" data-del="' + i.id + '">Excluir</button>';
         }
         var endereco = esc((i.logradouro || "") + ", " + (i.numero || "") + " - " + (i.bairro || ""));
