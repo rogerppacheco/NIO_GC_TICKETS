@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Guia de Soluções · NIO ESPECIALISTA Tickets{% endblock %}
+{% block body_class %}page-guia{% endblock %}
+{% block main_class %}wrap wrap-guia{% endblock %}
+{% block content %}
+<div class="guia-head" style="margin-bottom: 2rem;">
+  <div>
+    <h1>Guia de Soluções</h1>
+    <p>Módulo de orientações para auxiliar o time administrativo do parceiro no tratamento de pendências geradas.</p>
+  </div>
+</div>
+
+<div class="guia-search" style="margin-bottom: 2rem; max-width: 600px;">
+  <label for="guia-input" style="font-weight: 600; display: block; margin-bottom: 0.5rem; color: #333;">Buscar Pendência</label>
+  <input type="text" id="guia-input" list="guia-list" class="form-control" style="width: 100%; padding: 0.75rem; border: 1px solid #ced4da; border-radius: 6px; font-size: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" placeholder="Digite o código ou a descrição da pendência...">
+  <datalist id="guia-list"></datalist>
+</div>
+
+<div id="guia-details" style="display: none; background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); border: 1px solid #e9ecef;">
+  <h2 id="gd-titulo" style="margin-top: 0; color: #2c3e50; font-size: 1.5rem; border-bottom: 2px solid #007bff; padding-bottom: 0.5rem; margin-bottom: 1.5rem;"></h2>
+  
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+    <div style="background: #f8f9fa; padding: 1.25rem; border-radius: 6px; border-left: 4px solid #17a2b8;">
+      <strong style="color: #495057; display: block; margin-bottom: 0.5rem; font-size: 1.1rem;">Quando acontece:</strong>
+      <p id="gd-quando" style="margin-bottom: 0; color: #212529; line-height: 1.5;"></p>
+    </div>
+    <div style="background: #f8f9fa; padding: 1.25rem; border-radius: 6px; border-left: 4px solid #ffc107;">
+      <strong style="color: #495057; display: block; margin-bottom: 0.5rem; font-size: 1.1rem;">Nota / Observação:</strong>
+      <p id="gd-nota" style="margin-bottom: 0; color: #212529; line-height: 1.5;"></p>
+    </div>
+  </div>
+  
+  <h3 style="margin-top: 2rem; font-size: 1.2rem; color: #343a40; border-bottom: 1px solid #dee2e6; padding-bottom: 0.5rem; margin-bottom: 1rem;">Critérios e Atributos da Pendência</h3>
+  
+  <div style="overflow-x: auto;">
+    <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.95rem;">
+      <tbody>
+        <tr style="border-bottom: 1px solid #e9ecef;">
+          <th style="padding: 0.75rem 0.5rem; color: #495057; width: 40%;">Esteira</th>
+          <td style="padding: 0.75rem 0.5rem; color: #212529;" id="gd-esteira"></td>
+        </tr>
+        <tr style="border-bottom: 1px solid #e9ecef; background: #fdfdfd;">
+          <th style="padding: 0.75rem 0.5rem; color: #495057;">Pendência Agendável</th>
+          <td style="padding: 0.75rem 0.5rem; color: #212529;" id="gd-agendavel"></td>
+        </tr>
+        <tr style="border-bottom: 1px solid #e9ecef;">
+          <th style="padding: 0.75rem 0.5rem; color: #495057;">Elegível ao MEM CRV?</th>
+          <td style="padding: 0.75rem 0.5rem; color: #212529;" id="gd-mem"></td>
+        </tr>
+        <tr style="border-bottom: 1px solid #e9ecef; background: #fdfdfd;">
+          <th style="padding: 0.75rem 0.5rem; color: #495057;">Elegível a PAV (PA Virtual)?</th>
+          <td style="padding: 0.75rem 0.5rem; color: #212529;" id="gd-pav"></td>
+        </tr>
+        <tr style="border-bottom: 1px solid #e9ecef;">
+          <th style="padding: 0.75rem 0.5rem; color: #495057;">Tratamento Humano (Discador | Preview)</th>
+          <td style="padding: 0.75rem 0.5rem; color: #212529;" id="gd-discador"></td>
+        </tr>
+        <tr>
+          <th style="padding: 0.75rem 0.5rem; color: #495057;">Tratamento Humano (WhatsApp)</th>
+          <td style="padding: 0.75rem 0.5rem; color: #212529;" id="gd-whatsapp"></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  const guiasData = {{ guias_json|safe }};
+  const datalist = document.getElementById('guia-list');
+  const input = document.getElementById('guia-input');
+  const detailsDiv = document.getElementById('guia-details');
+  
+  // Populate datalist
+  const fragment = document.createDocumentFragment();
+  guiasData.forEach(g => {
+    const option = document.createElement('option');
+    option.value = g.search_term;
+    fragment.appendChild(option);
+  });
+  datalist.appendChild(fragment);
+
+  input.addEventListener('input', function(e) {
+    const val = e.target.value;
+    const match = guiasData.find(g => g.search_term === val);
+    
+    if (match) {
+      document.getElementById('gd-titulo').textContent = match.search_term;
+      document.getElementById('gd-quando').innerHTML = (match.quando_acontece || '-').replace(/\n/g, '<br>');
+      document.getElementById('gd-nota').innerHTML = (match.nota || '-').replace(/\n/g, '<br>');
+      document.getElementById('gd-esteira').textContent = match.esteira || '-';
+      document.getElementById('gd-agendavel').textContent = match.agendavel || '-';
+      document.getElementById('gd-mem').textContent = match.elegivel_mem_crv || '-';
+      document.getElementById('gd-pav').textContent = match.elegivel_pav || '-';
+      document.getElementById('gd-discador').textContent = match.tratamento_humano_discador || '-';
+      document.getElementById('gd-whatsapp').textContent = match.tratamento_humano_whatsapp || '-';
+      
+      detailsDiv.style.display = 'block';
+    } else {
+      detailsDiv.style.display = 'none';
+    }
+  });
+</script>
+{% endblock %}

@@ -1269,6 +1269,30 @@ class ComunicadoLeitura(models.Model):
         return f"{self.usuario} · {self.comunicado} ({estado})"
 
 
+class GuiaPendencia(models.Model):
+    """
+    Guia de Orientações sobre as pendências geradas para o parceiro.
+    """
+    codigo = models.CharField("Código", max_length=50, blank=True)
+    descricao = models.CharField("Descrição", max_length=255)
+    quando_acontece = models.TextField("Quando acontece", blank=True)
+    esteira = models.CharField("Esteira", max_length=100, blank=True)
+    agendavel = models.CharField("Pendência Agendável", max_length=50, blank=True)
+    elegivel_mem_crv = models.CharField("Elegível ao MEM CRV?", max_length=50, blank=True)
+    elegivel_pav = models.CharField("Elegível a PAV (PA Virtual)?", max_length=50, blank=True)
+    tratamento_humano_discador = models.CharField("Elegível ao tratamento humano (discador|preview)", max_length=50, blank=True)
+    tratamento_humano_whatsapp = models.CharField("Elegível ao tratamento Humano (whatsapp)", max_length=50, blank=True)
+    nota = models.TextField("Nota", blank=True)
+
+    class Meta:
+        ordering = ["codigo", "descricao"]
+        verbose_name = "Guia de Pendência"
+        verbose_name_plural = "Guias de Pendência"
+
+    def __str__(self) -> str:
+        return f"{self.codigo} - {self.descricao}"
+
+
 from tickets.consultas.vtal_models import (  # noqa: E402, F401
     VtalDadosViabilidade,
     VtalFonteDados,

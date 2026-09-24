@@ -8,6 +8,7 @@ from . import (
     tradehub_views,
     vertical_views,
     views,
+    guia_views,
 )
 
 urlpatterns = [
@@ -191,4 +192,5 @@ urlpatterns = [
     path("mascaras/", views.mascaras_lista, name="mascaras"),
     path("mascaras/nova/", views.mascara_form, name="mascara_nova"),
     path("mascaras/<int:pk>/", views.mascara_form, name="mascara_editar"),
+    path("guia-solucoes/", guia_views.guia_solucoes_view, name="guia_solucoes"),
 ]
