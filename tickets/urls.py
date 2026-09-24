@@ -145,6 +145,11 @@ urlpatterns = [
         name="vertical_api_solicitacao",
     ),
     path(
+        "abrir/vertical/api/solicitacoes/<int:pk>/resend/",
+        vertical_views.vertical_api_solicitacao_resend,
+        name="vertical_api_solicitacao_resend",
+    ),
+    path(
         "abrir/vertical/api/viacep/<str:cep>/",
         vertical_views.vertical_api_viacep,
         name="vertical_api_viacep",

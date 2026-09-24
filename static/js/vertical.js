@@ -176,6 +176,7 @@
             '" data-obs="' +
             esc(i.observacao) +
             '">Status</button> ';
+          acoes += '<button type="button" class="btn btn-secondary" data-resend="' + i.id + '">Reenviar</button> ';
           acoes += '<button type="button" class="btn btn-secondary" data-del="' + i.id + '">Excluir</button>';
         }
         var endereco = esc((i.logradouro || "") + ", " + (i.numero || "") + " - " + (i.bairro || ""));
@@ -226,6 +227,15 @@
       tbody.querySelectorAll("[data-del]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           excluir(Number(btn.getAttribute("data-del")));
+        });
+      });
+      tbody.querySelectorAll("[data-resend]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          if (!confirm("Reenviar resumo por WhatsApp e E-mail?")) return;
+          var id = btn.getAttribute("data-resend");
+          fetchJson(itemUrl(id) + "resend/", { method: "POST" }).then(function (body) {
+            alert((body.data && body.data.mensagem) || (body.error && body.error.message) || "Processado.");
+          });
         });
       });
     });
@@ -338,6 +348,7 @@
     setPreview("preview-carta", "");
     setPreview("preview-fachada", "");
     document.getElementById("resumoEnvio").hidden = true;
+    document.getElementById("inp_observacao_form").value = "";
     blocos = [];
     atualizarTabelaBlocos();
   }
@@ -369,6 +380,7 @@
       document.getElementById("input-arquivo-fachada").required = false;
       setPreview("preview-carta", d.link_carta_sindico);
       setPreview("preview-fachada", d.link_fotos_fachada);
+      document.getElementById("inp_observacao_form").value = d.observacao_form || d.observacao || "";
       blocos = d.blocos || [];
       atualizarTabelaBlocos();
       document.getElementById("tab-nova-label").textContent = "Editar solicitação";
@@ -417,6 +429,10 @@
     if (!isEdit) {
       document.getElementById("input-arquivo-carta").required = true;
       document.getElementById("input-arquivo-fachada").required = true;
+    }
+    if (blocos.length === 0) {
+      alert("É obrigatório incluir pelo menos uma Estrutura de blocos antes de enviar.");
+      return;
     }
     if (!form.checkValidity()) {
       form.reportValidity();

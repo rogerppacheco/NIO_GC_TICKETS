@@ -161,11 +161,36 @@ def vertical_api_solicitacoes(request: HttpRequest) -> JsonResponse:
     if blocos:
         gravar_blocos(item, blocos)
         item.refresh_from_db()
+        
+    parceiro_obj = parceiro_do_pedido(request)
+    protocolo_str = ""
+    if parceiro_obj:
+        from tickets.models import Ticket, TipoDemanda
+        t = Ticket.objects.create(
+            parceiro=parceiro_obj,
+            contato=contato,
+            tipo=TipoDemanda.OUTROS,
+            solicitante_nome=item.nome_sindico,
+            solicitante_contato=item.contato_sindico,
+            cep=item.cep,
+            logradouro=item.logradouro,
+            numero_fachada=item.numero,
+            bairro=item.bairro,
+            cidade=item.cidade,
+            uf=item.uf,
+            descricao=f"Novo Projeto Vertical Acionado: {item.nome_condominio}\nID Vertical: {item.id}\nHPs: {item.total_hps}",
+            observacoes=item.observacao,
+        )
+        protocolo_str = f" Protocolo gerado: {t.protocolo}."
+
+    from tickets.vertical_services import enviar_whatsapp_criacao, enviar_email_criacao_vertical
     resumo = enviar_whatsapp_criacao(item)
+    enviar_email_criacao_vertical(item)
+    
     return _json_ok(
         {
             "id": item.id,
-            "mensagem": f"Solicitação enviada! ID: {item.id}",
+            "mensagem": f"Solicitação enviada! ID: {item.id}.{protocolo_str}",
             "resumo": resumo,
         },
         status=201,
@@ -231,6 +256,20 @@ def vertical_api_solicitacao(request: HttpRequest, pk: int) -> JsonResponse:
             "item": serializar_solicitacao(item, request, can_edit=gestao, detalhe=True),
         }
     )
+
+@login_required
+@require_http_methods(["POST"])
+def vertical_api_solicitacao_resend(request: HttpRequest, pk: int) -> JsonResponse:
+    from tickets.vertical_services import enviar_whatsapp_criacao, enviar_email_criacao_vertical
+    qs = qs_solicitacoes(request.user)
+    item = get_object_or_404(qs, pk=pk)
+    gestao = pode_gestao_vertical(request.user)
+    if not gestao:
+        return _json_error("forbidden", "Acesso negado.", status=403)
+    
+    enviar_whatsapp_criacao(item)
+    enviar_email_criacao_vertical(item)
+    return _json_ok({"mensagem": "Resumo reenviado por WhatsApp e E-mail."})
 
 
 @login_required

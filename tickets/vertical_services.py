@@ -226,6 +226,7 @@ def payload_criar(data: dict[str, Any]) -> dict[str, Any]:
         "longitude": _texto(data.get("longitude"), 50),
         "infraestrutura_tipo": infra,
         "possui_shaft_dg": _bool_form(data.get("possui_shaft") or data.get("possui_shaft_dg")),
+        "observacao": _texto(data.get("observacao_form") or data.get("observacao"), 4000),
         "total_hps": total_hps,
         "pre_venda_minima": prevenda,
         "_blocos": blocos,
@@ -317,6 +318,38 @@ def enviar_whatsapp_criacao(item: SolicitacaoVertical) -> str:
         except Exception:
             logger.exception("Falha no resumo WhatsApp Vertical %s → %s", item.id, numero)
     return resumo
+
+def enviar_email_criacao_vertical(item: SolicitacaoVertical) -> None:
+    parceiro = item.parceiro
+    if not parceiro or not parceiro.especialista:
+        return
+    email_especialista = parceiro.especialista.email
+    if not email_especialista:
+        return
+
+    from gestao.messaging.email_smtp import enviar_email_com_anexos
+    resumo = montar_resumo(item)
+    
+    anexos = []
+    if item.arquivo_carta:
+        try:
+            with item.arquivo_carta.open("rb") as f:
+                anexos.append((item.arquivo_carta.name.split("/")[-1] or "carta.pdf", f.read(), "application/octet-stream"))
+        except Exception:
+            pass
+    if item.arquivo_fachada:
+        try:
+            with item.arquivo_fachada.open("rb") as f:
+                anexos.append((item.arquivo_fachada.name.split("/")[-1] or "fachada.jpg", f.read(), "application/octet-stream"))
+        except Exception:
+            pass
+
+    enviar_email_com_anexos(
+        [email_especialista],
+        assunto=f"Novo Projeto Vertical - {item.nome_condominio}",
+        corpo_texto=resumo,
+        anexos=anexos,
+    )
 
 
 def contar_vendas_cep_fachada(qs: QuerySet[SolicitacaoVertical]) -> int:
