@@ -65,6 +65,15 @@
       {% empty %}
         <p class="help">Sem mensagens ainda.</p>
       {% endfor %}
+      
+      {% if msg_form %}
+        <form method="post" style="margin-top:0.5rem">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="mensagem">
+          {{ msg_form.corpo }}
+          <button class="btn btn-primary" type="submit" style="margin-top:0.6rem">Enviar resposta</button>
+        </form>
+      {% endif %}
     </div>
   </div>
 </div>

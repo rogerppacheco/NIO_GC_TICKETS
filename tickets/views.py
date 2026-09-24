@@ -673,11 +673,31 @@ def consulta_protocolo(request: HttpRequest, protocolo: str) -> HttpResponse:
     ticket = Ticket.objects.select_related("parceiro").filter(protocolo=protocolo.upper()).first()
     if not ticket or not pode_ver_ticket(request.user, ticket):
         raise Http404("Ticket não encontrado.")
+        
+    msg_form = None
+    if ticket.status == StatusTicket.AGUARDANDO_PARCEIRO:
+        if request.method == "POST" and request.POST.get("action") == "mensagem":
+            msg_form = MensagemForm(request.POST)
+            if msg_form.is_valid():
+                msg = msg_form.save(commit=False)
+                msg.ticket = ticket
+                msg.autor = request.user
+                msg.autor_nome = request.user.get_username()
+                msg.interno = False
+                msg.save()
+                
+                ticket.status = StatusTicket.EM_ANALISE
+                ticket.save(update_fields=["status"])
+                messages.success(request, "Sua resposta foi enviada e o ticket está novamente em análise.")
+                return redirect("consulta_protocolo", protocolo=ticket.protocolo)
+        else:
+            msg_form = MensagemForm()
+
     msgs = ticket.mensagens.filter(interno=False)
     return render(
         request,
         "tickets/consulta.html",
-        {"ticket": ticket, "mensagens": msgs},
+        {"ticket": ticket, "mensagens": msgs, "msg_form": msg_form},
     )
 
 
