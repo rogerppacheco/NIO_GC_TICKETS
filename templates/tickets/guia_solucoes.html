@@ -10,10 +10,11 @@
   </div>
 </div>
 
-<div class="guia-search" style="margin-bottom: 2rem; max-width: 600px;">
+<div class="guia-search-container" style="position: relative; max-width: 600px; margin-bottom: 2rem;">
   <label for="guia-input" style="font-weight: 600; display: block; margin-bottom: 0.5rem; color: #333;">Buscar Pendência</label>
-  <input type="text" id="guia-input" list="guia-list" class="form-control" style="width: 100%; padding: 0.75rem; border: 1px solid #ced4da; border-radius: 6px; font-size: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" placeholder="Digite o código ou a descrição da pendência...">
-  <datalist id="guia-list"></datalist>
+  <input type="text" id="guia-input" class="form-control" autocomplete="off" style="width: 100%; padding: 0.75rem; border: 1px solid #ced4da; border-radius: 6px; font-size: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" placeholder="Digite o código ou a descrição da pendência para pesquisar...">
+  <ul id="guia-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; background: #fff; border: 1px solid #ced4da; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 300px; overflow-y: auto; list-style: none; padding: 0; margin: 0.5rem 0 0 0;">
+  </ul>
 </div>
 
 <div id="guia-details" style="display: none; background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); border: 1px solid #e9ecef;">
@@ -64,39 +65,99 @@
   </div>
 </div>
 
+<style>
+  .guia-dropdown-item {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    border-bottom: 1px solid #f1f3f5;
+    color: #212529;
+    font-size: 0.95rem;
+    transition: background-color 0.1s ease;
+  }
+  .guia-dropdown-item:last-child {
+    border-bottom: none;
+  }
+  .guia-dropdown-item:hover {
+    background-color: #f8f9fa;
+    color: #007bff;
+  }
+</style>
+
 <script>
   const guiasData = {{ guias_json|safe }};
-  const datalist = document.getElementById('guia-list');
+  const dropdown = document.getElementById('guia-dropdown');
   const input = document.getElementById('guia-input');
   const detailsDiv = document.getElementById('guia-details');
   
-  // Populate datalist
-  const fragment = document.createDocumentFragment();
-  guiasData.forEach(g => {
-    const option = document.createElement('option');
-    option.value = g.search_term;
-    fragment.appendChild(option);
-  });
-  datalist.appendChild(fragment);
+  function renderDropdown(matches) {
+    dropdown.innerHTML = '';
+    if (matches.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'guia-dropdown-item';
+      li.style.color = '#6c757d';
+      li.style.cursor = 'default';
+      li.textContent = 'Nenhuma pendência encontrada...';
+      li.onmouseover = () => li.style.backgroundColor = 'transparent';
+      dropdown.appendChild(li);
+      dropdown.style.display = 'block';
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    matches.forEach(g => {
+      const li = document.createElement('li');
+      li.className = 'guia-dropdown-item';
+      li.textContent = g.search_term;
+      li.onclick = () => {
+        input.value = g.search_term;
+        dropdown.style.display = 'none';
+        showDetails(g);
+      };
+      fragment.appendChild(li);
+    });
+    dropdown.appendChild(fragment);
+    dropdown.style.display = 'block';
+  }
+
+  function showDetails(match) {
+    document.getElementById('gd-titulo').textContent = match.search_term;
+    document.getElementById('gd-quando').innerHTML = (match.quando_acontece || '-').replace(/\n/g, '<br>');
+    document.getElementById('gd-nota').innerHTML = (match.nota || '-').replace(/\n/g, '<br>');
+    document.getElementById('gd-esteira').textContent = match.esteira || '-';
+    document.getElementById('gd-agendavel').textContent = match.agendavel || '-';
+    document.getElementById('gd-mem').textContent = match.elegivel_mem_crv || '-';
+    document.getElementById('gd-pav').textContent = match.elegivel_pav || '-';
+    document.getElementById('gd-discador').textContent = match.tratamento_humano_discador || '-';
+    document.getElementById('gd-whatsapp').textContent = match.tratamento_humano_whatsapp || '-';
+    
+    detailsDiv.style.display = 'block';
+  }
 
   input.addEventListener('input', function(e) {
-    const val = e.target.value;
-    const match = guiasData.find(g => g.search_term === val);
+    const val = e.target.value.toLowerCase();
+    detailsDiv.style.display = 'none';
     
-    if (match) {
-      document.getElementById('gd-titulo').textContent = match.search_term;
-      document.getElementById('gd-quando').innerHTML = (match.quando_acontece || '-').replace(/\n/g, '<br>');
-      document.getElementById('gd-nota').innerHTML = (match.nota || '-').replace(/\n/g, '<br>');
-      document.getElementById('gd-esteira').textContent = match.esteira || '-';
-      document.getElementById('gd-agendavel').textContent = match.agendavel || '-';
-      document.getElementById('gd-mem').textContent = match.elegivel_mem_crv || '-';
-      document.getElementById('gd-pav').textContent = match.elegivel_pav || '-';
-      document.getElementById('gd-discador').textContent = match.tratamento_humano_discador || '-';
-      document.getElementById('gd-whatsapp').textContent = match.tratamento_humano_whatsapp || '-';
-      
-      detailsDiv.style.display = 'block';
+    if (!val) {
+      renderDropdown(guiasData);
+      return;
+    }
+    
+    const matches = guiasData.filter(g => g.search_term.toLowerCase().includes(val));
+    renderDropdown(matches);
+  });
+
+  input.addEventListener('focus', function(e) {
+    const val = e.target.value.toLowerCase();
+    if (!val) {
+      renderDropdown(guiasData);
     } else {
-      detailsDiv.style.display = 'none';
+      const matches = guiasData.filter(g => g.search_term.toLowerCase().includes(val));
+      renderDropdown(matches);
+    }
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!document.querySelector('.guia-search-container').contains(e.target)) {
+      dropdown.style.display = 'none';
     }
   });
 </script>
