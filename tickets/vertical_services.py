@@ -288,35 +288,61 @@ def _numeros(texto: str) -> list[str]:
 def enviar_whatsapp_criacao(item: SolicitacaoVertical) -> str:
     resumo = montar_resumo(item)
     try:
-        from gestao.messaging.syncwa import enviar_texto, syncwa_configurado
+        from gestao.messaging.syncwa import enviar_texto, syncwa_configurado, enviar_documento
     except Exception:
         return resumo
     if not syncwa_configurado():
         return resumo
-    try:
-        if item.contato_sindico:
-            enviar_texto(
-                item.contato_sindico,
-                (
-                    f"Olá, sua solicitação de Projeto Vertical para *{item.nome_condominio}* "
-                    f"foi recebida com sucesso! ID: {item.id}. Status: Sem Tratamento."
-                ),
-            )
-    except Exception:
-        logger.exception("Falha ao avisar síndico no Projeto Vertical %s", item.id)
+    
     cfg = ler_config_resumo()
     destinos = _numeros(item.destinatarios_resumo or "")
     if cfg["ativo"]:
         destinos.extend(_numeros(cfg["destinatarios"]))
+        
+    parceiro = item.parceiro
+    if parceiro and parceiro.especialista:
+        perfil = getattr(parceiro.especialista, "perfil_staff", None)
+        if perfil and perfil.whatsapp:
+            from gestao.destinatarios_especialista import jid_individual
+            jid = jid_individual(perfil.whatsapp)
+            if jid:
+                destinos.append(jid)
+
     vistos: set[str] = set()
+    
+    carta_bytes = None
+    carta_name = ""
+    fachada_bytes = None
+    fachada_name = ""
+    
+    if item.arquivo_carta:
+        try:
+            with item.arquivo_carta.open("rb") as f:
+                carta_bytes = f.read()
+                carta_name = item.arquivo_carta.name.split("/")[-1] or "carta.pdf"
+        except Exception:
+            pass
+    if item.arquivo_fachada:
+        try:
+            with item.arquivo_fachada.open("rb") as f:
+                fachada_bytes = f.read()
+                fachada_name = item.arquivo_fachada.name.split("/")[-1] or "fachada.jpg"
+        except Exception:
+            pass
+
     for numero in destinos:
         if numero in vistos:
             continue
         vistos.add(numero)
         try:
             enviar_texto(numero, resumo)
+            if carta_bytes:
+                enviar_documento(numero, conteudo=carta_bytes, file_name=carta_name, caption="Carta do Síndico")
+            if fachada_bytes:
+                enviar_documento(numero, conteudo=fachada_bytes, file_name=fachada_name, caption="Foto da Fachada")
         except Exception:
-            logger.exception("Falha no resumo WhatsApp Vertical %s → %s", item.id, numero)
+            logger.exception("Falha no envio WhatsApp Vertical %s → %s", item.id, numero)
+            
     return resumo
 
 def enviar_email_criacao_vertical(item: SolicitacaoVertical) -> None:
