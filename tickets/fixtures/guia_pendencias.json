@@ -1,514 +1,514 @@
-﻿[
-{
-    "model": "tickets.guiapendencia",
-    "pk": 1,
-    "fields": {
-        "codigo": "-",
-        "descricao": "BA Vencido",
-        "quando_acontece": "Quando na data do agendamento nÒo ocorre a visita. Desta forma, o pedido nÒo Ú pendenciado, permanecendo em aprovisionamento e com a data de agendamento vencida",
-        "esteira": "InstalaþÒo",
-        "agendavel": "-",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
+[
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 1,
+        "fields": {
+            "codigo": "-",
+            "descricao": "BA Vencido",
+            "quando_acontece": "Quando na data do agendamento n\u00d2o ocorre a visita. Desta forma, o pedido n\u00d2o \u00da pendenciado, permanecendo em aprovisionamento e com a data de agendamento vencida",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "-",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 2,
+        "fields": {
+            "codigo": "7001",
+            "descricao": "Cancelar por Pedido Duplicado",
+            "quando_acontece": "Em caso de pedidos com GPON duplicado, o time de aprovisionamento, avaliar\u00df os mesmos e far\u00df inser\u00fe\u00d2o nessa pend\u00dbncia, somente dos pedidos que precisam ser cancelados.",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 3,
+        "fields": {
+            "codigo": "7008",
+            "descricao": "Cancelamento por Inviabilidade T\u00dacnica",
+            "quando_acontece": "Equipe de Implanta\u00fe\u00d2o avalia atendimento e conclui a inviabilidade.",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 4,
+        "fields": {
+            "codigo": "7009",
+            "descricao": "Cancelamento Erro de Dados do Cliente",
+            "quando_acontece": "Ocorre sempre que um pedido exige corre\u00fe\u00d2o e precisa ser cancelado e reaberto ou editado. Corre\u00fe\u00d2o de endere\u00feo, oferta, etc",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 5,
+        "fields": {
+            "codigo": "7010",
+            "descricao": "Problema equipamento do cliente",
+            "quando_acontece": "Esta pendencia ser\u00df aplicada pelo CO, quando informado pelo t\u00dacnico de campo que o cliente n\u00d2o permitiu a instala\u00fe\u00d2o, pois n\u00d2o estava com algum dos seus equipamentos dispon\u00ddveis (TV, Computador, Telefone) ou quando cliente n\u00d2o possuir comprovante de resid\u00dbncia",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 6,
+        "fields": {
+            "codigo": "7014",
+            "descricao": "Problemas \u00e1de Infra de Rede do cliente",
+            "quando_acontece": "Esta pendencia ser\u00df aplicada pelo CO nas seguintes situa\u00fe\u00a7es:\n- Tubula\u00fe\u00d2o Obstruida\n- Falta de tubula\u00fe\u00d2o\n- Falta postea\u00fe\u00d2o / ancoragem no Cliente \n- Arm\u00dfrio obstruindo a tubula\u00fe\u00d2o\n- Falta de energia (Ex.: tomada, evento da concession\u00dfria)",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 7,
+        "fields": {
+            "codigo": "7015",
+            "descricao": "Desist\u00dbncia Cliente",
+            "quando_acontece": "Pendencia aplicada pelo tecnico no CO Digital quando cliente informa que n\u00d2o deseja mais a instala\u00fe\u00d2o do Servi\u00feo. O CRV aplica na pend\u00dbncia quando o t\u00dacnico nos aciona para cen\u00dfrios de exce\u00fe\u00d2o (em que n\u00d2o for poss\u00ddve aplicar via CO Digital)",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "N\u00d2o",
+            "tratamento_humano_whatsapp": "N\u00d2o",
+            "nota": "Pend\u00dbncia eleg\u00ddvel ao cancelamento sem interven\u00fe\u00d2o"
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 8,
+        "fields": {
+            "codigo": "7016",
+            "descricao": "Cliente Ausente",
+            "quando_acontece": "Quando cliente est\u00df ausente ou somente tem um menor de idade no local ou a  pessoa no local desconhece o servi\u00feo e n\u00d2o foi poss\u00ddvel falar com o cliente",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "Sim",
+            "elegivel_mem_crv": "Sim",
+            "elegivel_pav": "Sim",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 9,
+        "fields": {
+            "codigo": "7017",
+            "descricao": "Ag. aviso cliente para instala\u00fe\u00d2o",
+            "quando_acontece": "Quando o cliente solicita a altera\u00fe\u00d2o da data de instala\u00fe\u00d2o (no momento da instala\u00fe\u00d2o) ou \u00da verificada a necessidade de instala\u00fe\u00d2o futura",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "Sim",
+            "elegivel_mem_crv": "Sim",
+            "elegivel_pav": "Sim",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 10,
+        "fields": {
+            "codigo": "7021",
+            "descricao": "CLIE. INTERROMPE E SOLICITA REAGENDAR ATIV",
+            "quando_acontece": "Quando a instala\u00fe\u00d2o \u00da iniciada (consumo de equipamento) e o cliente solicita a altera\u00fe\u00d2o da data de instala\u00fe\u00d2o. Essa pend\u00dbncia \u00da aplicada pelo Co e tratada no CRV.",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "Sim",
+            "elegivel_mem_crv": "Sim",
+            "elegivel_pav": "Sim",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 11,
+        "fields": {
+            "codigo": "7029",
+            "descricao": "Consulta de agendamento",
+            "quando_acontece": "Pedido encontra-se sem agendamento",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "Sim",
+            "elegivel_mem_crv": "Sim",
+            "elegivel_pav": "Sim",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 12,
+        "fields": {
+            "codigo": "7031",
+            "descricao": "Pend\u00dbncia Funcional MUA",
+            "quando_acontece": "Ocorre quando acontece erro no agendamento pelo MUA",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "Sim",
+            "elegivel_mem_crv": "Sim",
+            "elegivel_pav": "Sim",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": "Pend\u00dbncia n\u00d2o est\u00df acontecendo para Nova Fibra"
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 13,
+        "fields": {
+            "codigo": "7035",
+            "descricao": "\u2534rea de Risco moment\u00d4nea",
+            "quando_acontece": "Ocorre quando momentaneamente n\u00d2o \u00da poss\u00ddvel acessar o local\u00e1 (viol\u00dbncia urbana, inc\u00dbndio, alagamento)",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 14,
+        "fields": {
+            "codigo": "7037",
+            "descricao": "Impedimento de Execu\u00fe\u00d2o por motivo Chuva",
+            "quando_acontece": "Pend\u00dbncia usada em sazonalidade da regi\u00d2o, quando o pedido est\u00df em local com chuva e impossibilite seguir com a instala\u00fe\u00d2o.",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "Sim",
+            "elegivel_mem_crv": "Sim",
+            "elegivel_pav": "Sim",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 15,
+        "fields": {
+            "codigo": "7047",
+            "descricao": "Acesso Impossibilitado pela ADM do Condom\u00ddnio",
+            "quando_acontece": "Quando a Administra\u00fe\u00d2o do pr\u00dadio/Condom\u00ddnio n\u00d2o permite a realiza\u00fe\u00d2o do servi\u00feo, mesmo o cliente informando que deseja a instala\u00fe\u00d2o",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 16,
+        "fields": {
+            "codigo": "7049",
+            "descricao": "Endere\u00feo n\u00d2o localizado",
+            "quando_acontece": "Quando n\u00d2o \u00da localizado o endere\u00feo e n\u00d2o consegue contato com o cliente no momento da instala\u00fe\u00d2o",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 17,
+        "fields": {
+            "codigo": "7065",
+            "descricao": "Local Fechado",
+            "quando_acontece": "Quando local est\u00df fechado impossibilitando a instala\u00fe\u00d2o",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "Sim",
+            "elegivel_mem_crv": "Sim",
+            "elegivel_pav": "Sim",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 18,
+        "fields": {
+            "codigo": "7073",
+            "descricao": "Falta documento cliente",
+            "quando_acontece": "Esta pendencia ser\u00df aplicada pelo CO, na seguinte situa\u00fe\u00d2o:\n\n- Quando o t\u00dacnico no momento da Instala\u00fe\u00d2o n\u00d2o segue com a execu\u00fe\u00d2o, pois cliente n\u00d2o possui comprovante de resid\u00dbncia para apresentar no momento da Instala\u00fe\u00d2o;\n\n- Quando o comprovante de resid\u00dbncia apresentado \u00da de um endere\u00feo diferente do endere\u00feo pedido do cliente (exceto bairro).",
+            "esteira": "Instala\u00fe\u00d2o",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 19,
+        "fields": {
+            "codigo": "7042",
+            "descricao": "Local Fechado para atividades de Obra",
+            "quando_acontece": "Esta pendencia ser\u00df aplicada pela Implanta\u00fe\u00d2o quando identificada a situa\u00fe\u00d2o de Local Fechado.",
+            "esteira": "Obra",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 20,
+        "fields": {
+            "codigo": "7075",
+            "descricao": "Cancelamento por Inviabilidade T\u00dacnica de Obra",
+            "quando_acontece": "Quando a equipe de Implanta\u00fe\u00d2o avalia atendimento e conclui a inviabilidade",
+            "esteira": "Obra",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 21,
+        "fields": {
+            "codigo": "7076",
+            "descricao": "Cancelamento por Erro de dados",
+            "quando_acontece": "Esta pendencia ser\u00df aplicada pela Implanta\u00fe\u00d2o, nas seguintes situa\u00fe\u00a7es:\n- Endere\u00feo de instala\u00fe\u00d2o n\u00d2o confere\n- Dados cadastrais do cliente divergentes",
+            "esteira": "Obra",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 22,
+        "fields": {
+            "codigo": "7077",
+            "descricao": "Problemas \u00e1de Infra de Rede do cliente",
+            "quando_acontece": "Esta pendencia ser\u00df aplicada pela Implanta\u00fe\u00d2o nas seguintes situa\u00fe\u00a7es:\n- Tubula\u00fe\u00d2o Obstruida\n- Falta de tubula\u00fe\u00d2o\n- Falta postea\u00fe\u00d2o / ancoragem no Cliente \n- Arm\u00dfrio obstruindo a tubula\u00fe\u00d2o\n- Falta de energia (Ex.: tomada, evento da concession\u00dfria)\n- Demais situa\u00fe\u00a7es relativas a problemas no cliente",
+            "esteira": "Obra",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 23,
+        "fields": {
+            "codigo": "7078",
+            "descricao": "Desist\u00dbncia Cliente",
+            "quando_acontece": "Pendencia aplicada por Implanta\u00fe\u00d2o de Rede quando o Cliente informa que n\u00d2o deseja mais a instala\u00fe\u00d2o do Servi\u00feo",
+            "esteira": "Obra",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 24,
+        "fields": {
+            "codigo": "7079",
+            "descricao": "Acesso impossibilitado para Obra",
+            "quando_acontece": "Esta pendencia ser\u00df aplicada pela Implanta\u00fe\u00d2o na seguinte situa\u00fe\u00d2o:\n- Quando a Administra\u00fe\u00d2o do predio / Condominio n\u00d2o permite a realiza\u00fe\u00d2o do servi\u00feo, mesmo o cliente informando que deseja a instala\u00fe\u00d2o.",
+            "esteira": "Obra",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 25,
+        "fields": {
+            "codigo": "7080",
+            "descricao": "\u2534rea de Risco moment\u00d4nea - Obra",
+            "quando_acontece": "Pendencia aplicada pelo time de Implanta\u00fe\u00d2o na situa\u00fe\u00d2o em que n\u00d2o \u00da poss\u00ddvel acessar o local, cancelamento realizado vinculado a exist\u00dbncia de um BO",
+            "esteira": "Obra",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 26,
+        "fields": {
+            "codigo": "7081",
+            "descricao": "Cancelamento Obra (Riser/Infra)",
+            "quando_acontece": "Pend\u00dbncia aplicado pelo time de Implanta\u00fe\u00d2o para os cen\u00dfrios de Cancelamento pelos Motivos abaixo: \n\n - Quando o respons\u00dfvel n\u00d2o autoriza a avalia\u00fe\u00d2o de desobstru\u00fe\u00d2o;\n - Quando mesmo ap\u00bes or\u00feamento e desobstru\u00fe\u00d2o, n\u00d2o for poss\u00ddvel construir o Riser;\n - Quando o pr\u00dadio possui problema de Infraestrutura sem possibilidade constru\u00fe\u00d2o;\n - Quando o sindico n\u00d2o permite a constru\u00fe\u00d2o do Riser ap\u00bes v\u00dfrias tentativas.",
+            "esteira": "Obra",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 27,
+        "fields": {
+            "codigo": "7082",
+            "descricao": "Endere\u00feo n\u00d2o localizado - Obra",
+            "quando_acontece": "Pendencia aplicado pelo time de Implanta\u00fe\u00d2o para os cen\u00dfrios em que o endere\u00feo n\u00d2o \u00da localizado pelo Projetista:\n- Aus\u00dbncia de complemento\n- Aus\u00dbncia de Ponto de refer\u00dbncia\n- Fachada n\u00d2o localizada",
+            "esteira": "Obra",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 28,
+        "fields": {
+            "codigo": "7083",
+            "descricao": "Venda Indevida - Obra",
+            "quando_acontece": "Pendencia aplicada pelo time de Implanta\u00fe\u00d2o, quando a pessoa no local diz que n\u00d2o reconhece o cliente informado no pedido",
+            "esteira": "Obra",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 29,
+        "fields": {
+            "codigo": "7092",
+            "descricao": "Pedido Duplicado - Obra",
+            "quando_acontece": "Pendencia aplicada pelo time de Implanta\u00fe\u00d2o para cen\u00dfrios onde \u00da localizado outro pedido em tratamento na esteira de Obra",
+            "esteira": "Obra",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 30,
+        "fields": {
+            "codigo": "7099",
+            "descricao": "Endere\u00feo correto invi\u00dfvel",
+            "quando_acontece": "Pend\u00dbncia deve ser aplicada pelo time de Projeto e Implanta\u00fe\u00d2o de rede externa quando o endere\u00feo est\u00df incorreto na origem da venda e o correto identificado \u00da inviavel.",
+            "esteira": "Obra",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 31,
+        "fields": {
+            "codigo": "7100",
+            "descricao": "Sem contato - Obra",
+            "quando_acontece": "Pend\u00dbncia deve ser aplicada pelo time de Projeto e Implanta\u00fe\u00d2o rede externa quando n\u00d2o conseguir contato com o cliente para agendar visita na pendencia 7089 (survey/elabora\u00fe\u00d2o de projeto ou execu\u00fe\u00d2o da obra) na esteria de contao com o cliete obra.",
+            "esteira": "Obra",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
+    },
+    {
+        "model": "tickets.guiapendencia",
+        "pk": 32,
+        "fields": {
+            "codigo": "7105",
+            "descricao": "Altera\u00fe\u00d2o de Endere\u00feo",
+            "quando_acontece": "Pend\u00dbncia aplicada pelo CRV para edi\u00fe\u00d2o de endere\u00feo",
+            "esteira": "Instala\u00fe\u00d2o e Obra",
+            "agendavel": "N\u00d2o",
+            "elegivel_mem_crv": "N\u00d2o",
+            "elegivel_pav": "N\u00d2o",
+            "tratamento_humano_discador": "Sim",
+            "tratamento_humano_whatsapp": "Sim",
+            "nota": ""
+        }
     }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 2,
-    "fields": {
-        "codigo": "7001",
-        "descricao": "Cancelar por Pedido Duplicado",
-        "quando_acontece": "Em caso de pedidos com GPON duplicado, o time de aprovisionamento, avaliarß os mesmos e farß inserþÒo nessa pendÛncia, somente dos pedidos que precisam ser cancelados.",
-        "esteira": "InstalaþÒo",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 3,
-    "fields": {
-        "codigo": "7008",
-        "descricao": "Cancelamento por Inviabilidade TÚcnica",
-        "quando_acontece": "Equipe de ImplantaþÒo avalia atendimento e conclui a inviabilidade.",
-        "esteira": "InstalaþÒo",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 4,
-    "fields": {
-        "codigo": "7009",
-        "descricao": "Cancelamento Erro de Dados do Cliente",
-        "quando_acontece": "Ocorre sempre que um pedido exige correþÒo e precisa ser cancelado e reaberto ou editado. CorreþÒo de endereþo, oferta, etc",
-        "esteira": "InstalaþÒo",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 5,
-    "fields": {
-        "codigo": "7010",
-        "descricao": "Problema equipamento do cliente",
-        "quando_acontece": "Esta pendencia serß aplicada pelo CO, quando informado pelo tÚcnico de campo que o cliente nÒo permitiu a instalaþÒo, pois nÒo estava com algum dos seus equipamentos disponÝveis (TV, Computador, Telefone) ou quando cliente nÒo possuir comprovante de residÛncia",
-        "esteira": "InstalaþÒo",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 6,
-    "fields": {
-        "codigo": "7014",
-        "descricao": "Problemas áde Infra de Rede do cliente",
-        "quando_acontece": "Esta pendencia serß aplicada pelo CO nas seguintes situaþ§es:\n- TubulaþÒo Obstruida\n- Falta de tubulaþÒo\n- Falta posteaþÒo / ancoragem no Cliente \n- Armßrio obstruindo a tubulaþÒo\n- Falta de energia (Ex.: tomada, evento da concessionßria)",
-        "esteira": "InstalaþÒo",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 7,
-    "fields": {
-        "codigo": "7015",
-        "descricao": "DesistÛncia Cliente",
-        "quando_acontece": "Pendencia aplicada pelo tecnico no CO Digital quando cliente informa que nÒo deseja mais a instalaþÒo do Serviþo. O CRV aplica na pendÛncia quando o tÚcnico nos aciona para cenßrios de exceþÒo (em que nÒo for possÝve aplicar via CO Digital)",
-        "esteira": "InstalaþÒo",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "NÒo",
-        "tratamento_humano_whatsapp": "NÒo",
-        "nota": "PendÛncia elegÝvel ao cancelamento sem intervenþÒo"
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 8,
-    "fields": {
-        "codigo": "7016",
-        "descricao": "Cliente Ausente",
-        "quando_acontece": "Quando cliente estß ausente ou somente tem um menor de idade no local ou a  pessoa no local desconhece o serviþo e nÒo foi possÝvel falar com o cliente",
-        "esteira": "InstalaþÒo",
-        "agendavel": "Sim",
-        "elegivel_mem_crv": "Sim",
-        "elegivel_pav": "Sim",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 9,
-    "fields": {
-        "codigo": "7017",
-        "descricao": "Ag. aviso cliente para instalaþÒo",
-        "quando_acontece": "Quando o cliente solicita a alteraþÒo da data de instalaþÒo (no momento da instalaþÒo) ou Ú verificada a necessidade de instalaþÒo futura",
-        "esteira": "InstalaþÒo",
-        "agendavel": "Sim",
-        "elegivel_mem_crv": "Sim",
-        "elegivel_pav": "Sim",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 10,
-    "fields": {
-        "codigo": "7021",
-        "descricao": "CLIE. INTERROMPE E SOLICITA REAGENDAR ATIV",
-        "quando_acontece": "Quando a instalaþÒo Ú iniciada (consumo de equipamento) e o cliente solicita a alteraþÒo da data de instalaþÒo. Essa pendÛncia Ú aplicada pelo Co e tratada no CRV.",
-        "esteira": "InstalaþÒo",
-        "agendavel": "Sim",
-        "elegivel_mem_crv": "Sim",
-        "elegivel_pav": "Sim",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 11,
-    "fields": {
-        "codigo": "7029",
-        "descricao": "Consulta de agendamento",
-        "quando_acontece": "Pedido encontra-se sem agendamento",
-        "esteira": "InstalaþÒo",
-        "agendavel": "Sim",
-        "elegivel_mem_crv": "Sim",
-        "elegivel_pav": "Sim",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 12,
-    "fields": {
-        "codigo": "7031",
-        "descricao": "PendÛncia Funcional MUA",
-        "quando_acontece": "Ocorre quando acontece erro no agendamento pelo MUA",
-        "esteira": "InstalaþÒo",
-        "agendavel": "Sim",
-        "elegivel_mem_crv": "Sim",
-        "elegivel_pav": "Sim",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": "PendÛncia nÒo estß acontecendo para Nova Fibra"
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 13,
-    "fields": {
-        "codigo": "7035",
-        "descricao": "┴rea de Risco momentÔnea",
-        "quando_acontece": "Ocorre quando momentaneamente nÒo Ú possÝvel acessar o localá (violÛncia urbana, incÛndio, alagamento)",
-        "esteira": "InstalaþÒo",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 14,
-    "fields": {
-        "codigo": "7037",
-        "descricao": "Impedimento de ExecuþÒo por motivo Chuva",
-        "quando_acontece": "PendÛncia usada em sazonalidade da regiÒo, quando o pedido estß em local com chuva e impossibilite seguir com a instalaþÒo.",
-        "esteira": "InstalaþÒo",
-        "agendavel": "Sim",
-        "elegivel_mem_crv": "Sim",
-        "elegivel_pav": "Sim",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 15,
-    "fields": {
-        "codigo": "7047",
-        "descricao": "Acesso Impossibilitado pela ADM do CondomÝnio",
-        "quando_acontece": "Quando a AdministraþÒo do prÚdio/CondomÝnio nÒo permite a realizaþÒo do serviþo, mesmo o cliente informando que deseja a instalaþÒo",
-        "esteira": "InstalaþÒo",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 16,
-    "fields": {
-        "codigo": "7049",
-        "descricao": "Endereþo nÒo localizado",
-        "quando_acontece": "Quando nÒo Ú localizado o endereþo e nÒo consegue contato com o cliente no momento da instalaþÒo",
-        "esteira": "InstalaþÒo",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 17,
-    "fields": {
-        "codigo": "7065",
-        "descricao": "Local Fechado",
-        "quando_acontece": "Quando local estß fechado impossibilitando a instalaþÒo",
-        "esteira": "InstalaþÒo",
-        "agendavel": "Sim",
-        "elegivel_mem_crv": "Sim",
-        "elegivel_pav": "Sim",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 18,
-    "fields": {
-        "codigo": "7073",
-        "descricao": "Falta documento cliente",
-        "quando_acontece": "Esta pendencia serß aplicada pelo CO, na seguinte situaþÒo:\n\n- Quando o tÚcnico no momento da InstalaþÒo nÒo segue com a execuþÒo, pois cliente nÒo possui comprovante de residÛncia para apresentar no momento da InstalaþÒo;\n\n- Quando o comprovante de residÛncia apresentado Ú de um endereþo diferente do endereþo pedido do cliente (exceto bairro).",
-        "esteira": "InstalaþÒo",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 19,
-    "fields": {
-        "codigo": "7042",
-        "descricao": "Local Fechado para atividades de Obra",
-        "quando_acontece": "Esta pendencia serß aplicada pela ImplantaþÒo quando identificada a situaþÒo de Local Fechado.",
-        "esteira": "Obra",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 20,
-    "fields": {
-        "codigo": "7075",
-        "descricao": "Cancelamento por Inviabilidade TÚcnica de Obra",
-        "quando_acontece": "Quando a equipe de ImplantaþÒo avalia atendimento e conclui a inviabilidade",
-        "esteira": "Obra",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 21,
-    "fields": {
-        "codigo": "7076",
-        "descricao": "Cancelamento por Erro de dados",
-        "quando_acontece": "Esta pendencia serß aplicada pela ImplantaþÒo, nas seguintes situaþ§es:\n- Endereþo de instalaþÒo nÒo confere\n- Dados cadastrais do cliente divergentes",
-        "esteira": "Obra",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 22,
-    "fields": {
-        "codigo": "7077",
-        "descricao": "Problemas áde Infra de Rede do cliente",
-        "quando_acontece": "Esta pendencia serß aplicada pela ImplantaþÒo nas seguintes situaþ§es:\n- TubulaþÒo Obstruida\n- Falta de tubulaþÒo\n- Falta posteaþÒo / ancoragem no Cliente \n- Armßrio obstruindo a tubulaþÒo\n- Falta de energia (Ex.: tomada, evento da concessionßria)\n- Demais situaþ§es relativas a problemas no cliente",
-        "esteira": "Obra",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 23,
-    "fields": {
-        "codigo": "7078",
-        "descricao": "DesistÛncia Cliente",
-        "quando_acontece": "Pendencia aplicada por ImplantaþÒo de Rede quando o Cliente informa que nÒo deseja mais a instalaþÒo do Serviþo",
-        "esteira": "Obra",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 24,
-    "fields": {
-        "codigo": "7079",
-        "descricao": "Acesso impossibilitado para Obra",
-        "quando_acontece": "Esta pendencia serß aplicada pela ImplantaþÒo na seguinte situaþÒo:\n- Quando a AdministraþÒo do predio / Condominio nÒo permite a realizaþÒo do serviþo, mesmo o cliente informando que deseja a instalaþÒo.",
-        "esteira": "Obra",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 25,
-    "fields": {
-        "codigo": "7080",
-        "descricao": "┴rea de Risco momentÔnea - Obra",
-        "quando_acontece": "Pendencia aplicada pelo time de ImplantaþÒo na situaþÒo em que nÒo Ú possÝvel acessar o local, cancelamento realizado vinculado a existÛncia de um BO",
-        "esteira": "Obra",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 26,
-    "fields": {
-        "codigo": "7081",
-        "descricao": "Cancelamento Obra (Riser/Infra)",
-        "quando_acontece": "PendÛncia aplicado pelo time de ImplantaþÒo para os cenßrios de Cancelamento pelos Motivos abaixo: \n\n - Quando o responsßvel nÒo autoriza a avaliaþÒo de desobstruþÒo;\n - Quando mesmo ap¾s orþamento e desobstruþÒo, nÒo for possÝvel construir o Riser;\n - Quando o prÚdio possui problema de Infraestrutura sem possibilidade construþÒo;\n - Quando o sindico nÒo permite a construþÒo do Riser ap¾s vßrias tentativas.",
-        "esteira": "Obra",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 27,
-    "fields": {
-        "codigo": "7082",
-        "descricao": "Endereþo nÒo localizado - Obra",
-        "quando_acontece": "Pendencia aplicado pelo time de ImplantaþÒo para os cenßrios em que o endereþo nÒo Ú localizado pelo Projetista:\n- AusÛncia de complemento\n- AusÛncia de Ponto de referÛncia\n- Fachada nÒo localizada",
-        "esteira": "Obra",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 28,
-    "fields": {
-        "codigo": "7083",
-        "descricao": "Venda Indevida - Obra",
-        "quando_acontece": "Pendencia aplicada pelo time de ImplantaþÒo, quando a pessoa no local diz que nÒo reconhece o cliente informado no pedido",
-        "esteira": "Obra",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 29,
-    "fields": {
-        "codigo": "7092",
-        "descricao": "Pedido Duplicado - Obra",
-        "quando_acontece": "Pendencia aplicada pelo time de ImplantaþÒo para cenßrios onde Ú localizado outro pedido em tratamento na esteira de Obra",
-        "esteira": "Obra",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 30,
-    "fields": {
-        "codigo": "7099",
-        "descricao": "Endereþo correto invißvel",
-        "quando_acontece": "PendÛncia deve ser aplicada pelo time de Projeto e ImplantaþÒo de rede externa quando o endereþo estß incorreto na origem da venda e o correto identificado Ú inviavel.",
-        "esteira": "Obra",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 31,
-    "fields": {
-        "codigo": "7100",
-        "descricao": "Sem contato - Obra",
-        "quando_acontece": "PendÛncia deve ser aplicada pelo time de Projeto e ImplantaþÒo rede externa quando nÒo conseguir contato com o cliente para agendar visita na pendencia 7089 (survey/elaboraþÒo de projeto ou execuþÒo da obra) na esteria de contao com o cliete obra.",
-        "esteira": "Obra",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-},
-{
-    "model": "tickets.guiapendencia",
-    "pk": 32,
-    "fields": {
-        "codigo": "7105",
-        "descricao": "AlteraþÒo de Endereþo",
-        "quando_acontece": "PendÛncia aplicada pelo CRV para ediþÒo de endereþo",
-        "esteira": "InstalaþÒo e Obra",
-        "agendavel": "NÒo",
-        "elegivel_mem_crv": "NÒo",
-        "elegivel_pav": "NÒo",
-        "tratamento_humano_discador": "Sim",
-        "tratamento_humano_whatsapp": "Sim",
-        "nota": ""
-    }
-}
 ]
