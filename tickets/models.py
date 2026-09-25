@@ -156,6 +156,7 @@ class TipoDemanda(models.TextChoices):
     OS_NAO_ATRIBUIDA = "os_nao_atribuida", "OS não atribuída"
     VAZAMENTO_DADOS = "vazamento_dados", "Vazamento de dados"
     GESTAO_ACESSOS = "gestao_acessos", "Apoio gestão de acessos"
+    ABRIR_GA_BRPRONTO = "abrir_ga_brpronto", "Abrir GA para BrPronto"
     OUTROS = "outros", "Outros / suporte geral"
 
 

@@ -502,6 +502,11 @@ CAMPOS_POR_TIPO: dict[str, dict] = {
             "descricao",
         ],
     },
+    TipoDemanda.ABRIR_GA_BRPRONTO: {
+        "titulo": "Adicione as TTs para criar o acesso",
+        "campos": ["descricao", "evidencias"],
+        "obrigatorios": ["descricao"],
+    },
     TipoDemanda.OUTROS: {
         "titulo": "Descreva a demanda",
         "campos": ["pedido", "descricao", "evidencias"],
@@ -681,6 +686,7 @@ CAMPOS_CONTEXTO_RESPOSTA: dict[str, list[str]] = {
         "data_alternativa",
         "turno_alternativo",
     ],
+    TipoDemanda.ABRIR_GA_BRPRONTO: ["descricao"],
     TipoDemanda.OUTROS: ["pedido", "descricao"],
     TipoDemanda.VAZAMENTO_DADOS: [
         "documento_cliente",

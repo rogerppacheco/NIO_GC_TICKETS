@@ -10,7 +10,152 @@
   </div>
 </div>
 {% include "tickets/_form_demanda.html" with submit_label="Salvar demanda" cancel_url="fila" %}
+
+<div id="brpronto-ui" style="display:none; margin-top:20px;" class="panel">
+  <div class="panel-b">
+    <h3>Adicionar TTs (BrPronto)</h3>
+    <p>Adicione as matrículas aprovadas. Apenas matrículas do mesmo perfil podem ser criadas na mesma demanda.</p>
+    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+      <input type="text" id="brpronto-tt-input" placeholder="Informe a TT" class="form-control" style="flex:1;">
+      <button type="button" class="btn btn-secondary" id="brpronto-btn-buscar">Buscar TT</button>
+    </div>
+    <div id="brpronto-resultado" style="margin-bottom:10px;"></div>
+    
+    <div id="brpronto-lista" style="margin-top:20px;">
+      <h4>TTs Adicionadas:</h4>
+      <ul id="brpronto-ul" style="list-style-type: disc; margin-left: 20px;"></ul>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 {% block extra_js %}
 <script src="{% static 'js/demanda_form.js' %}"></script>
+<script>
+  (function(){
+    const form = document.querySelector('form[data-demanda-form]');
+    if(!form) return;
+    const tipoSelect = form.querySelector('[name="tipo"]');
+    const brProntoUI = document.getElementById('brpronto-ui');
+    const descricaoRow = form.querySelector('[data-field="descricao"]');
+    const descricaoTextarea = form.querySelector('[name="descricao"]');
+    
+    let ttsAdicionadas = [];
+    let perfilAtual = null;
+
+    function atualizarDescricao() {
+      if(ttsAdicionadas.length === 0){
+        descricaoTextarea.value = "";
+        return;
+      }
+      let texto = "Demandas GA BrPronto:\n\n";
+      ttsAdicionadas.forEach(item => {
+        texto += `TT: ${item.tt}\nNome: ${item.nome}\nCPF: ${item.cpf}\nRG: ${item.rg || '-'}\nE-mail: ${item.email}\nPerfil: ${item.perfil}\n\n`;
+      });
+      descricaoTextarea.value = texto;
+    }
+
+    function renderLista() {
+      const ul = document.getElementById('brpronto-ul');
+      ul.innerHTML = "";
+      ttsAdicionadas.forEach((item, index) => {
+        const li = document.createElement('li');
+        li.textContent = `${item.tt} - ${item.nome} (${item.perfil})`;
+        const btnRm = document.createElement('button');
+        btnRm.type = "button";
+        btnRm.textContent = "Remover";
+        btnRm.style.marginLeft = "10px";
+        btnRm.className = "btn btn-sm btn-danger";
+        btnRm.onclick = () => {
+          ttsAdicionadas.splice(index, 1);
+          if(ttsAdicionadas.length === 0) perfilAtual = null;
+          renderLista();
+          atualizarDescricao();
+        };
+        li.appendChild(btnRm);
+        ul.appendChild(li);
+      });
+    }
+
+    tipoSelect.addEventListener('change', (e) => {
+      if(e.target.value === 'abrir_ga_brpronto'){
+        descricaoRow.parentNode.insertBefore(brProntoUI, descricaoRow);
+        brProntoUI.style.display = 'block';
+        descricaoRow.style.display = 'none'; 
+      } else {
+        brProntoUI.style.display = 'none';
+        descricaoRow.style.display = '';
+      }
+    });
+    
+    // Dispara manualmente para verificar o valor inicial
+    if(tipoSelect.value === 'abrir_ga_brpronto'){
+      tipoSelect.dispatchEvent(new Event('change'));
+    }
+
+    document.getElementById('brpronto-btn-buscar').addEventListener('click', () => {
+      const tt = document.getElementById('brpronto-tt-input').value.trim();
+      if(!tt) return;
+      
+      const divRes = document.getElementById('brpronto-resultado');
+      divRes.innerHTML = "Buscando...";
+      
+      fetch(`/api/sym-supply/${tt}/`)
+        .then(r => r.json())
+        .then(data => {
+          if(!data.encontrado){
+            divRes.innerHTML = `<span style="color:red">TT não encontrada no Sym Supply.</span>`;
+            return;
+          }
+          
+          if(perfilAtual && perfilAtual !== data.perfil){
+             divRes.innerHTML = `<span style="color:red">O perfil dessa TT (${data.perfil}) é diferente do primeiro perfil adicionado (${perfilAtual}). Por favor, crie outra demanda para esse perfil.</span>`;
+             return;
+          }
+          
+          if(ttsAdicionadas.find(i => i.tt === tt)){
+             divRes.innerHTML = `<span style="color:red">Esta TT já foi adicionada na lista.</span>`;
+             return;
+          }
+          
+          divRes.innerHTML = `
+            <div style="background:var(--bg-panel); padding:10px; border-radius:4px; margin-top:10px;">
+              <strong>Encontrado:</strong> ${data.nome} (${data.perfil})<br>
+              <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-top:10px;">
+                <div>CPF: <input type="text" id="bp-cpf" class="form-control" value="${data.cpf || ''}"></div>
+                <div>RG: <input type="text" id="bp-rg" class="form-control" value="${data.rg || ''}" placeholder="Preencha se vazio"></div>
+                <div>E-mail: <input type="text" id="bp-email" class="form-control" value="${data.email || ''}"></div>
+              </div>
+              <button type="button" class="btn btn-primary" id="bp-btn-add" style="margin-top:10px;">Adicionar esta TT à demanda</button>
+            </div>
+          `;
+          
+          document.getElementById('bp-btn-add').onclick = () => {
+            const finalCpf = document.getElementById('bp-cpf').value;
+            const finalRg = document.getElementById('bp-rg').value;
+            const finalEmail = document.getElementById('bp-email').value;
+            
+            if(!perfilAtual) perfilAtual = data.perfil;
+            
+            ttsAdicionadas.push({
+              tt: tt,
+              nome: data.nome,
+              cpf: finalCpf,
+              rg: finalRg,
+              email: finalEmail,
+              perfil: data.perfil
+            });
+            
+            document.getElementById('brpronto-tt-input').value = "";
+            divRes.innerHTML = "";
+            renderLista();
+            atualizarDescricao();
+          };
+          
+        }).catch(err => {
+          divRes.innerHTML = `<span style="color:red">Erro na busca. Tente novamente.</span>`;
+        });
+    });
+  })();
+</script>
 {% endblock %}

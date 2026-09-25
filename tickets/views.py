@@ -1908,3 +1908,21 @@ def _salvar_anexos(request: HttpRequest, ticket: Ticket) -> None:
             nome_original=f.name,
             enviado_por=request.user if request.user.is_authenticated else None,
         )
+
+
+def api_buscar_terceiro(request, tt):
+    from django.http import JsonResponse
+    from gestao.models import CadastroTerceiro
+    try:
+        terceiro = CadastroTerceiro.objects.get(chave_acesso=tt)
+        data = {
+            "encontrado": True,
+            "nome": terceiro.nome_terceiro,
+            "cpf": terceiro.cpf,
+            "email": terceiro.email,
+            "perfil": terceiro.cargo_funcao,
+            "rg": "",
+        }
+    except CadastroTerceiro.DoesNotExist:
+        data = {"encontrado": False}
+    return JsonResponse(data)

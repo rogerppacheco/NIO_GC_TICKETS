@@ -193,4 +193,5 @@ urlpatterns = [
     path("mascaras/nova/", views.mascara_form, name="mascara_nova"),
     path("mascaras/<int:pk>/", views.mascara_form, name="mascara_editar"),
     path("guia-solucoes/", guia_views.guia_solucoes_view, name="guia_solucoes"),
+    path("api/sym-supply/<str:tt>/", views.api_buscar_terceiro, name="api_buscar_terceiro"),
 ]
