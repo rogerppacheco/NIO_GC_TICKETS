@@ -539,3 +539,20 @@ class VerticalEdicaoTests(TestCase):
         self.assertIn("fachada", item.arquivo_fachada.name)
         self.assertEqual(item.total_hps, 32)
         self.assertEqual(list(item.blocos.values_list("nome_bloco", flat=True)), ["Bloco Unico"])
+
+    def test_renomear_bloco_mantem_obra_smartriser(self):
+        from tickets.vertical_services import gravar_blocos, parse_blocos
+
+        gravar_blocos(self.item, [{"nome": "Bloco Unico", "andares": 4, "aptos": 8, "total": 32}])
+        self.item.blocos.update(vtop_obra_id="9416")
+        gravar_blocos(
+            self.item,
+            parse_blocos('[{"nome":"BLOCO A","andares":5,"aptos":6,"total":30,"vtop_obra_id":"9416"},'
+                         '{"nome":"BLOCO B","andares":2,"aptos":2,"total":4,"vtop_obra_id":"123"}]'),
+        )
+        a = self.item.blocos.get(nome_bloco="BLOCO A")
+        b = self.item.blocos.get(nome_bloco="BLOCO B")
+        self.assertEqual((a.andares, a.unidades_por_andar, a.total_hps_bloco, a.vtop_obra_id), (5, 6, 30, "9416"))
+        self.assertEqual(b.vtop_obra_id, "")
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.total_hps, 34)

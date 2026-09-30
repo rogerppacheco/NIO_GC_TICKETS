@@ -77,24 +77,12 @@
     if (name === "config" && canConfig) carregarConfig();
   }
 
-  function atualizarTabelaBlocos() {
-    var tbody = document.getElementById("lista-blocos");
-    tbody.innerHTML = "";
+  function atualizarTotaisBlocos() {
     var total = 0;
     blocos.forEach(function (b, i) {
       total += b.total;
-      tbody.innerHTML +=
-        "<tr><td>" +
-        esc(b.nome) +
-        "</td><td>" +
-        b.andares +
-        "</td><td>" +
-        b.aptos +
-        "</td><td>" +
-        b.total +
-        '</td><td><button type="button" class="btn btn-secondary" data-rm="' +
-        i +
-        '">Remover</button></td></tr>';
+      var cel = document.querySelector('#lista-blocos [data-total-bloco="' + i + '"]');
+      if (cel) cel.textContent = b.total;
     });
     var prevenda = Math.ceil(total * 0.1);
     document.getElementById("total-hps-geral").textContent = total;
@@ -102,12 +90,44 @@
     document.getElementById("input_total_hps").value = total;
     document.getElementById("input_prevenda").value = prevenda;
     document.getElementById("input_blocos_json").value = JSON.stringify(blocos);
+  }
+
+  function atualizarTabelaBlocos() {
+    var tbody = document.getElementById("lista-blocos");
+    tbody.innerHTML = blocos
+      .map(function (b, i) {
+        return (
+          '<tr><td><input type="text" class="inp" data-bloco="' + i + '" data-campo="nome" value="' +
+          esc(b.nome) +
+          '" aria-label="Nome do bloco"></td>' +
+          '<td><input type="number" min="1" class="inp" data-bloco="' + i + '" data-campo="andares" value="' +
+          b.andares +
+          '" aria-label="Andares"></td>' +
+          '<td><input type="number" min="0" class="inp" data-bloco="' + i + '" data-campo="aptos" value="' +
+          b.aptos +
+          '" aria-label="Aptos por andar"></td>' +
+          '<td data-total-bloco="' + i + '">' + b.total + "</td>" +
+          '<td><button type="button" class="btn btn-secondary" data-rm="' + i + '">Remover</button></td></tr>'
+        );
+      })
+      .join("");
+    tbody.querySelectorAll("[data-bloco]").forEach(function (inp) {
+      inp.addEventListener("input", function () {
+        var b = blocos[Number(inp.getAttribute("data-bloco"))];
+        var campo = inp.getAttribute("data-campo");
+        if (campo === "nome") b.nome = inp.value.trim();
+        else b[campo] = parseInt(inp.value, 10) || 0;
+        b.total = b.andares * b.aptos;
+        atualizarTotaisBlocos();
+      });
+    });
     tbody.querySelectorAll("[data-rm]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         blocos.splice(Number(btn.getAttribute("data-rm")), 1);
         atualizarTabelaBlocos();
       });
     });
+    atualizarTotaisBlocos();
   }
 
   function addBloco() {
@@ -735,6 +755,11 @@
     }
     if (blocos.length === 0) {
       alert("É obrigatório incluir pelo menos uma Estrutura de blocos antes de enviar.");
+      return;
+    }
+    var blocoInvalido = blocos.filter(function (b) { return !b.nome || b.andares <= 0; })[0];
+    if (blocoInvalido) {
+      alert("Cada bloco precisa de nome e pelo menos 1 andar.");
       return;
     }
     if (!form.checkValidity()) {

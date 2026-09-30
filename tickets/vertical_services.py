@@ -185,20 +185,22 @@ def parse_blocos(bruto: Any) -> list[dict[str, Any]]:
                 "andares": andares,
                 "aptos": aptos,
                 "total": total if total > 0 else andares * aptos,
+                "vtop_obra_id": _texto(item.get("vtop_obra_id"), 32),
             }
         )
     return saida
 
 
 def gravar_blocos(solicitacao: SolicitacaoVertical, blocos: list[dict[str, Any]]) -> None:
-    vinculos_vtop = {
-        b.nome_bloco.strip().upper(): b
-        for b in solicitacao.blocos.all()
-        if (b.vtop_obra_id or "").strip()
-    }
+    com_obra = [b for b in solicitacao.blocos.all() if (b.vtop_obra_id or "").strip()]
+    por_nome = {b.nome_bloco.strip().upper(): b for b in com_obra}
+    por_obra = {b.vtop_obra_id.strip(): b for b in com_obra}
     solicitacao.blocos.all().delete()
     for bloco in blocos:
-        anterior = vinculos_vtop.get(bloco["nome"].strip().upper())
+        # Bloco renomeado na tela mantém a obra SmartRiser (só aceita obra que já era desta solicitação).
+        anterior = por_nome.get(bloco["nome"].strip().upper()) or por_obra.get(
+            (bloco.get("vtop_obra_id") or "").strip()
+        )
         BlocoVertical.objects.create(
             solicitacao=solicitacao,
             nome_bloco=bloco["nome"],
