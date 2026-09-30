@@ -116,10 +116,11 @@
           <label>CEP *
             <input type="text" name="cep" id="inp_cep" class="inp" required maxlength="9">
           </label>
-          <label>Cidade/UF
-            <input type="text" id="cidade_uf" class="inp" readonly>
-            <input type="hidden" name="cidade" id="cidade">
-            <input type="hidden" name="uf" id="uf">
+          <label>Cidade
+            <input type="text" name="cidade" id="cidade" class="inp">
+          </label>
+          <label>UF
+            <input type="text" name="uf" id="uf" class="inp" maxlength="2" style="text-transform:uppercase">
           </label>
           <label>Logradouro
             <input type="text" name="logradouro" id="logradouro" class="inp">

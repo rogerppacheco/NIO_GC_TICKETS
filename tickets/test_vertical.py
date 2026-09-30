@@ -479,3 +479,63 @@ class VerticalSmartRiserTests(TestCase):
         self.assertEqual(kwargs["payload"]["complemento"], "BLOCO 01")
         self.assertEqual(kwargs["payload"]["codigo_sap"], "1069102")
         self.assertEqual(kwargs["payload"]["vtop_senha"], "s")
+
+@override_settings(STORAGES=STORAGES_TESTE)
+class VerticalEdicaoTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.spec = User.objects.create_user("edit-spec", password="senha-ok-1234", first_name="Spec")
+        PerfilStaff.objects.create(user=self.spec, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self.item = SolicitacaoVertical.objects.create(
+            nome_condominio="Antigo",
+            nome_sindico="Ana",
+            contato_sindico="31977776666",
+            cep="30140071",
+            numero="50",
+            cidade="BH",
+            uf="MG",
+            criado_por=self.spec,
+        )
+
+    def test_patch_multipart_salva_todos_os_campos(self):
+        from django.test.client import BOUNDARY, MULTIPART_CONTENT, encode_multipart
+
+        dados = {
+            "nome_condominio": "Jardim Monte Almo",
+            "nome_sindico": "Lidiane Elisa da Cruz",
+            "contato": "35988647235",
+            "cep": "37704-021",
+            "cidade": "Poços de Caldas",
+            "uf": "mg",
+            "logradouro": "Rua Sidney Gandini",
+            "numero": "234",
+            "bairro": "Jardim Monte Almo",
+            "latitude": "-21.78",
+            "longitude": "-46.54",
+            "infraestrutura": "AEREA",
+            "possui_shaft": "on",
+            "observacao_form": "Portaria 24h",
+            "dados_blocos_json": '[{"nome":"Bloco Unico","andares":4,"aptos":8,"total":32}]',
+            "arquivo_fachada": _arquivo("fachada.jpg", b"img"),
+        }
+        self.client.force_login(self.spec)
+        r = self.client.generic(
+            "PATCH",
+            reverse("vertical_api_solicitacao", args=[self.item.id]),
+            encode_multipart(BOUNDARY, dados),
+            content_type=MULTIPART_CONTENT,
+        )
+        self.assertEqual(r.status_code, 200)
+        item = SolicitacaoVertical.objects.get(pk=self.item.pk)
+        self.assertEqual(item.nome_condominio, "Jardim Monte Almo")
+        self.assertEqual(item.nome_sindico, "Lidiane Elisa da Cruz")
+        self.assertEqual(item.contato_sindico, "35988647235")
+        self.assertEqual((item.cidade, item.uf), ("Poços de Caldas", "MG"))
+        self.assertEqual((item.logradouro, item.numero, item.bairro), ("Rua Sidney Gandini", "234", "Jardim Monte Almo"))
+        self.assertEqual((item.latitude, item.longitude), ("-21.78", "-46.54"))
+        self.assertEqual(item.infraestrutura_tipo, "AEREA")
+        self.assertTrue(item.possui_shaft_dg)
+        self.assertEqual(item.observacao, "Portaria 24h")
+        self.assertIn("fachada", item.arquivo_fachada.name)
+        self.assertEqual(item.total_hps, 32)
+        self.assertEqual(list(item.blocos.values_list("nome_bloco", flat=True)), ["Bloco Unico"])

@@ -279,7 +279,6 @@
       document.getElementById("bairro").value = d.bairro || "";
       document.getElementById("cidade").value = d.cidade || "";
       document.getElementById("uf").value = d.uf || "";
-      document.getElementById("cidade_uf").value = (d.cidade || "") + (d.uf ? "/" + d.uf : "");
     });
   }
 
@@ -372,7 +371,6 @@
       document.getElementById("bairro").value = d.bairro || "";
       document.getElementById("cidade").value = d.cidade || "";
       document.getElementById("uf").value = d.uf || "";
-      document.getElementById("cidade_uf").value = (d.cidade || "") + (d.uf ? "/" + d.uf : "");
       document.getElementById("inp_lat").value = d.latitude || "";
       document.getElementById("inp_long").value = d.longitude || "";
       document.getElementById("inp_infra").value = d.infraestrutura || "SUBTERRANEA";
