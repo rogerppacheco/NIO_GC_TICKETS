@@ -1181,6 +1181,10 @@ class BlocoVertical(models.Model):
     andares = models.IntegerField()
     unidades_por_andar = models.IntegerField()
     total_hps_bloco = models.IntegerField()
+    # Vínculo 1:1 com obra SmartRiser — evita recriar obra com o mesmo complemento
+    vtop_obra_id = models.CharField(max_length=32, blank=True, default="")
+    vtop_etapa = models.PositiveSmallIntegerField(null=True, blank=True)
+    vtop_sincronizado_em = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["nome_bloco"]

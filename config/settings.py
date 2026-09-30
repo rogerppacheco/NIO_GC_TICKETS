@@ -158,6 +158,42 @@ else:
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+CACHES = {
+    "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+    # Estado da automação SmartRiser compartilhado entre workers do gunicorn
+    "vtop": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "vtop_cache",
+    },
+}
+
+# --- SmartRiser / V.top (Projeto Vertical) ---
+# Sessão OAuth V.tal persistida (NÃO apagar entre testes — evita relogar o IdP corporativo).
+VTOP_STORAGE_STATE = os.environ.get(
+    "VTOP_STORAGE_STATE", str(BASE_DIR / ".playwright_vtop_state.json")
+)
+# Railway (disco efêmero): JSON do storage_state em base64 gerado no PC.
+VTOP_STORAGE_STATE_B64 = os.environ.get("VTOP_STORAGE_STATE_B64", "").strip()
+# Local: False para ver o browser. Produção: True (login via QR Code exibido na tela).
+VTOP_HEADLESS = os.environ.get("VTOP_HEADLESS", "False").lower() in {"1", "true", "yes"}
+# Emergência: True bloqueia QUALQUER criação de obra (só reabre obra existente).
+VTOP_BLOQUEAR_CRIAR_OBRA = os.environ.get("VTOP_BLOQUEAR_CRIAR_OBRA", "False").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+VTOP_PERMITIR_CRIAR_OBRA = os.environ.get("VTOP_PERMITIR_CRIAR_OBRA", "True").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+# False: falha de anexo NÃO aborta o fluxo (salva/valida mesmo assim).
+VTOP_ANEXO_OBRIGATORIO = os.environ.get("VTOP_ANEXO_OBRIGATORIO", "False").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "fila"
 LOGOUT_REDIRECT_URL = "login"

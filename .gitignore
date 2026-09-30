@@ -8,5 +8,9 @@ staticfiles/
 *.log
 .DS_Store
 
+# Sessão V.tal (SmartRiser) e diagnósticos da automação
+.playwright_vtop_state.json
+tmp_vtop_*.json
+
 # Binários espelhados do Trade Hub (ficam locais / R2; não vão para o git)
 tradehub/materiais/

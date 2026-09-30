@@ -31,6 +31,7 @@ from tickets.vertical_services import (
     _int,
     _texto,
 )
+from tickets.vertical_vtop_views import pode_usar_smartriser
 from tickets.views import _portal_sessao
 
 
@@ -71,6 +72,7 @@ def vertical_portal(request: HttpRequest) -> HttpResponse:
             {
                 "visao_equipe": True,
                 "can_config": pode_gestao_vertical(request.user),
+                "can_smartriser": pode_usar_smartriser(request.user),
                 "parceiro": None,
                 "contato": None,
                 "acionado_por_nome": nome_usuario(request.user),
@@ -85,6 +87,7 @@ def vertical_portal(request: HttpRequest) -> HttpResponse:
         {
             "visao_equipe": False,
             "can_config": False,
+            "can_smartriser": False,
             "parceiro": parceiro,
             "contato": contato,
             "acionado_por_nome": contato.nome,

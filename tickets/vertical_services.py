@@ -104,6 +104,7 @@ def serializar_bloco(bloco: BlocoVertical) -> dict[str, Any]:
         "andares": bloco.andares,
         "aptos": bloco.unidades_por_andar,
         "total": bloco.total_hps_bloco,
+        "vtop_obra_id": bloco.vtop_obra_id or "",
     }
 
 
@@ -190,14 +191,23 @@ def parse_blocos(bruto: Any) -> list[dict[str, Any]]:
 
 
 def gravar_blocos(solicitacao: SolicitacaoVertical, blocos: list[dict[str, Any]]) -> None:
+    vinculos_vtop = {
+        b.nome_bloco.strip().upper(): b
+        for b in solicitacao.blocos.all()
+        if (b.vtop_obra_id or "").strip()
+    }
     solicitacao.blocos.all().delete()
     for bloco in blocos:
+        anterior = vinculos_vtop.get(bloco["nome"].strip().upper())
         BlocoVertical.objects.create(
             solicitacao=solicitacao,
             nome_bloco=bloco["nome"],
             andares=bloco["andares"],
             unidades_por_andar=bloco["aptos"],
             total_hps_bloco=bloco["total"],
+            vtop_obra_id=anterior.vtop_obra_id if anterior else "",
+            vtop_etapa=anterior.vtop_etapa if anterior else None,
+            vtop_sincronizado_em=anterior.vtop_sincronizado_em if anterior else None,
         )
     total = sum(b["total"] for b in blocos)
     solicitacao.total_hps = total

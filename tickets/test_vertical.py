@@ -344,3 +344,138 @@ class VerticalServicesTests(TestCase):
         self.assertEqual(nome_acionado(item), "Contato da Sessao")
         item.contato = None
         self.assertEqual(nome_acionado(item), "Usuario")
+
+
+@override_settings(STORAGES=STORAGES_TESTE)
+class VerticalSmartRiserTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.gestor = User.objects.create_user("vtop-gestor", password="senha-ok-1234", first_name="Gestor")
+        PerfilStaff.objects.create(user=self.gestor, papel=PerfilStaff.Papel.GESTOR)
+        self.gerencia = User.objects.create_user("vtop-ger", password="senha-ok-1234", first_name="Ger")
+        PerfilStaff.objects.create(user=self.gerencia, papel=PerfilStaff.Papel.GERENCIA)
+        self.spec = User.objects.create_user("vtop-spec", password="senha-ok-1234", first_name="Spec")
+        PerfilStaff.objects.create(user=self.spec, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self.spec_outro = User.objects.create_user("vtop-spec2", password="senha-ok-1234", first_name="Outro")
+        PerfilStaff.objects.create(user=self.spec_outro, papel=PerfilStaff.Papel.ESPECIALISTA)
+        self.pdv = Parceiro.objects.create(codigo_pdv="1069102", nome="PDV SAP", especialista=self.spec)
+        self.pdv_user = User.objects.create_user("1069102", password="senha-pdv-ok1", first_name="Pdv")
+        self.pdv.usuario = self.pdv_user
+        self.pdv.save(update_fields=["usuario"])
+        self.contato = ContatoParceiro.objects.create(parceiro=self.pdv, nome="Jaqueline")
+        self.item = SolicitacaoVertical.objects.create(
+            nome_condominio="Jardim Monte Almo",
+            nome_sindico="Lidiane",
+            contato_sindico="(35) 98864-7235",
+            cep="37704-021",
+            logradouro="Rua Sidney Gandini",
+            numero="234",
+            bairro="Jardim Monte Almo",
+            cidade="Poços de Caldas",
+            uf="mg",
+            criado_por=self.pdv_user,
+            contato=self.contato,
+            parceiro=self.pdv,
+        )
+
+    def _gravar(self, blocos):
+        from tickets.vertical_services import gravar_blocos
+
+        gravar_blocos(self.item, blocos)
+
+    def _iniciar(self, corpo: str):
+        return self.client.post(
+            reverse("vertical_vtop_iniciar", args=[self.item.id]),
+            data=corpo,
+            content_type="application/json",
+        )
+
+    def test_botao_para_admin_gerencia_especialista(self):
+        for user in (self.gestor, self.gerencia, self.spec):
+            self.client.force_login(user)
+            r = self.client.get(reverse("vertical_portal"))
+            self.assertContains(r, "Preencher SmartRiser")
+
+    def test_botao_oculto_para_pdv(self):
+        self.client.force_login(self.pdv_user)
+        session = self.client.session
+        session["contato_id"] = self.contato.id
+        session.save()
+        r = self.client.get(reverse("vertical_portal"))
+        self.assertEqual(r.status_code, 200)
+        self.assertNotContains(r, "Preencher SmartRiser")
+
+    def test_api_nega_pdv(self):
+        self.client.force_login(self.pdv_user)
+        self.assertEqual(self._iniciar("{}").status_code, 403)
+        r = self.client.get(reverse("vertical_vtop_status", args=[self.item.id]))
+        self.assertEqual(r.status_code, 403)
+
+    def test_especialista_fora_da_carteira_nao_acha(self):
+        self.client.force_login(self.spec_outro)
+        self.assertEqual(self._iniciar('{"bloco": "BLOCO 01"}').status_code, 404)
+
+    def test_regravar_blocos_preserva_obra_vtop(self):
+        self._gravar([{"nome": "BLOCO 01", "andares": 4, "aptos": 4, "total": 16}])
+        self.item.blocos.update(vtop_obra_id="9416", vtop_etapa=2)
+        self._gravar(
+            [
+                {"nome": "bloco 01", "andares": 5, "aptos": 4, "total": 20},
+                {"nome": "BLOCO 02", "andares": 4, "aptos": 4, "total": 16},
+            ]
+        )
+        b1 = self.item.blocos.get(nome_bloco="bloco 01")
+        b2 = self.item.blocos.get(nome_bloco="BLOCO 02")
+        self.assertEqual((b1.vtop_obra_id, b1.vtop_etapa), ("9416", 2))
+        self.assertEqual(b2.vtop_obra_id, "")
+
+    def test_payload_por_bloco_com_sap_do_pdv(self):
+        from tickets.vertical_vtop_service import montar_payload_vertical, payload_para_bloco
+
+        self._gravar([{"nome": "BLOCO 05", "andares": 4, "aptos": 4, "total": 16}])
+        self.item.blocos.update(vtop_obra_id="777")
+        base = montar_payload_vertical(SolicitacaoVertical.objects.get(pk=self.item.pk))
+        self.assertEqual(base["codigo_sap"], "1069102")
+        self.assertEqual(base["contato"], "35988647235")
+        self.assertEqual(base["uf"], "MG")
+        self.assertEqual(base["cdoi_id"], self.item.id)
+        obra = payload_para_bloco(base, "BLOCO 5")
+        self.assertEqual(obra["complemento"], "BLOCO 05")
+        self.assertEqual(obra["total_hps"], 16)
+        self.assertEqual(obra["pre_venda"], 3)
+        self.assertEqual(obra["obra_id"], "777")
+
+    def test_sap_cai_para_pdv_do_contato(self):
+        from tickets.vertical_vtop_service import codigo_sap_do_acionamento
+
+        self.item.parceiro = None
+        self.assertEqual(codigo_sap_do_acionamento(self.item), "1069102")
+
+    def test_iniciar_sem_pdv_bloqueia(self):
+        self._gravar([{"nome": "BLOCO 01", "andares": 2, "aptos": 4, "total": 8}])
+        SolicitacaoVertical.objects.filter(pk=self.item.pk).update(parceiro=None, contato=None, criado_por=self.gestor)
+        self.client.force_login(self.gestor)
+        r = self._iniciar('{"bloco": "BLOCO 01"}')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["faltando"], ["codigo_sap"])
+
+    def test_iniciar_bloco_inexistente(self):
+        self.client.force_login(self.gestor)
+        self.assertEqual(self._iniciar('{"bloco": "BLOCO 99"}').status_code, 400)
+
+    @patch("tickets.vertical_vtop_views.get_vtop_service")
+    def test_iniciar_repassa_payload_sem_expor_senha(self, get_svc):
+        self._gravar([{"nome": "BLOCO 01", "andares": 2, "aptos": 4, "total": 8}])
+        get_svc.return_value.iniciar.return_value = {
+            "ok": True,
+            "state": {"status": "starting", "extras": {"vtop_senha": "x"}},
+        }
+        self.client.force_login(self.spec)
+        r = self._iniciar('{"bloco": "BLOCO 01", "vtop_usuario": "u", "vtop_senha": "s", "codigo_sap": "1"}')
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn("vtop_senha", r.json()["state"]["extras"])
+        kwargs = get_svc.return_value.iniciar.call_args.kwargs
+        self.assertEqual(kwargs["cdoi_id"], self.item.id)
+        self.assertEqual(kwargs["payload"]["complemento"], "BLOCO 01")
+        self.assertEqual(kwargs["payload"]["codigo_sap"], "1069102")
+        self.assertEqual(kwargs["payload"]["vtop_senha"], "s")

@@ -2358,6 +2358,22 @@ button.rota-ag-dot.is-empty { background: #eef1f4; }
 }
 .vertical-modal-card h2 { margin: 0 0 0.8rem; font-size: 1.05rem; }
 .vertical-modal-card label { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.7rem; font-weight: 600; }
+.vertical-form-acoes { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; justify-content: flex-end; }
+.vtop-badge { max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vtop-badge.vtop-st-idle { background: #eef1f4; color: #4b5563; }
+.vtop-badge.vtop-st-ativo { background: #cce5ff; color: #004085; }
+.vtop-badge.vtop-st-aguardando { background: #fff3cd; color: #856404; }
+.vtop-badge.vtop-st-done { background: #d4edda; color: #155724; }
+.vtop-badge.vtop-st-error { background: #f8d7da; color: #842029; }
+.vtop-badge.vtop-st-paused { background: #d1ecf1; color: #0c5460; }
+.vtop-alerta { padding: 0.5rem 0.7rem; border-radius: 8px; font-size: 0.85rem; margin-bottom: 0.7rem; background: #fff3cd; color: #856404; }
+.vtop-alerta.is-info { background: #d1ecf1; color: #0c5460; }
+.vtop-alerta.is-ok { background: #d4edda; color: #155724; }
+.vtop-alerta.is-erro { background: #f8d7da; color: #842029; }
+.vtop-qr-box { display: flex; align-items: center; justify-content: center; width: 280px; height: 280px; margin: 0 auto 0.8rem; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; }
+.vtop-qr-box img { width: 280px; height: 280px; }
+.btn-pulse { animation: vtop-pulse 1.2s ease-in-out infinite; }
+@keyframes vtop-pulse { 50% { opacity: 0.55; } }
 @media (max-width: 900px) {
   .vertical-kpis, .vertical-grid { grid-template-columns: 1fr 1fr; }
 }

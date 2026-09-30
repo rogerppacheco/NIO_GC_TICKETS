@@ -76,7 +76,15 @@
   <section class="panel vertical-panel" data-panel="nova" hidden>
     <div class="panel-h">
       <h2 id="form-titulo">Dados do condomínio</h2>
-      <button type="button" class="btn btn-secondary" id="btn-cancelar-edicao" hidden>Cancelar edição</button>
+      <div class="vertical-form-acoes">
+        {% if can_smartriser %}
+        <span id="vtop-status-badge" class="pill vtop-badge" title="Status da automação SmartRiser" hidden></span>
+        <button type="button" class="btn btn-primary" id="btn-vtop-senha-pronta" title="Depois de digitar login e senha no navegador V.tal" hidden>Já coloquei a senha</button>
+        <button type="button" class="btn btn-secondary" id="btn-vtop-fechar" title="Fecha o navegador sem deslogar (mantém sessão)" hidden>Fechar navegador</button>
+        <button type="button" class="btn btn-primary" id="btn-vtop-smartriser" title="Abre o V.top e preenche o SmartRiser com os dados desta solicitação" hidden>Preencher SmartRiser</button>
+        {% endif %}
+        <button type="button" class="btn btn-secondary" id="btn-cancelar-edicao" hidden>Cancelar edição</button>
+      </div>
     </div>
     <div class="panel-b">
       <form id="form-vertical" novalidate>
@@ -250,6 +258,59 @@
     </div>
   </div>
 </div>
+
+{% if can_smartriser %}
+<div
+  id="vertical-modal-vtop"
+  class="vertical-modal"
+  data-vtop-base-url="{% url 'vertical_vtop_iniciar' 0 %}"
+  data-vtop-fechar-global-url="{% url 'vertical_vtop_fechar_global' %}"
+  hidden
+>
+  <div class="vertical-modal-card">
+    <h2>Login V.tal / SmartRiser</h2>
+    <p class="help">
+      Se a sessão V.tal ainda estiver válida, a automação segue direto.
+      Caso contrário, o QR Code da V.tal aparece na tela para você escanear
+      com o app <strong>V.tal Pass</strong> — o cadastro começa sozinho após a leitura.
+    </p>
+    <div id="vtop-modal-alerta" class="vtop-alerta" role="alert" hidden></div>
+    <label>Bloco / complemento
+      <select id="vtop_bloco" class="inp">
+        <option value="">— só testar login (sessão) —</option>
+      </select>
+      <span class="help">Com bloco: inventário → reusar ou criar obra → Cadastro. Vazio: só valida sessão.</span>
+    </label>
+    <details id="vtop-login-senha">
+      <summary class="help">Entrar com usuário e senha + OTP (alternativa ao QR Code)</summary>
+      <p class="help">Usados só nesta execução (não são gravados).</p>
+      <label>Usuário V.tal
+        <input type="text" id="vtop_usuario" class="inp" autocomplete="off">
+      </label>
+      <label>Senha + OTP
+        <input type="password" id="vtop_senha" class="inp" autocomplete="new-password">
+      </label>
+    </details>
+    <div style="display:flex;gap:0.5rem;margin-top:0.8rem">
+      <button type="button" class="btn btn-primary" id="btn-vtop-modal-iniciar">Iniciar SmartRiser</button>
+      <button type="button" class="btn btn-secondary" id="btn-vtop-modal-fechar">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div id="vertical-modal-vtop-qr" class="vertical-modal" hidden>
+  <div class="vertical-modal-card" style="text-align:center">
+    <h2>Login V.tal FAST PASS</h2>
+    <p class="help">Abra o app <strong>V.tal Pass</strong> no celular e escaneie o QR Code abaixo.</p>
+    <div class="vtop-qr-box">
+      <img id="vtop-qr-img" alt="QR Code de login V.tal" hidden>
+      <span id="vtop-qr-carregando" class="help">Carregando QR Code…</span>
+    </div>
+    <p id="vtop-qr-mensagem" class="help"></p>
+    <button type="button" class="btn btn-secondary" id="btn-vtop-qr-cancelar">Cancelar login</button>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
