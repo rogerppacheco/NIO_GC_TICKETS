@@ -1809,6 +1809,55 @@ class MascaraWhatsAppTests(TestCase):
             mock_send.assert_called_once()
             jid, texto = mock_send.call_args.args
             self.assertEqual(jid, "5521999575120")
+            self.assertIsNone(mock_send.call_args.kwargs["instance"])
+
+    def test_notificar_mascaras_sai_do_numero_do_especialista_conectado(self):
+        from unittest.mock import patch
+        from gestao.messaging.syncwa import SyncWAResult
+        from gestao.models import InstanciaWhatsApp
+        from tickets.services import notificar_mascaras_por_whatsapp
+
+        InstanciaWhatsApp.objects.create(user=self.spec, nome=f"nio_u{self.spec.pk}")
+        ticket = Ticket.objects.create(
+            parceiro=self.pdv_spec,
+            tipo=TipoDemanda.SEM_SLOT,
+            pedido="PED-CONN",
+            uf="RJ",
+        )
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), \
+             patch(
+                 "gestao.messaging.evolution_connection.EvolutionConnectionService.get_status",
+                 return_value={"state": "open", "connected": True},
+             ), \
+             patch(
+                 "gestao.messaging.syncwa.enviar_texto", return_value=SyncWAResult(ok=True)
+             ) as mock_send:
+            notificar_mascaras_por_whatsapp(ticket)
+        self.assertEqual(mock_send.call_args.args[0], "5521999575120")
+        self.assertEqual(mock_send.call_args.kwargs["instance"], f"nio_u{self.spec.pk}")
+
+    def test_mascara_para_grupo_escolhido_nao_usa_instancia_do_especialista(self):
+        from unittest.mock import patch
+        from gestao.messaging.syncwa import SyncWAResult
+        from gestao.models import InstanciaWhatsApp
+        from tickets.services import enviar_mascara_whatsapp
+
+        InstanciaWhatsApp.objects.create(user=self.spec, nome=f"nio_u{self.spec.pk}")
+        ticket = Ticket.objects.create(
+            parceiro=self.pdv_spec, tipo=TipoDemanda.SEM_SLOT, pedido="PED-G", uf="RJ"
+        )
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), \
+             patch(
+                 "gestao.messaging.evolution_connection.EvolutionConnectionService.get_status",
+                 return_value={"state": "open", "connected": True},
+             ), \
+             patch(
+                 "gestao.messaging.syncwa.enviar_texto", return_value=SyncWAResult(ok=True)
+             ) as mock_send:
+            enviar_mascara_whatsapp(
+                ticket, self.mascara_slot, destino_jid="120363000000000@g.us", destino_nome="Grupo"
+            )
+        self.assertIsNone(mock_send.call_args.kwargs["instance"])
 
     def test_view_enviar_mascara_wpp(self):
         from unittest.mock import patch
