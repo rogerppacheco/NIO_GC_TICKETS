@@ -2428,10 +2428,45 @@ class DestinatarioEnvioTests(TestCase):
         self.assertTrue(logs.exists())
         self.assertTrue(all(l.status == EnvioWhatsApp.Status.ENVIADO for l in logs))
         self.assertTrue(any(l.syncwa_message_id == "ml-9" for l in logs))
-        self.assertTrue(any("Bom dia" in l.mensagem for l in logs))
+        self.assertTrue(
+            any(
+                s in l.mensagem
+                for l in logs
+                for s in ("Bom dia", "Boa tarde", "Boa noite")
+            )
+        )
+
+    def test_enviar_capilaridade_sem_saudacao(self):
+        from unittest.mock import MagicMock, patch
+
+        from gestao.models import Destinatario, EnvioWhatsApp
+
+        Destinatario.objects.create(
+            parceiro=self.pdv,
+            nome="Contato",
+            jid="5531999999999",
+            envio_capilaridade=True,
+        )
+        fake = MagicMock()
+        fake.status_code = 200
+        fake.json.return_value = {"key": {"id": "ml-10"}}
+        with patch("gestao.messaging.syncwa.requests.post", return_value=fake):
+            r = self.client.post(
+                reverse("gestao_capilaridade"),
+                {
+                    "action": "enviar_pdv",
+                    "parceiro": self.pdv.id,
+                    "escopo": "outros",
+                    "saudacao": "0",
+                },
+            )
+        self.assertEqual(r.status_code, 302)
+        logs = EnvioWhatsApp.objects.filter(tipo=EnvioWhatsApp.Tipo.CAPILARIDADE)
+        self.assertTrue(logs.exists())
+        self.assertFalse(any("time " + self.pdv.nome in l.mensagem for l in logs))
 
     def test_motivacional_capilaridade(self):
-        from datetime import date
+        from datetime import date, datetime
         from gestao.motivacional import (
             FRASES_MOTIVACIONAIS_VENDAS,
             montar_mensagem_motivacional_pdv,
@@ -2446,10 +2481,15 @@ class DestinatarioEnvioTests(TestCase):
         self.assertNotEqual(f1, f2)
         self.assertIn(f1, FRASES_MOTIVACIONAIS_VENDAS)
 
-        msg = montar_mensagem_motivacional_pdv(self.pdv, d1)
-        self.assertIn("Bom dia, time", msg)
+        manha = datetime(2026, 9, 4, 8, 0)
+        msg = montar_mensagem_motivacional_pdv(self.pdv, agora=manha)
+        self.assertIn("☀️ *Bom dia, time", msg)
         self.assertIn(self.pdv.nome, msg)
         self.assertIn(f1, msg)
+        tarde = montar_mensagem_motivacional_pdv(self.pdv, d1, datetime(2026, 9, 4, 14, 0))
+        self.assertIn("🌤️ *Boa tarde, time", tarde)
+        noite = montar_mensagem_motivacional_pdv(self.pdv, d1, datetime(2026, 9, 4, 20, 0))
+        self.assertIn("🌙 *Boa noite, time", noite)
 
     def test_destinos_especialista_usa_whatsapp_do_perfil(self):
         from gestao.messaging.envio import destinos_para_envio

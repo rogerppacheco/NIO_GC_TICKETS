@@ -479,6 +479,10 @@ def importar_sysmap_view(request: HttpRequest) -> HttpResponse:
     )
 
 
+def _com_saudacao(request: HttpRequest) -> bool:
+    return request.POST.get("saudacao", "1") != "0"
+
+
 @login_required
 def capilaridade_view(request: HttpRequest) -> HttpResponse:
     ano, mes = periodo_ativo()
@@ -502,7 +506,12 @@ def capilaridade_view(request: HttpRequest) -> HttpResponse:
                     _flash_resumo(
                         request,
                         "Capilaridade",
-                        enviar_capilaridade_pdv(parceiro, request.user, filtros),
+                        enviar_capilaridade_pdv(
+                            parceiro,
+                            request.user,
+                            filtros,
+                            enviar_motivacional=_com_saudacao(request),
+                        ),
                     )
                 except Exception as exc:
                     messages.error(request, f"Falha ao enviar capilaridade: {exc}")
@@ -512,7 +521,10 @@ def capilaridade_view(request: HttpRequest) -> HttpResponse:
                         request,
                         "Capilaridade (todos)",
                         enviar_capilaridade_todos(
-                            parceiros, request.user, filtros=filtros
+                            parceiros,
+                            request.user,
+                            filtros=filtros,
+                            enviar_motivacional=_com_saudacao(request),
                         ),
                     )
                 except Exception as exc:
@@ -2521,13 +2533,24 @@ def envios_view(request: HttpRequest) -> HttpResponse:
             _flash_resumo(request, "Teste WhatsApp", enviar_teste(request.user))
             return _voltar(request, "gestao_envios")
         if action == "capilaridade":
+            saudacao = _com_saudacao(request)
             if parceiro:
-                _flash_resumo(request, "Capilaridade", enviar_capilaridade_pdv(parceiro, request.user))
+                _flash_resumo(
+                    request,
+                    "Capilaridade",
+                    enviar_capilaridade_pdv(
+                        parceiro, request.user, enviar_motivacional=saudacao
+                    ),
+                )
             else:
                 _flash_resumo(
                     request,
                     "Capilaridade (todos)",
-                    enviar_capilaridade_todos(list(_parceiros(request)), request.user),
+                    enviar_capilaridade_todos(
+                        list(_parceiros(request)),
+                        request.user,
+                        enviar_motivacional=saudacao,
+                    ),
                 )
             return _voltar(request, "gestao_envios")
         if action == "resumo_capilaridade":

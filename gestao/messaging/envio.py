@@ -538,7 +538,7 @@ def enviar_capilaridade_pdv(
 
     resumo_total = ResumoEnvio()
 
-    # 1. Envia o Bom Dia com frase motivacional de vendas antes do relatório
+    # 1. Envia a saudação do horário com frase motivacional antes do relatório
     if enviar_motivacional:
         msg_motivacional = montar_mensagem_motivacional_pdv(parceiro)
         resumo_mot = _enviar_para_lista(
@@ -612,6 +612,7 @@ def enviar_capilaridade_todos(
     *,
     incluir_resumo: bool = False,
     filtros: dict | None = None,
+    enviar_motivacional: bool = True,
 ) -> ResumoEnvio:
     total = ResumoEnvio()
     if incluir_resumo:
@@ -623,7 +624,9 @@ def enviar_capilaridade_todos(
 
     for p in parceiros:
         try:
-            parte = enviar_capilaridade_pdv(p, user, filtros)
+            parte = enviar_capilaridade_pdv(
+                p, user, filtros, enviar_motivacional=enviar_motivacional
+            )
         except Exception as exc:
             parte = ResumoEnvio(erros=1, detalhes=[f"{p.nome}: {exc}"])
         total.enviados += parte.enviados

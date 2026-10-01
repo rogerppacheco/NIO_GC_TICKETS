@@ -50,6 +50,11 @@
       <button class="btn btn-secondary" type="submit" name="action" value="tarefas">Tarefas</button>
       <button class="btn btn-secondary" type="submit" name="action" value="venda_indevida">Venda indevida</button>
       <button class="btn btn-secondary" type="submit" name="action" value="recompra">Recompra</button>
+      <input type="hidden" name="saudacao" value="0">
+      <label class="help" style="display:flex;align-items:center;gap:0.35rem;cursor:pointer">
+        <input type="checkbox" name="saudacao" value="1" checked>
+        Capilaridade com saudação do dia
+      </label>
     </form>
     <p class="help">OSAB, FPD, Churn e Comissionamento exigem PDV. Tarefas/VI/Recompra sem PDV só enviam o consolidado se o admin não tiver gerência (senão mistura bases).</p>
   </div>
