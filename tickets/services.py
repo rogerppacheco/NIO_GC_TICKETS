@@ -374,8 +374,14 @@ def notificar_demanda_com_anexo(ticket: Ticket, ator=None) -> int:
     )
 
     if destino and syncwa_configurado():
+        from gestao.messaging.instancia import instancia_conectada_do_usuario
+
         jid, nome = destino
-        resp_txt = enviar_texto(jid, resumo)
+        try:
+            instancia_spec = instancia_conectada_do_usuario(spec)
+        except Exception:
+            instancia_spec = None
+        resp_txt = enviar_texto(jid, resumo, instance=instancia_spec)
         if resp_txt.ok:
             enviados += 1
         for anexo in anexos:
@@ -385,7 +391,11 @@ def notificar_demanda_com_anexo(ticket: Ticket, ator=None) -> int:
                 continue
             caption = f"{ticket.protocolo} · {nome_arq}"
             resp_doc = enviar_documento(
-                jid, conteudo=dados, file_name=nome_arq, caption=caption
+                jid,
+                conteudo=dados,
+                file_name=nome_arq,
+                caption=caption,
+                instance=instancia_spec,
             )
             if isinstance(resp_doc, SyncWAResult) and resp_doc.ok:
                 enviados += 1

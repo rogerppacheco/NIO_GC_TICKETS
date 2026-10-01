@@ -159,6 +159,58 @@ class DemandaComAnexoNotificacaoTests(TestCase):
             self.ticket.mensagens.filter(interno=True, corpo__contains="anexo").exists()
         )
 
+    def test_especialista_conectado_recebe_do_proprio_numero(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.syncwa import SyncWAResult
+        from gestao.models import InstanciaWhatsApp
+        from tickets.services import notificar_demanda_com_anexo
+
+        InstanciaWhatsApp.objects.create(user=self.spec, nome=f"nio_u{self.spec.pk}")
+        self._anexo("evidencia.png")
+        fake = SyncWAResult(ok=True)
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), \
+             patch(
+                 "gestao.messaging.evolution_connection.EvolutionConnectionService.get_status",
+                 return_value={"state": "open", "connected": True},
+             ), \
+             patch("gestao.messaging.syncwa.enviar_texto", return_value=fake) as mock_txt, \
+             patch("gestao.messaging.syncwa.enviar_documento", return_value=fake) as mock_doc:
+            notificar_demanda_com_anexo(self.ticket)
+        self.assertEqual(mock_txt.call_args.args[0], "5531999990000")
+        self.assertEqual(mock_txt.call_args.kwargs["instance"], f"nio_u{self.spec.pk}")
+        self.assertEqual(mock_doc.call_args.kwargs["instance"], f"nio_u{self.spec.pk}")
+
+    def test_especialista_desconectado_recebe_do_chip_central(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.syncwa import SyncWAResult
+        from gestao.models import InstanciaWhatsApp
+        from tickets.services import notificar_demanda_com_anexo
+
+        InstanciaWhatsApp.objects.create(user=self.spec, nome=f"nio_u{self.spec.pk}")
+        self._anexo("evidencia.png")
+        fake = SyncWAResult(ok=True)
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), \
+             patch(
+                 "gestao.messaging.evolution_connection.EvolutionConnectionService.get_status",
+                 return_value={"state": "close", "connected": False},
+             ), \
+             patch("gestao.messaging.syncwa.enviar_texto", return_value=fake) as mock_txt, \
+             patch("gestao.messaging.syncwa.enviar_documento", return_value=fake) as mock_doc:
+            notificar_demanda_com_anexo(self.ticket)
+        self.assertIsNone(mock_txt.call_args.kwargs["instance"])
+        self.assertIsNone(mock_doc.call_args.kwargs["instance"])
+
+    def test_instalacao_fisica_aceita_evidencias(self):
+        from tickets.demanda_campos import schema_tipo
+
+        schema = schema_tipo(TipoDemanda.INSTALACAO_FISICA)
+        self.assertIn("evidencias", schema["campos"])
+        for campo in ("nome_cliente", "documento_cliente"):
+            self.assertIn(campo, schema["campos"])
+            self.assertIn(campo, schema["obrigatorios"])
+
     def test_especialista_nao_recebe_quando_ele_mesmo_abre(self):
         from unittest.mock import patch
 

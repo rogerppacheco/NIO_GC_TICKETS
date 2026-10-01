@@ -73,6 +73,19 @@ def gravar_status(user, status: dict) -> None:
     inst.save(update_fields=["estado", "numero", "atualizado_em"])
 
 
+def instancia_conectada_do_usuario(user) -> str | None:
+    """Instância própria do usuário se o WhatsApp dele estiver conectado; senão None."""
+    if user is None or eh_gestor(user):
+        return None
+    try:
+        inst = user.instancia_whatsapp
+    except (ObjectDoesNotExist, AttributeError):
+        return None
+    status = EvolutionConnectionService(instance_name=inst.nome).get_status()
+    gravar_status(user, status)
+    return inst.nome if status.get("connected") else None
+
+
 def instancia_para_envio(user) -> str:
     """Nome da instância Evolution que dispara o envio.
 
