@@ -229,6 +229,44 @@ def _anexar_osab_fila(tickets: list) -> None:
         t.osab_atualizacao = venda.dt_ref if venda else None
 
 
+ABAS_FILA = (
+    {
+        "id": StatusTicket.NOVO,
+        "rotulo": "A tratar",
+        "titulo": "Demandas ainda sem tratamento. Toda demanda nova cai aqui.",
+        "grupo": "trabalho",
+    },
+    {"id": StatusTicket.EM_ANALISE, "rotulo": "Em análise", "titulo": "Em análise", "grupo": "trabalho"},
+    {
+        "id": StatusTicket.AGUARDANDO_PARCEIRO,
+        "rotulo": "Aguardando",
+        "titulo": "Aguardando parceiro",
+        "grupo": "trabalho",
+    },
+    {"id": StatusTicket.ENCAMINHADO, "rotulo": "Encaminhado", "titulo": "Encaminhado", "grupo": "trabalho"},
+    {"id": StatusTicket.RESOLVIDO, "rotulo": "Resolvido", "titulo": "Resolvido", "grupo": "arquivo"},
+    {"id": StatusTicket.FECHADO, "rotulo": "Fechado", "titulo": "Fechado", "grupo": "arquivo"},
+    {"id": StatusTicket.CANCELADO, "rotulo": "Cancelado", "titulo": "Cancelado", "grupo": "arquivo"},
+)
+
+
+def _abas_da_fila(request: HttpRequest, contagens: dict[str, int], ativa: str) -> list[dict]:
+    params = request.GET.copy()
+    params.pop("export", None)
+    abas = []
+    for spec in ABAS_FILA:
+        params["status"] = spec["id"]
+        abas.append(
+            {
+                **spec,
+                "n": contagens.get(spec["id"], 0),
+                "href": "?" + params.urlencode(),
+                "ativa": spec["id"] == ativa,
+            }
+        )
+    return abas
+
+
 @login_required
 def fila(request: HttpRequest) -> HttpResponse:
     especialistas_qs = qs_equipe_da_gerencia(request.user)
@@ -262,8 +300,6 @@ def fila(request: HttpRequest) -> HttpResponse:
                 | Q(parceiro__nome__icontains=q)
                 | Q(descricao__icontains=q)
             )
-        if form.cleaned_data.get("status"):
-            qs = qs.filter(status=form.cleaned_data["status"])
         if form.cleaned_data.get("tipo"):
             qs = qs.filter(tipo=form.cleaned_data["tipo"])
         if form.cleaned_data.get("parceiro"):
@@ -283,13 +319,27 @@ def fila(request: HttpRequest) -> HttpResponse:
                 )
                 qs = qs.filter(pedido__in=pedidos_osab)
 
+    status_pedido = ""
+    if form.is_valid():
+        status_pedido = (form.cleaned_data.get("status") or "").strip()
+    if status_pedido not in StatusTicket.values:
+        status_pedido = StatusTicket.NOVO
+    contagens = {
+        row["status"]: row["n"]
+        for row in qs.order_by().values("status").annotate(n=Count("pk"))
+    }
+    abas = _abas_da_fila(request, contagens, status_pedido)
+    aba_ativa = next(aba for aba in abas if aba["ativa"])
+    outras_com_itens = [aba for aba in abas if not aba["ativa"] and aba["n"]]
+    qs = qs.filter(status=status_pedido)
+
     abertos = qs.exclude(
         status__in=[StatusTicket.RESOLVIDO, StatusTicket.FECHADO, StatusTicket.CANCELADO]
     )
     filtros_ativos = any(
         (request.GET.get(k) or "").strip()
-        for k in ("q", "status", "tipo", "parceiro", "especialista", "situacao_osab")
-    )
+        for k in ("q", "tipo", "parceiro", "especialista", "situacao_osab")
+    ) or (request.GET.get("status") or "").strip() not in ("", StatusTicket.NOVO)
 
     if request.GET.get("export") == "excel":
         import openpyxl
@@ -389,7 +439,11 @@ def fila(request: HttpRequest) -> HttpResponse:
         {
             "form": form,
             "tickets": tickets,
-            "abertos_count": abertos.count(),
+            "abas": abas,
+            "abas_trabalho": [aba for aba in abas if aba["grupo"] == "trabalho"],
+            "abas_arquivo": [aba for aba in abas if aba["grupo"] == "arquivo"],
+            "aba_ativa": aba_ativa,
+            "outras_com_itens": outras_com_itens,
             "mostrar_filtro_especialista": True,
             "filtros_ativos": filtros_ativos,
         },

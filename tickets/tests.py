@@ -1437,6 +1437,34 @@ class FilaOsabTests(TestCase):
         self.assertEqual(len(r.context["tickets"]), 1)
         self.assertEqual(r.context["tickets"][0].pedido, "99999999")
 
+    def test_fila_abre_em_a_tratar_e_separa_os_outros_status(self):
+        self.ticket.status = StatusTicket.EM_ANALISE
+        self.ticket.save(update_fields=["status"])
+        novo = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.RESET_SENHA,
+            pedido="111",
+        )
+        self.client.force_login(self.gestor)
+        with override_settings(**self.storages):
+            r = self.client.get(reverse("fila"))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.context["aba_ativa"]["id"], StatusTicket.NOVO)
+        self.assertEqual([t.protocolo for t in r.context["tickets"]], [novo.protocolo])
+        self.assertContains(r, "A tratar")
+        self.assertContains(r, "Nova demanda", count=1)
+        self.assertNotContains(r, "Todos status")
+        self.assertContains(r, "status=em_analise")
+        self.assertContains(r, "has-items")
+        with override_settings(**self.storages):
+            em_analise = self.client.get(reverse("fila"), {"status": "em_analise"})
+        self.assertEqual(
+            [t.protocolo for t in em_analise.context["tickets"]],
+            [self.ticket.protocolo],
+        )
+        self.assertContains(em_analise, "is-tratar")
+        self.assertContains(em_analise, "has-items")
+
     def test_botao_responder_leva_filtros_no_next(self):
         self.client.force_login(self.gestor)
         with override_settings(**self.storages):

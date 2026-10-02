@@ -3,17 +3,42 @@
 {% block body_class %}page-fila{% endblock %}
 {% block main_class %}wrap wrap-fila{% endblock %}
 {% block content %}
-<div class="fila-head">
-  <div>
-    <h1>Fila de demandas</h1>
-    <p>{{ abertos_count }} abertos</p>
+<form method="get" id="fila-filtros">
+  <input type="hidden" name="status" value="{{ aba_ativa.id }}">
+  <div class="fila-abas-row">
+    <nav class="fila-abas" aria-label="Etapas da fila">
+      {% for aba in abas_trabalho %}
+        <a class="fila-aba{% if aba.id == 'novo' %} is-tratar{% endif %}{% if aba.ativa %} is-on{% endif %}"
+           href="{{ aba.href }}"
+           {% if aba.ativa %}aria-current="page"{% endif %}
+           title="{{ aba.titulo }}">
+          {{ aba.rotulo }}
+          <span class="fila-aba-n{% if aba.n %} has-items{% endif %}">{{ aba.n }}</span>
+        </a>
+      {% endfor %}
+      <span class="fila-abas-sep" aria-hidden="true"></span>
+      {% for aba in abas_arquivo %}
+        <a class="fila-aba is-arquivo{% if aba.ativa %} is-on{% endif %}"
+           href="{{ aba.href }}"
+           {% if aba.ativa %}aria-current="page"{% endif %}
+           title="{{ aba.titulo }}">
+          {{ aba.rotulo }}
+          <span class="fila-aba-n{% if aba.n %} has-items{% endif %}">{{ aba.n }}</span>
+        </a>
+      {% endfor %}
+    </nav>
+    <button type="submit" name="export" value="excel" class="btn btn-secondary fila-excel" title="Baixar os tickets abertos desta aba em Excel">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+      Excel
+    </button>
   </div>
-  <a class="btn btn-primary" href="{% url 'ticket_criar' %}">Nova demanda</a>
-</div>
 
-<form method="get" class="fila-toolbar" id="fila-filtros">
+  <div class="fila-toolbar">
   {{ form.q }}
-  {{ form.status }}
   {{ form.tipo }}
   {% if form.situacao_osab %}
     {{ form.situacao_osab }}
@@ -25,14 +50,7 @@
   {% if filtros_ativos %}
     <a class="btn btn-ghost fila-clear" href="{% url 'fila' %}">Limpar</a>
   {% endif %}
-  <button type="submit" name="export" value="excel" class="btn btn-secondary" title="Baixar tickets abertos em Excel">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-      <polyline points="7 10 12 15 17 10"></polyline>
-      <line x1="12" y1="15" x2="12" y2="3"></line>
-    </svg>
-    Excel
-  </button>
+  </div>
 </form>
 
 <div class="panel fila-board">
@@ -94,7 +112,20 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="10">Nenhuma demanda encontrada.</td></tr>
+        <tr>
+          <td class="fila-empty" colspan="10">
+            Nenhuma demanda em {{ aba_ativa.rotulo }}.
+            {% if outras_com_itens %}
+              <div class="fila-vazio-outras">
+                Com estes filtros há demanda em
+                {% for outra in outras_com_itens %}
+                  {% if not forloop.first %} · {% endif %}
+                  <a href="{{ outra.href }}">{{ outra.rotulo }} ({{ outra.n }})</a>
+                {% endfor %}.
+              </div>
+            {% endif %}
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>

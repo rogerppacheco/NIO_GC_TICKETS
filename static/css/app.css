@@ -271,12 +271,95 @@ body.page-fila .topbar-gestao:not(.ready) #gestao-nav-wrap { display: none; }
   overflow: hidden;
 }
 .page-fila { background: var(--bg); }
-.fila-head {
-  display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
+.fila-abas-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   flex-shrink: 0;
+  min-width: 0;
 }
-.fila-head h1 { margin: 0; font-size: 1.1rem; letter-spacing: -0.03em; }
-.fila-head p { margin: 0.1rem 0 0; color: var(--muted); font-size: 0.8rem; }
+.fila-abas {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+.fila-aba {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+.fila-aba:hover { text-decoration: none; background: #fff; color: var(--ink); }
+.fila-aba.is-on {
+  background: #fff;
+  color: var(--brand);
+  border-color: var(--line);
+}
+.fila-aba.is-tratar.is-on {
+  background: #e7f6f2;
+  border-color: #b7e0d6;
+}
+.fila-aba-n {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.7rem;
+  font-weight: 700;
+  min-width: 1.15rem;
+  padding: 0 0.28rem;
+  border-radius: 999px;
+  background: #eef1f4;
+  color: var(--muted);
+  text-align: center;
+}
+.fila-aba.is-on .fila-aba-n { background: var(--brand); color: #fff; }
+.fila-aba.is-tratar:not(.is-on) .fila-aba-n.has-items {
+  background: var(--accent);
+  color: #fff;
+}
+.fila-abas-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 0.15rem 0.3rem;
+  background: var(--line);
+  flex: 0 0 auto;
+}
+.fila-excel {
+  flex-shrink: 0;
+  padding: 0.32rem 0.55rem;
+  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+#fila-filtros {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  min-width: 0;
+}
+.wrap-fila .table td.fila-empty {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+}
+.fila-vazio-outras { margin-top: 0.35rem; color: var(--muted); font-size: 0.82rem; }
+.fila-vazio-outras a { font-weight: 700; }
+body.page-fila .messages { margin: 0; flex-shrink: 0; }
+body.page-fila .messages li {
+  padding: 0.4rem 0.7rem;
+  margin: 0;
+  font-size: 0.82rem;
+}
 .fila-toolbar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem;
   flex-shrink: 0;
