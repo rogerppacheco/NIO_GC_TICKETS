@@ -45,6 +45,20 @@
           {% if parcial_sub == "consolidado" %}A Carteira lista parceiro e especialista, zerados em ordem alfabética e o total no rodapé.{% endif %}
         </p>
       </details>
+      {% if parcial_dados and pode_enviar %}
+      <div class="resultados-send resultados-send-top">
+        {% if parcial_sub == "gerencia" %}
+        <button class="btn btn-primary" type="submit" form="form-enviar-gerencia" name="action" value="enviar_parcial_gerencia">Enviar imagem</button>
+        {% endif %}
+        {% if parcial_sub == "consolidado" and grupos_ranking %}
+        <button class="btn btn-primary" type="submit" form="form-enviar-consolidado" name="action" value="enviar_parcial_consolidado">Enviar neste grupo</button>
+        <button class="btn btn-secondary" type="submit" form="form-enviar-consolidado-todos" name="action" value="enviar_parcial_grupos">Enviar a todos</button>
+        {% endif %}
+        {% if parcial_sub == "parceiros" and parcial_pdvs|length > 1 %}
+        <button class="btn btn-secondary" type="submit" form="form-enviar-parceiros-todos" name="action" value="enviar_parcial_grupos">Enviar em todos os grupos</button>
+        {% endif %}
+      </div>
+      {% endif %}
       {% if pode_editar %}
       <form method="post" enctype="multipart/form-data" class="resultados-import">
         {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
@@ -184,7 +198,7 @@
       <input id="parcial-nota-envio" type="text" maxlength="500" placeholder="Legenda do envio (opcional)">
       {% endif %}
       {% if parcial_sub == "gerencia" and pode_enviar %}
-      <form method="post" class="resultados-send-form" data-parcial-envio>
+      <form method="post" id="form-enviar-gerencia" class="resultados-send-form" data-parcial-envio>
         {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
         <input type="hidden" name="parcial_sub" value="gerencia">
         <select name="destinatario" required aria-label="Grupo da gerência">
@@ -200,7 +214,7 @@
       {% endif %}
       {% if parcial_sub == "consolidado" and pode_enviar %}
         {% if grupos_ranking %}
-        <form method="post" class="resultados-send-form" data-parcial-envio>
+        <form method="post" id="form-enviar-consolidado" class="resultados-send-form" data-parcial-envio>
           {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
           <input type="hidden" name="parcial_sub" value="consolidado">
           <select name="destinatario" required aria-label="Grupo da carteira">
@@ -216,14 +230,14 @@
         {% else %}
         <p class="help err">Ative um grupo em Destinatários (Ranking consolidado + Resultados).</p>
         {% endif %}
-        <form method="post" data-parcial-envio>
+        <form method="post" id="form-enviar-consolidado-todos" data-parcial-envio>
           {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
           <input type="hidden" name="parcial_sub" value="consolidado">
           <button class="btn btn-secondary" type="submit" name="action" value="enviar_parcial_grupos">Enviar a todos</button>
         </form>
       {% endif %}
       {% if parcial_sub == "parceiros" and pode_enviar and parcial_pdvs|length > 1 %}
-      <form method="post" data-parcial-envio>
+      <form method="post" id="form-enviar-parceiros-todos" data-parcial-envio>
         {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
         <input type="hidden" name="parcial_sub" value="parceiros">
         <button class="btn btn-secondary" type="submit" name="action" value="enviar_parcial_grupos">Enviar em todos os grupos</button>

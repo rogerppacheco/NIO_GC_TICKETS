@@ -1252,13 +1252,15 @@ body.page-resultados .messages li { padding: 0.35rem 0.65rem; margin: 0 0 0.3rem
 .resultados-help { font-size: 0.78rem; }
 .resultados-help summary { cursor: pointer; color: var(--brand); font-weight: 700; }
 .resultados-help p { margin: 0.3rem 0 0; max-width: 40rem; }
+.resultados-send-top { margin-left: auto; flex-shrink: 0; }
 .resultados-import {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  margin-left: auto;
   flex-wrap: wrap;
 }
+.resultados-bar .resultados-import { margin-left: 0; }
+.resultados-bar:not(:has(.resultados-send-top)) .resultados-import { margin-left: auto; }
 .resultados-file,
 .resultados-turno {
   display: flex;
