@@ -1187,6 +1187,8 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                 ),
             )
     ultimo_parcial = _ultimo_lote_ok(LoteImportacao.Tipo.PARCIAL, request)
+    agora = timezone.localtime()
+    legenda_envio = f"Vendas que entraram até {agora:%H}h{agora:%M}"
     return render(
         request,
         "gestao/resultados.html",
@@ -1209,6 +1211,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             "parcial_pdvs": parcial_pdvs,
             "parcial_gerencia_linhas": parcial_gerencia_linhas,
             "parcial_turno": rotulo_turno,
+            "legenda_envio": legenda_envio,
             "parcial_horarios": HORARIOS_PARCIAL,
             "ultimo_parcial": ultimo_parcial,
             "ranking_grupo_padrao": _grupo_ranking_padrao(grupos_ranking, gerencia_atual),
