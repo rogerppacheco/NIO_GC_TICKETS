@@ -3805,10 +3805,14 @@ class ResultadosTests(TestCase):
         self.client.force_login(spec)
         r = self.client.get(reverse("gestao_resultados"), {"escopo": "meus"})
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.context["parcial_sub"], "gerencia")
+        self.assertEqual(r.context["parcial_sub"], "consolidado")
         self.assertContains(r, "Carteira PP")
         self.assertContains(r, "escopo=todos")
-        pdvs = [l["pdv"] for l in r.context["parcial_gerencia_linhas"]]
+        ger = self.client.get(
+            reverse("gestao_resultados"),
+            {"escopo": "meus", "aba": "parcial", "parcial_sub": "gerencia"},
+        )
+        pdvs = [l["pdv"] for l in ger.context["parcial_gerencia_linhas"]]
         self.assertIn("INOVA MG", pdvs)
         self.assertIn("ATOS TELECOM", pdvs)
         esp = self.client.get(

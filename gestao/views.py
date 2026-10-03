@@ -652,7 +652,7 @@ def osab_view(request: HttpRequest) -> HttpResponse:
 def _parcial_sub(request) -> str:
     sub = (request.GET.get("parcial_sub") or request.POST.get("parcial_sub") or "").strip().lower()
     if sub not in {"gerencia", "consolidado", "especialistas", "parceiros"}:
-        sub = "gerencia"
+        sub = "consolidado"
     return sub
 
 
@@ -983,7 +983,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                 arquivo = form.cleaned_data.get("arquivo")
                 if not arquivo:
                     messages.error(request, "Envie a base Excel com PDV, Vendas Total e Plano Dia.")
-                    return _voltar(request, "gestao_resultados", extra="aba=parcial&parcial_sub=gerencia")
+                    return _voltar(request, "gestao_resultados", extra="aba=parcial&parcial_sub=consolidado")
                 try:
                     parceiros_todos = list(parceiros_gestao(request.user, "todos"))
                     parceiros_import = parceiros_todos or visiveis
@@ -1021,7 +1021,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                     messages.error(request, f"Falha ao importar parcial: {exc}")
             else:
                 messages.error(request, "Envie a base Excel com PDV, Vendas Total e Plano Dia.")
-            return _voltar(request, "gestao_resultados", extra="aba=parcial&parcial_sub=gerencia")
+            return _voltar(request, "gestao_resultados", extra="aba=parcial&parcial_sub=consolidado")
         if action in {
             "enviar_parcial_gerencia",
             "enviar_parcial_carteira",
