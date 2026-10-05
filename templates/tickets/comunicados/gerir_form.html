@@ -6,20 +6,78 @@
   <a class="btn btn-secondary" href="{% url 'comunicados_gerir' %}">← Lista</a>
 </div>
 
-<form method="post" class="panel">
+<form method="post" enctype="multipart/form-data" class="panel">
   <div class="panel-b form-grid">
     {% csrf_token %}
     {% for field in form %}
+      {% if field.name != "anexos" and field.name != "enviar_whatsapp" and field.name != "whatsapp_destino" and field.name != "whatsapp_numero" %}
       <div class="{% if field.field.widget.input_type == 'checkbox' %}checkbox-row{% endif %}"{% if field.name == "corpo" %} style="grid-column:1/-1"{% endif %}>
         <label for="{{ field.id_for_label }}">{{ field.label }}</label>
         {{ field }}
         {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
         {% for err in field.errors %}<div class="help warn">{{ err }}</div>{% endfor %}
       </div>
+      {% endif %}
     {% endfor %}
+    <div class="aviso-upload" style="grid-column:1/-1">
+      <label for="{{ form.anexos.id_for_label }}">{{ form.anexos.label }}</label>
+      {{ form.anexos }}
+      {% if form.anexos.help_text %}<div class="help">{{ form.anexos.help_text }}</div>{% endif %}
+      {% for err in form.anexos.errors %}<div class="help warn">{{ err }}</div>{% endfor %}
+      {% if anexos %}
+      <ul class="aviso-anexos-form">
+        {% for a in anexos %}
+        <li class="aviso-anexo-atual">
+          <label>
+            <input type="checkbox" name="remover_anexo" value="{{ a.pk }}">
+            Remover
+          </label>
+          <a href="{% url 'comunicado_anexo_baixar' a.pk %}">{{ a.nome_exibicao }}</a>
+        </li>
+        {% endfor %}
+      </ul>
+      <div class="help">Marque Remover e salve para tirar o arquivo deste comunicado.</div>
+      {% endif %}
+    </div>
+    <div class="aviso-wpp" style="grid-column:1/-1">
+      <label class="aviso-anexo-atual" for="{{ form.enviar_whatsapp.id_for_label }}">
+        {{ form.enviar_whatsapp }}
+        {{ form.enviar_whatsapp.label }}
+      </label>
+      {% if form.enviar_whatsapp.help_text %}<div class="help">{{ form.enviar_whatsapp.help_text }}</div>{% endif %}
+      {% for err in form.enviar_whatsapp.errors %}<div class="help warn">{{ err }}</div>{% endfor %}
+      <label for="{{ form.whatsapp_destino.id_for_label }}">{{ form.whatsapp_destino.label }}</label>
+      {{ form.whatsapp_destino }}
+      {% for err in form.whatsapp_destino.errors %}<div class="help warn">{{ err }}</div>{% endfor %}
+      <div id="wpp-numero">
+        <label for="{{ form.whatsapp_numero.id_for_label }}">{{ form.whatsapp_numero.label }}</label>
+        {{ form.whatsapp_numero }}
+        <div class="help">DDD + número. Se faltar o 55, o envio completa.</div>
+        {% for err in form.whatsapp_numero.errors %}<div class="help warn">{{ err }}</div>{% endfor %}
+      </div>
+      <p class="help">
+        {% if comunicado %}
+          <a href="{% url 'comunicado_editar' comunicado.pk %}?grupos=1">Listar grupos do WhatsApp conectado</a>
+        {% else %}
+          <a href="{% url 'comunicado_novo' %}?grupos=1">Listar grupos do WhatsApp conectado</a>
+        {% endif %}
+        {% if grupos_qtd %} · {{ grupos_qtd }} grupo{{ grupos_qtd|pluralize }} na lista{% endif %}
+      </p>
+      {% if grupos_erro %}<div class="help warn">{{ grupos_erro }}</div>{% endif %}
+    </div>
     <div style="grid-column:1/-1">
       <button class="btn btn-primary" type="submit">Salvar</button>
     </div>
   </div>
 </form>
+<script>
+(function () {
+  var sel = document.getElementById("id_whatsapp_destino");
+  var box = document.getElementById("wpp-numero");
+  if (!sel || !box) return;
+  function sync() { box.hidden = sel.value !== "numero"; }
+  sel.addEventListener("change", sync);
+  sync();
+})();
+</script>
 {% endblock %}

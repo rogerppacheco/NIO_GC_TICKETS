@@ -5,6 +5,7 @@ from .models import (
     BlocoVertical,
     CheckinRotaDiaria,
     Comunicado,
+    ComunicadoAnexo,
     ComunicadoLeitura,
     ContatoParceiro,
     Encaminhamento,
@@ -213,12 +214,19 @@ class ComunicadoLeituraInline(admin.TabularInline):
     readonly_fields = ("lido_em",)
 
 
+class ComunicadoAnexoInline(admin.TabularInline):
+    model = ComunicadoAnexo
+    extra = 0
+    raw_id_fields = ("enviado_por",)
+    readonly_fields = ("criado_em",)
+
+
 @admin.register(Comunicado)
 class ComunicadoAdmin(admin.ModelAdmin):
     list_display = ("titulo", "publico", "ativo", "publicado_em", "criado_por")
     list_filter = ("ativo", "publico")
     search_fields = ("titulo", "corpo")
-    inlines = [ComunicadoLeituraInline]
+    inlines = [ComunicadoAnexoInline, ComunicadoLeituraInline]
 
 
 @admin.register(ComunicadoLeitura)

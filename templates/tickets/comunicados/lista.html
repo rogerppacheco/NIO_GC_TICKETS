@@ -24,7 +24,10 @@
   <a class="aviso-item{% if not c.lido %} is-unread{% endif %}" href="{% url 'comunicado_detalhe' c.pk %}">
     <div>
       <strong>{{ c.titulo }}</strong>
-      <span class="help">{{ c.publicado_em|date:"d/m/Y H:i" }}</span>
+      <span class="help">
+        {{ c.publicado_em|date:"d/m/Y H:i" }}
+        {% if c.qtd_anexos %} · {{ c.qtd_anexos }} arquivo{{ c.qtd_anexos|pluralize }}{% endif %}
+      </span>
     </div>
     {% if c.lido %}
       <span class="pill resolvido">Lido</span>

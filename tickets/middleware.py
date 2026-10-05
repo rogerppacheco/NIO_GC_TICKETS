@@ -68,7 +68,7 @@ class AcessoInternoMiddleware:
             return redirect("senha_trocar")
 
         if deve_confirmar_comunicado(user) and not _livre(path) and not path.startswith(
-            "/comunicados/pendente"
+            ("/comunicados/pendente", "/comunicados/anexos/")
         ):
             return redirect("comunicado_pendente")
 

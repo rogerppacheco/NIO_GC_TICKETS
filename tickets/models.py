@@ -6,6 +6,8 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import models, transaction
 from django.db.models import Max
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 from django.utils import timezone
 
 
@@ -1268,6 +1270,49 @@ class ComunicadoLeitura(models.Model):
     def __str__(self) -> str:
         estado = "entendeu" if self.entendeu else "não entendeu"
         return f"{self.usuario} · {self.comunicado} ({estado})"
+
+
+class ComunicadoAnexo(models.Model):
+    comunicado = models.ForeignKey(
+        Comunicado, on_delete=models.CASCADE, related_name="anexos"
+    )
+    arquivo = models.FileField(upload_to="comunicados/%Y/%m/")
+    nome_original = models.CharField(max_length=255, blank=True)
+    enviado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="comunicado_anexos",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["criado_em", "id"]
+        verbose_name = "Anexo de comunicado"
+        verbose_name_plural = "Anexos de comunicados"
+
+    def __str__(self) -> str:
+        return self.nome_original or self.arquivo.name
+
+    @property
+    def nome_exibicao(self) -> str:
+        return self.nome_original or self.arquivo.name.rsplit("/", 1)[-1]
+
+    @property
+    def eh_imagem(self) -> bool:
+        nome = self.nome_exibicao.lower()
+        return any(
+            nome.endswith(ext)
+            for ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp")
+        )
+
+
+@receiver(post_delete, sender=ComunicadoAnexo)
+def apagar_arquivo_comunicado(sender, instance, **kwargs):
+    arquivo = getattr(instance, "arquivo", None)
+    if arquivo:
+        arquivo.delete(save=False)
 
 
 class GuiaPendencia(models.Model):

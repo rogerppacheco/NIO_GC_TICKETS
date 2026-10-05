@@ -22,6 +22,7 @@
           <th>Ativo</th>
           <th>Publicado</th>
           <th>Leituras</th>
+          <th>Arquivos</th>
           <th></th>
         </tr>
       </thead>
@@ -33,10 +34,11 @@
             <td>{% if c.ativo %}Sim{% else %}Não{% endif %}</td>
             <td>{% if c.publicado_em %}{{ c.publicado_em|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
             <td>{{ c.qtd_leituras }}</td>
+            <td>{{ c.qtd_anexos }}</td>
             <td><a href="{% url 'comunicado_editar' c.pk %}">Editar</a></td>
           </tr>
         {% empty %}
-          <tr><td colspan="6" class="help">Nenhum comunicado cadastrado.</td></tr>
+          <tr><td colspan="7" class="help">Nenhum comunicado cadastrado.</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -1,0 +1,12 @@
+{% if anexos %}
+<ul class="aviso-anexos">
+  {% for a in anexos %}
+  <li>
+    {% if a.eh_imagem %}
+    <img class="aviso-anexo-img" src="{% url 'comunicado_anexo_baixar' a.pk %}?ver=1" alt="{{ a.nome_exibicao }}">
+    {% endif %}
+    <a href="{% url 'comunicado_anexo_baixar' a.pk %}">Baixar {{ a.nome_exibicao }}</a>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

@@ -15,7 +15,10 @@
   </div>
 
   <div class="panel aviso-card">
-    <div class="panel-b aviso-corpo">{{ comunicado.corpo|linebreaks }}</div>
+    <div class="panel-b aviso-corpo">
+      {{ comunicado.corpo|linebreaks }}
+      {% include "tickets/comunicados/_anexos.html" %}
+    </div>
   </div>
 
   <form method="post" class="aviso-acoes">

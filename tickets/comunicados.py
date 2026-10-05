@@ -132,6 +132,126 @@ def notificar_demanda_comunicado(ticket: Ticket, ator=None) -> None:
         pass
 
 
+def enviar_comunicado_whatsapp(
+    comunicado: Comunicado, *, jid: str, nome: str, user, request=None
+) -> tuple[bool, str]:
+    """Envia o texto e os anexos do comunicado para um número ou grupo."""
+    from django.urls import reverse
+
+    from gestao.messaging.instancia import instancia_para_envio
+    from gestao.messaging.syncwa import (
+        SyncWAError,
+        enviar_documento,
+        enviar_texto,
+        syncwa_configurado,
+    )
+    from gestao.models import EnvioWhatsApp
+
+    destino = (jid or "").strip()
+    rotulo = (nome or destino or "WhatsApp").strip()
+    if not destino:
+        return False, "Escolha o WhatsApp ou o grupo."
+    if not syncwa_configurado():
+        return False, "WhatsApp não está configurado."
+    try:
+        instancia = instancia_para_envio(user)
+    except SyncWAError as exc:
+        return False, str(exc)
+
+    texto = f"*{comunicado.titulo}*\n\n{comunicado.corpo}".strip()
+    if request is not None:
+        link = request.build_absolute_uri(
+            reverse("comunicado_detalhe", args=[comunicado.pk])
+        )
+        texto = f"{texto}\n\nAbra no portal: {link}"
+
+    resposta = enviar_texto(destino, texto, instance=instancia)
+    if not resposta.ok:
+        _registrar_envio_comunicado(
+            EnvioWhatsApp,
+            jid=destino,
+            nome=rotulo,
+            mensagem=texto,
+            user=user,
+            ok=False,
+            erro=resposta.error or "Falha no envio.",
+            message_id=resposta.message_log_id,
+        )
+        return False, resposta.error or f"Não foi possível enviar para {rotulo}."
+
+    falhas: list[str] = []
+    for anexo in comunicado.anexos.all():
+        try:
+            with anexo.arquivo.open("rb") as handle:
+                conteudo = handle.read()
+        except Exception:
+            falhas.append(anexo.nome_exibicao)
+            continue
+        if not conteudo:
+            falhas.append(anexo.nome_exibicao)
+            continue
+        arquivo = enviar_documento(
+            destino,
+            conteudo=conteudo,
+            file_name=anexo.nome_exibicao,
+            caption=anexo.nome_exibicao,
+            instance=instancia,
+        )
+        if not arquivo.ok:
+            falhas.append(anexo.nome_exibicao)
+
+    detalhe = ""
+    if falhas:
+        detalhe = " Não enviei estes arquivos: " + ", ".join(falhas) + "."
+    _registrar_envio_comunicado(
+        EnvioWhatsApp,
+        jid=destino,
+        nome=rotulo,
+        mensagem=texto,
+        user=user,
+        ok=True,
+        erro=detalhe.strip(),
+        message_id=resposta.message_log_id,
+    )
+    return True, f"Enviado para {rotulo}.{detalhe}"
+
+
+def _registrar_envio_comunicado(
+    envio_model,
+    *,
+    jid: str,
+    nome: str,
+    mensagem: str,
+    user,
+    ok: bool,
+    erro: str,
+    message_id: str,
+) -> None:
+    try:
+        envio_model.objects.create(
+            tipo=envio_model.Tipo.COMUNICADO,
+            status=envio_model.Status.ENVIADO if ok else envio_model.Status.ERRO,
+            destino_jid=(jid or "")[:80],
+            destino_nome=(nome or "")[:150],
+            mensagem=mensagem,
+            erro=(erro or "")[:2000],
+            syncwa_message_id=(message_id or "")[:80],
+            criado_por=user if getattr(user, "is_authenticated", False) else None,
+        )
+    except Exception:
+        pass
+
+
+def pode_baixar_anexo(user, comunicado: Comunicado) -> bool:
+    from .acesso import tem_acesso_interno
+
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if tem_acesso_interno(user):
+        return True
+    return qs_comunicados_visiveis(user).filter(pk=comunicado.pk).exists()
+
+
 def confirmar_comunicado(
     user, comunicado: Comunicado, *, entendeu: bool, request=None
 ) -> ComunicadoLeitura:

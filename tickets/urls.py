@@ -38,6 +38,11 @@ urlpatterns = [
         name="comunicado_editar",
     ),
     path(
+        "comunicados/anexos/<int:pk>/",
+        comunicados_views.comunicado_anexo_baixar,
+        name="comunicado_anexo_baixar",
+    ),
+    path(
         "comunicados/<int:pk>/",
         comunicados_views.comunicado_detalhe,
         name="comunicado_detalhe",

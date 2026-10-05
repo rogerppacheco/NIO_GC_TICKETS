@@ -707,6 +707,7 @@ class EnvioWhatsApp(models.Model):
         RANKING = "ranking", "Ranking VB"
         RESUMO = "resumo", "Resumo geral"
         MASCARA = "mascara", "Máscara de atendimento"
+        COMUNICADO = "comunicado", "Comunicado"
         TESTE = "teste", "Teste WhatsApp"
 
     class Status(models.TextChoices):

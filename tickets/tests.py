@@ -2518,3 +2518,226 @@ class ComunicadoTests(TestCase):
         )
         self.assertEqual(self.client.get(reverse("fila")).status_code, 200)
         self.assertEqual(Ticket.objects.count(), 0)
+
+    def test_anexa_arquivos_e_usuario_baixa(self):
+        from .models import Comunicado, ComunicadoAnexo
+
+        pdf = SimpleUploadedFile(
+            "regua.pdf", b"%PDF-1.4 teste", content_type="application/pdf"
+        )
+        imagem = SimpleUploadedFile(
+            "fachada.png", b"\x89PNG\r\n", content_type="image/png"
+        )
+        self.client.force_login(self.spec)
+        criado = self.client.post(
+            reverse("comunicado_novo"),
+            {
+                "titulo": "Com anexo",
+                "corpo": "Veja os arquivos.",
+                "publico": "parceiros",
+                "ativo": "on",
+                "anexos": [pdf, imagem],
+            },
+        )
+        self.assertEqual(criado.status_code, 302)
+        aviso = Comunicado.objects.get(titulo="Com anexo")
+        self.assertEqual(aviso.anexos.count(), 2)
+        nomes = set(aviso.anexos.values_list("nome_original", flat=True))
+        self.assertEqual(nomes, {"regua.pdf", "fachada.png"})
+
+        self.client.force_login(self.user_pdv)
+        pdf_anexo = aviso.anexos.get(nome_original="regua.pdf")
+        baixa = self.client.get(reverse("comunicado_anexo_baixar", args=[pdf_anexo.pk]))
+        self.assertEqual(baixa.status_code, 200)
+        self.assertIn("regua.pdf", baixa["Content-Disposition"])
+        self.assertIn(b"%PDF-1.4", b"".join(baixa.streaming_content))
+
+        self.client.post(
+            reverse("comunicado_pendente"),
+            {"comunicado_id": str(self.aviso.pk), "acao": "entendi"},
+        )
+        tela = self.client.get(reverse("comunicado_pendente"))
+        self.assertContains(tela, "Baixar regua.pdf")
+        self.assertContains(tela, "aviso-anexo-img")
+        self.client.post(
+            reverse("comunicado_pendente"),
+            {"comunicado_id": str(aviso.pk), "acao": "entendi"},
+        )
+        detalhe = self.client.get(reverse("comunicado_detalhe", args=[aviso.pk]))
+        self.assertContains(detalhe, "Baixar fachada.png")
+
+    def test_recusa_formato_e_arquivo_grande(self):
+        from .models import Comunicado
+
+        self.client.force_login(self.spec)
+        exe = SimpleUploadedFile("virus.exe", b"MZ", content_type="application/octet-stream")
+        recusado = self.client.post(
+            reverse("comunicado_novo"),
+            {
+                "titulo": "Arquivo ruim",
+                "corpo": "Nao deve salvar.",
+                "publico": "parceiros",
+                "ativo": "on",
+                "anexos": exe,
+            },
+        )
+        self.assertEqual(recusado.status_code, 200)
+        self.assertContains(recusado, "Formato não aceito")
+        self.assertFalse(Comunicado.objects.filter(titulo="Arquivo ruim").exists())
+
+        from .comunicados_forms import ComunicadoForm
+
+        grande = SimpleUploadedFile("grande.pdf", b"%PDF", content_type="application/pdf")
+        grande.size = 21 * 1024 * 1024
+        form = ComunicadoForm(
+            data={
+                "titulo": "Arquivo pesado",
+                "corpo": "Nao deve salvar.",
+                "publico": "parceiros",
+                "ativo": "on",
+            },
+            files={"anexos": [grande]},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("passa de 20 MB", form.errors["anexos"][0])
+
+    def test_remove_anexo_na_edicao_e_bloqueia_download_de_outro_publico(self):
+        from .models import Comunicado, ComunicadoAnexo
+
+        pdf = SimpleUploadedFile("interno.pdf", b"%PDF interno", content_type="application/pdf")
+        self.client.force_login(self.spec)
+        self.client.post(
+            reverse("comunicado_novo"),
+            {
+                "titulo": "So equipe",
+                "corpo": "Documento interno.",
+                "publico": "equipe",
+                "ativo": "on",
+                "anexos": pdf,
+            },
+        )
+        aviso = Comunicado.objects.get(titulo="So equipe")
+        anexo = aviso.anexos.get()
+        self.client.force_login(self.user_pdv)
+        negado = self.client.get(reverse("comunicado_anexo_baixar", args=[anexo.pk]))
+        self.assertEqual(negado.status_code, 404)
+
+        self.client.force_login(self.spec)
+        self.client.post(
+            reverse("comunicado_pendente"),
+            {"comunicado_id": str(aviso.pk), "acao": "entendi"},
+        )
+        editado = self.client.post(
+            reverse("comunicado_editar", args=[aviso.pk]),
+            {
+                "titulo": "So equipe",
+                "corpo": "Documento interno.",
+                "publico": "equipe",
+                "ativo": "on",
+                "remover_anexo": str(anexo.pk),
+            },
+        )
+        self.assertEqual(editado.status_code, 302)
+        self.assertIn("/comunicados/gerir/", editado["Location"])
+        self.assertFalse(ComunicadoAnexo.objects.filter(pk=anexo.pk).exists())
+
+    def test_envia_comunicado_para_grupo_ou_numero(self):
+        from unittest.mock import patch
+
+        from gestao.models import Destinatario
+
+        grupo = Destinatario.objects.create(
+            owner=self.spec,
+            nome="Grupo PDVs",
+            jid="120363012345@g.us",
+            tipo=Destinatario.TipoDestino.GRUPO,
+            ativo=True,
+        )
+        self.client.force_login(self.spec)
+        with patch(
+            "tickets.comunicados_views.enviar_comunicado_whatsapp",
+            return_value=(True, "Enviado para Grupo PDVs."),
+        ) as envio:
+            salvo = self.client.post(
+                reverse("comunicado_novo"),
+                {
+                    "titulo": "Aviso no grupo",
+                    "corpo": "Texto do aviso.",
+                    "publico": "parceiros",
+                    "ativo": "on",
+                    "enviar_whatsapp": "on",
+                    "whatsapp_destino": f"dest:{grupo.pk}",
+                },
+                follow=True,
+            )
+        self.assertEqual(envio.call_count, 1)
+        self.assertEqual(envio.call_args.kwargs["jid"], "120363012345@g.us")
+        self.assertContains(salvo, "Enviado para Grupo PDVs.")
+
+        recusado = self.client.post(
+            reverse("comunicado_novo"),
+            {
+                "titulo": "Numero ruim",
+                "corpo": "Nao salva.",
+                "publico": "parceiros",
+                "ativo": "on",
+                "enviar_whatsapp": "on",
+                "whatsapp_destino": "numero",
+                "whatsapp_numero": "123",
+            },
+        )
+        self.assertEqual(recusado.status_code, 200)
+        self.assertContains(recusado, "Informe o número")
+        from .models import Comunicado
+
+        self.assertFalse(Comunicado.objects.filter(titulo="Numero ruim").exists())
+
+    def test_lista_grupo_do_whatsapp_e_envia_texto_com_anexo(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.syncwa import SyncWAResult
+        from .comunicados import enviar_comunicado_whatsapp
+        from .models import Comunicado, ComunicadoAnexo
+
+        self.client.force_login(self.spec)
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), patch(
+            "gestao.messaging.instancia.instancia_para_envio", return_value="inst-teste"
+        ), patch(
+            "gestao.messaging.syncwa.listar_grupos",
+            return_value={
+                "ok": True,
+                "groups": [{"jid": "120363999@g.us", "name": "Parceiros Nio"}],
+            },
+        ):
+            tela = self.client.get(reverse("comunicado_novo") + "?grupos=1")
+        self.assertContains(tela, "Parceiros Nio")
+        self.assertContains(tela, "Enviar por WhatsApp ao salvar")
+
+        aviso = Comunicado.objects.create(
+            titulo="Com arquivo",
+            corpo="Segue o PDF.",
+            ativo=True,
+            publico="parceiros",
+        )
+        ComunicadoAnexo.objects.create(
+            comunicado=aviso,
+            arquivo=SimpleUploadedFile("aviso.pdf", b"%PDF-1.4", content_type="application/pdf"),
+            nome_original="aviso.pdf",
+        )
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), patch(
+            "gestao.messaging.instancia.instancia_para_envio", return_value="inst-teste"
+        ), patch("gestao.messaging.syncwa.enviar_texto") as texto, patch(
+            "gestao.messaging.syncwa.enviar_documento"
+        ) as documento:
+            texto.return_value = SyncWAResult(ok=True, destino="120363999@g.us")
+            documento.return_value = SyncWAResult(ok=True, destino="120363999@g.us")
+            ok, msg = enviar_comunicado_whatsapp(
+                aviso,
+                jid="120363999@g.us",
+                nome="Parceiros Nio",
+                user=self.spec,
+            )
+        self.assertTrue(ok)
+        self.assertIn("Parceiros Nio", msg)
+        self.assertIn("*Com arquivo*", texto.call_args.args[1])
+        self.assertEqual(documento.call_args.kwargs["file_name"], "aviso.pdf")

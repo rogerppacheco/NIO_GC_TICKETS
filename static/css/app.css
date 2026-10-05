@@ -2536,6 +2536,56 @@ body.page-fpd .gestao-escopo + .help { display: none; }
 .aviso-item.is-unread { border-left: 3px solid var(--accent); }
 .aviso-item strong { display: block; }
 .aviso-item .help { display: block; margin-top: 0.15rem; }
+.aviso-anexos, .aviso-anexos-form {
+  list-style: none;
+  margin: 0.9rem 0 0;
+  padding: 0.85rem 0 0;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 0.65rem;
+}
+.aviso-anexos-form { margin-top: 0.75rem; }
+.aviso-anexos a { font-weight: 700; }
+.aviso-anexo-img {
+  display: block;
+  max-width: min(100%, 28rem);
+  max-height: 18rem;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 0.35rem;
+  background: #fff;
+}
+.aviso-anexo-atual {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+.aviso-anexo-atual label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  font-weight: 700;
+}
+.aviso-upload input[type="file"] { padding: 0.45rem 0.55rem; }
+.aviso-wpp {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+.aviso-wpp > label.aviso-anexo-atual {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  color: var(--ink);
+}
+.aviso-wpp select { max-width: 36rem; }
+#wpp-numero input { max-width: 16rem; }
 
 .wrap-fluid { max-width: none; width: 100%; }
 
