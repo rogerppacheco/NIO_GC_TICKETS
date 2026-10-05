@@ -278,6 +278,7 @@ body.page-fila .topbar-gestao:not(.ready) #gestao-nav-wrap { display: none; }
   flex-shrink: 0;
   min-width: 0;
 }
+.fila-limite { margin: 0.7rem 0.9rem 0; }
 .fila-abas {
   display: flex;
   align-items: center;

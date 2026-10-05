@@ -229,7 +229,15 @@ def _anexar_osab_fila(tickets: list) -> None:
         t.osab_atualizacao = venda.dt_ref if venda else None
 
 
+ABA_TODOS = "todos"
+
 ABAS_FILA = (
+    {
+        "id": ABA_TODOS,
+        "rotulo": "Todos",
+        "titulo": "Todas as demandas, em qualquer status.",
+        "grupo": "trabalho",
+    },
     {
         "id": StatusTicket.NOVO,
         "rotulo": "A tratar",
@@ -254,12 +262,13 @@ def _abas_da_fila(request: HttpRequest, contagens: dict[str, int], ativa: str) -
     params = request.GET.copy()
     params.pop("export", None)
     abas = []
+    total = sum(contagens.values())
     for spec in ABAS_FILA:
         params["status"] = spec["id"]
         abas.append(
             {
                 **spec,
-                "n": contagens.get(spec["id"], 0),
+                "n": total if spec["id"] == ABA_TODOS else contagens.get(spec["id"], 0),
                 "href": "?" + params.urlencode(),
                 "ativa": spec["id"] == ativa,
             }
@@ -319,10 +328,10 @@ def fila(request: HttpRequest) -> HttpResponse:
                 )
                 qs = qs.filter(pedido__in=pedidos_osab)
 
-    status_pedido = ""
+    status_pedido = (request.GET.get("status") or "").strip()
     if form.is_valid():
-        status_pedido = (form.cleaned_data.get("status") or "").strip()
-    if status_pedido not in StatusTicket.values:
+        status_pedido = (form.cleaned_data.get("status") or status_pedido).strip()
+    if status_pedido != ABA_TODOS and status_pedido not in StatusTicket.values:
         status_pedido = StatusTicket.NOVO
     contagens = {
         row["status"]: row["n"]
@@ -330,8 +339,11 @@ def fila(request: HttpRequest) -> HttpResponse:
     }
     abas = _abas_da_fila(request, contagens, status_pedido)
     aba_ativa = next(aba for aba in abas if aba["ativa"])
-    outras_com_itens = [aba for aba in abas if not aba["ativa"] and aba["n"]]
-    qs = qs.filter(status=status_pedido)
+    outras_com_itens = [
+        aba for aba in abas if not aba["ativa"] and aba["n"] and aba["id"] != ABA_TODOS
+    ]
+    if status_pedido != ABA_TODOS:
+        qs = qs.filter(status=status_pedido)
 
     abertos = qs.exclude(
         status__in=[StatusTicket.RESOLVIDO, StatusTicket.FECHADO, StatusTicket.CANCELADO]
@@ -364,7 +376,7 @@ def fila(request: HttpRequest) -> HttpResponse:
         ]
         ws.append(headers)
         
-        export_list = list(abertos)
+        export_list = list(qs if status_pedido == ABA_TODOS else abertos)
         _anexar_osab_fila(export_list)
         
         for t in export_list:
@@ -444,6 +456,7 @@ def fila(request: HttpRequest) -> HttpResponse:
             "abas_arquivo": [aba for aba in abas if aba["grupo"] == "arquivo"],
             "aba_ativa": aba_ativa,
             "outras_com_itens": outras_com_itens,
+            "lista_limitada": aba_ativa["n"] > len(tickets),
             "mostrar_filtro_especialista": True,
             "filtros_ativos": filtros_ativos,
         },

@@ -910,7 +910,7 @@ class FilaFiltroForm(forms.Form):
     )
     status = forms.ChoiceField(
         required=False,
-        choices=[("", "Todos status")] + list(StatusTicket.choices),
+        choices=[("", "Todos status"), ("todos", "Todos")] + list(StatusTicket.choices),
         widget=forms.Select(attrs={"class": "fila-pick", "aria-label": "Status"}),
     )
     tipo = forms.ChoiceField(

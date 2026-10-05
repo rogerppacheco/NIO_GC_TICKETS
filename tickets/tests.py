@@ -1465,6 +1465,27 @@ class FilaOsabTests(TestCase):
         self.assertContains(em_analise, "is-tratar")
         self.assertContains(em_analise, "has-items")
 
+    def test_aba_todos_junta_os_status_da_fila(self):
+        self.ticket.status = StatusTicket.RESOLVIDO
+        self.ticket.save(update_fields=["status"])
+        novo = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.RESET_SENHA,
+            pedido="222",
+        )
+        self.client.force_login(self.gestor)
+        with override_settings(**self.storages):
+            todos = self.client.get(reverse("fila"), {"status": "todos"})
+        self.assertEqual(todos.status_code, 200)
+        self.assertEqual(todos.context["aba_ativa"]["id"], "todos")
+        self.assertEqual(todos.context["aba_ativa"]["rotulo"], "Todos")
+        self.assertEqual(todos.context["aba_ativa"]["n"], 2)
+        self.assertEqual(
+            {t.protocolo for t in todos.context["tickets"]},
+            {self.ticket.protocolo, novo.protocolo},
+        )
+        self.assertContains(todos, "status=todos")
+
     def test_botao_responder_leva_filtros_no_next(self):
         self.client.force_login(self.gestor)
         with override_settings(**self.storages):

@@ -27,7 +27,7 @@
         </a>
       {% endfor %}
     </nav>
-    <button type="submit" name="export" value="excel" class="btn btn-secondary fila-excel" title="Baixar os tickets abertos desta aba em Excel">
+    <button type="submit" name="export" value="excel" class="btn btn-secondary fila-excel" title="{% if aba_ativa.id == 'todos' %}Baixar todas as demandas desta aba em Excel{% else %}Baixar os tickets abertos desta aba em Excel{% endif %}">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
         <polyline points="7 10 12 15 17 10"></polyline>
@@ -54,6 +54,9 @@
 </form>
 
 <div class="panel fila-board">
+  {% if lista_limitada %}
+  <p class="help fila-limite">Mostrando as {{ tickets|length }} demandas mais recentes de {{ aba_ativa.n }}.</p>
+  {% endif %}
   <div class="table-scroll">
     <table class="table">
       <thead>
@@ -114,7 +117,7 @@
         {% empty %}
         <tr>
           <td class="fila-empty" colspan="10">
-            Nenhuma demanda em {{ aba_ativa.rotulo }}.
+            {% if aba_ativa.id == "todos" %}Nenhuma demanda com estes filtros.{% else %}Nenhuma demanda em {{ aba_ativa.rotulo }}.{% endif %}
             {% if outras_com_itens %}
               <div class="fila-vazio-outras">
                 Com estes filtros há demanda em
