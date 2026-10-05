@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("tickets", "0038_elite_mascara_nome_titular_cpf"),
+        ("tickets", "0039_blocovertical_vtop"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
