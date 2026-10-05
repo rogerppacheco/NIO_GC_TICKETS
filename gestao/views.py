@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
 from django.db.models import Count, Max, Q
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -479,6 +480,10 @@ def importar_sysmap_view(request: HttpRequest) -> HttpResponse:
     )
 
 
+def _com_saudacao(request: HttpRequest) -> bool:
+    return request.POST.get("saudacao", "1") != "0"
+
+
 @login_required
 def capilaridade_view(request: HttpRequest) -> HttpResponse:
     ano, mes = periodo_ativo()
@@ -502,7 +507,12 @@ def capilaridade_view(request: HttpRequest) -> HttpResponse:
                     _flash_resumo(
                         request,
                         "Capilaridade",
-                        enviar_capilaridade_pdv(parceiro, request.user, filtros),
+                        enviar_capilaridade_pdv(
+                            parceiro,
+                            request.user,
+                            filtros,
+                            enviar_motivacional=_com_saudacao(request),
+                        ),
                     )
                 except Exception as exc:
                     messages.error(request, f"Falha ao enviar capilaridade: {exc}")
@@ -512,7 +522,10 @@ def capilaridade_view(request: HttpRequest) -> HttpResponse:
                         request,
                         "Capilaridade (todos)",
                         enviar_capilaridade_todos(
-                            parceiros, request.user, filtros=filtros
+                            parceiros,
+                            request.user,
+                            filtros=filtros,
+                            enviar_motivacional=_com_saudacao(request),
                         ),
                     )
                 except Exception as exc:
@@ -640,7 +653,7 @@ def osab_view(request: HttpRequest) -> HttpResponse:
 def _parcial_sub(request) -> str:
     sub = (request.GET.get("parcial_sub") or request.POST.get("parcial_sub") or "").strip().lower()
     if sub not in {"gerencia", "consolidado", "especialistas", "parceiros"}:
-        sub = "gerencia"
+        sub = "consolidado"
     return sub
 
 
@@ -971,7 +984,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                 arquivo = form.cleaned_data.get("arquivo")
                 if not arquivo:
                     messages.error(request, "Envie a base Excel com PDV, Vendas Total e Plano Dia.")
-                    return _voltar(request, "gestao_resultados", extra="aba=parcial&parcial_sub=gerencia")
+                    return _voltar(request, "gestao_resultados", extra="aba=parcial&parcial_sub=consolidado")
                 try:
                     parceiros_todos = list(parceiros_gestao(request.user, "todos"))
                     parceiros_import = parceiros_todos or visiveis
@@ -1009,7 +1022,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                     messages.error(request, f"Falha ao importar parcial: {exc}")
             else:
                 messages.error(request, "Envie a base Excel com PDV, Vendas Total e Plano Dia.")
-            return _voltar(request, "gestao_resultados", extra="aba=parcial&parcial_sub=gerencia")
+            return _voltar(request, "gestao_resultados", extra="aba=parcial&parcial_sub=consolidado")
         if action in {
             "enviar_parcial_gerencia",
             "enviar_parcial_carteira",
@@ -1175,6 +1188,8 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                 ),
             )
     ultimo_parcial = _ultimo_lote_ok(LoteImportacao.Tipo.PARCIAL, request)
+    agora = timezone.localtime()
+    legenda_envio = f"Vendas que entraram até {agora:%H}h{agora:%M}"
     return render(
         request,
         "gestao/resultados.html",
@@ -1197,6 +1212,7 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
             "parcial_pdvs": parcial_pdvs,
             "parcial_gerencia_linhas": parcial_gerencia_linhas,
             "parcial_turno": rotulo_turno,
+            "legenda_envio": legenda_envio,
             "parcial_horarios": HORARIOS_PARCIAL,
             "ultimo_parcial": ultimo_parcial,
             "ranking_grupo_padrao": _grupo_ranking_padrao(grupos_ranking, gerencia_atual),
@@ -2521,13 +2537,24 @@ def envios_view(request: HttpRequest) -> HttpResponse:
             _flash_resumo(request, "Teste WhatsApp", enviar_teste(request.user))
             return _voltar(request, "gestao_envios")
         if action == "capilaridade":
+            saudacao = _com_saudacao(request)
             if parceiro:
-                _flash_resumo(request, "Capilaridade", enviar_capilaridade_pdv(parceiro, request.user))
+                _flash_resumo(
+                    request,
+                    "Capilaridade",
+                    enviar_capilaridade_pdv(
+                        parceiro, request.user, enviar_motivacional=saudacao
+                    ),
+                )
             else:
                 _flash_resumo(
                     request,
                     "Capilaridade (todos)",
-                    enviar_capilaridade_todos(list(_parceiros(request)), request.user),
+                    enviar_capilaridade_todos(
+                        list(_parceiros(request)),
+                        request.user,
+                        enviar_motivacional=saudacao,
+                    ),
                 )
             return _voltar(request, "gestao_envios")
         if action == "resumo_capilaridade":

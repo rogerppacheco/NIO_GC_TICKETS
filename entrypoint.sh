@@ -18,6 +18,7 @@ else:
 PY
 
 python manage.py migrate --noinput
+python manage.py createcachetable
 python manage.py collectstatic --noinput
 python manage.py seed_nio || true
 

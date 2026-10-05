@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -75,12 +75,22 @@ def obter_frase_do_dia(data: date | None = None) -> str:
     return FRASES_MOTIVACIONAIS_VENDAS[indice]
 
 
-def montar_mensagem_motivacional_pdv(parceiro: Parceiro, data: date | None = None) -> str:
-    """Monta a mensagem de Bom Dia motivacional personalizada para o PDV."""
-    frase = obter_frase_do_dia(data)
+def montar_mensagem_motivacional_pdv(
+    parceiro: Parceiro,
+    data: date | None = None,
+    agora: datetime | None = None,
+) -> str:
+    """Monta a saudação (bom dia/boa tarde/boa noite) motivacional do PDV."""
+    from django.utils import timezone
+
+    from .pipelines.resultados import saudacao_horario
+
+    agora = agora or timezone.localtime()
+    emoji, saudacao = saudacao_horario(agora.hour)
+    frase = obter_frase_do_dia(data or agora.date())
     nome_pdv = (parceiro.nome or "Parceiro").strip()
     return (
-        f"☀️ *Bom dia, time {nome_pdv}!* 🚀\n\n"
+        f"{emoji} *{saudacao}, time {nome_pdv}!* 🚀\n\n"
         f"_{frase}_\n\n"
         f"Bora pra cima que hoje é dia de bater metas e acelerar os resultados! 💪🔥\n"
         f"Segue abaixo o relatório de capilaridade da equipe: 👇"

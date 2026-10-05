@@ -14,3 +14,4 @@ xlrd>=2.0
 lxml>=5.0
 python-dateutil>=2.9
 requests>=2.31
+playwright==1.54.0

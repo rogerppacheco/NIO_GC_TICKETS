@@ -154,9 +154,11 @@ CAMPOS_POR_TIPO: dict[str, dict] = {
         },
     },
     TipoDemanda.INSTALACAO_FISICA: {
-        "titulo": "OS, endereço e descrição",
+        "titulo": "OS, cliente, endereço e descrição",
         "campos": [
             "pedido",
+            "nome_cliente",
+            "documento_cliente",
             "cep",
             "logradouro",
             "numero_fachada",
@@ -166,8 +168,9 @@ CAMPOS_POR_TIPO: dict[str, dict] = {
             "endereco_completo",
             "data_desejada",
             "descricao",
+            "evidencias",
         ],
-        "obrigatorios": ["pedido", "descricao"],
+        "obrigatorios": ["pedido", "nome_cliente", "documento_cliente", "descricao"],
     },
     TipoDemanda.REPARO: {
         "titulo": "OS recém instalada (até 14 dias): duas opções de retorno e a solicitação",

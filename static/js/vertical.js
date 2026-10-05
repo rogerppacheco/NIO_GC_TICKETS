@@ -77,24 +77,12 @@
     if (name === "config" && canConfig) carregarConfig();
   }
 
-  function atualizarTabelaBlocos() {
-    var tbody = document.getElementById("lista-blocos");
-    tbody.innerHTML = "";
+  function atualizarTotaisBlocos() {
     var total = 0;
     blocos.forEach(function (b, i) {
       total += b.total;
-      tbody.innerHTML +=
-        "<tr><td>" +
-        esc(b.nome) +
-        "</td><td>" +
-        b.andares +
-        "</td><td>" +
-        b.aptos +
-        "</td><td>" +
-        b.total +
-        '</td><td><button type="button" class="btn btn-secondary" data-rm="' +
-        i +
-        '">Remover</button></td></tr>';
+      var cel = document.querySelector('#lista-blocos [data-total-bloco="' + i + '"]');
+      if (cel) cel.textContent = b.total;
     });
     var prevenda = Math.ceil(total * 0.1);
     document.getElementById("total-hps-geral").textContent = total;
@@ -102,12 +90,44 @@
     document.getElementById("input_total_hps").value = total;
     document.getElementById("input_prevenda").value = prevenda;
     document.getElementById("input_blocos_json").value = JSON.stringify(blocos);
+  }
+
+  function atualizarTabelaBlocos() {
+    var tbody = document.getElementById("lista-blocos");
+    tbody.innerHTML = blocos
+      .map(function (b, i) {
+        return (
+          '<tr><td><input type="text" class="inp" data-bloco="' + i + '" data-campo="nome" value="' +
+          esc(b.nome) +
+          '" aria-label="Nome do bloco"></td>' +
+          '<td><input type="number" min="1" class="inp" data-bloco="' + i + '" data-campo="andares" value="' +
+          b.andares +
+          '" aria-label="Andares"></td>' +
+          '<td><input type="number" min="0" class="inp" data-bloco="' + i + '" data-campo="aptos" value="' +
+          b.aptos +
+          '" aria-label="Aptos por andar"></td>' +
+          '<td data-total-bloco="' + i + '">' + b.total + "</td>" +
+          '<td><button type="button" class="btn btn-secondary" data-rm="' + i + '">Remover</button></td></tr>'
+        );
+      })
+      .join("");
+    tbody.querySelectorAll("[data-bloco]").forEach(function (inp) {
+      inp.addEventListener("input", function () {
+        var b = blocos[Number(inp.getAttribute("data-bloco"))];
+        var campo = inp.getAttribute("data-campo");
+        if (campo === "nome") b.nome = inp.value.trim();
+        else b[campo] = parseInt(inp.value, 10) || 0;
+        b.total = b.andares * b.aptos;
+        atualizarTotaisBlocos();
+      });
+    });
     tbody.querySelectorAll("[data-rm]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         blocos.splice(Number(btn.getAttribute("data-rm")), 1);
         atualizarTabelaBlocos();
       });
     });
+    atualizarTotaisBlocos();
   }
 
   function addBloco() {
@@ -279,7 +299,6 @@
       document.getElementById("bairro").value = d.bairro || "";
       document.getElementById("cidade").value = d.cidade || "";
       document.getElementById("uf").value = d.uf || "";
-      document.getElementById("cidade_uf").value = (d.cidade || "") + (d.uf ? "/" + d.uf : "");
     });
   }
 
@@ -351,6 +370,7 @@
     document.getElementById("inp_observacao_form").value = "";
     blocos = [];
     atualizarTabelaBlocos();
+    vtopOcultarControles();
   }
 
   function editarTudo(id) {
@@ -371,7 +391,6 @@
       document.getElementById("bairro").value = d.bairro || "";
       document.getElementById("cidade").value = d.cidade || "";
       document.getElementById("uf").value = d.uf || "";
-      document.getElementById("cidade_uf").value = (d.cidade || "") + (d.uf ? "/" + d.uf : "");
       document.getElementById("inp_lat").value = d.latitude || "";
       document.getElementById("inp_long").value = d.longitude || "";
       document.getElementById("inp_infra").value = d.infraestrutura || "SUBTERRANEA";
@@ -386,7 +405,311 @@
       document.getElementById("tab-nova-label").textContent = "Editar solicitação";
       document.getElementById("btn-submit").textContent = "Salvar alterações";
       document.getElementById("btn-cancelar-edicao").hidden = false;
+      vtopMostrarControles();
       showPanel("nova");
+    });
+  }
+
+  // --- SmartRiser / V.top ---
+  var vtopModal = document.getElementById("vertical-modal-vtop");
+  var vtopPollTimer = null;
+  var vtopBlocosQueue = null;
+  var VTOP_ATIVOS = [
+    "starting", "awaiting_credentials", "awaiting_qr", "clicking_login", "logged_in", "navigating",
+    "filling_obra", "filling_coords", "filling_cadastro", "uploading", "saving", "validating",
+  ];
+
+  function vtopUrl(id, acao) {
+    var base = vtopModal ? vtopModal.dataset.vtopBaseUrl : "";
+    return String(base).replace(/\/0\/vtop\/iniciar\/$/, "/" + id + "/vtop/" + acao + "/");
+  }
+
+  function vtopIdAtual() {
+    return document.getElementById("edit_mode_id").value;
+  }
+
+  function vtopEl(id) {
+    return document.getElementById(id);
+  }
+
+  function vtopMostrarControles() {
+    if (!vtopModal) return;
+    vtopEl("btn-vtop-smartriser").hidden = false;
+    fetchJson(vtopUrl(vtopIdAtual(), "status")).then(function (body) {
+      if (body.state && body.state.status && body.state.status !== "idle") {
+        vtopAtualizarUiStatus(body.state);
+        if (VTOP_ATIVOS.indexOf(body.state.status) >= 0) vtopIniciarPolling(vtopIdAtual());
+      }
+    });
+  }
+
+  function vtopOcultarControles() {
+    if (!vtopModal) return;
+    ["btn-vtop-smartriser", "btn-vtop-senha-pronta", "btn-vtop-fechar", "vtop-status-badge"].forEach(function (id) {
+      vtopEl(id).hidden = true;
+    });
+    if (vtopPollTimer) {
+      clearInterval(vtopPollTimer);
+      vtopPollTimer = null;
+    }
+  }
+
+  function vtopAlerta(msg, tipo) {
+    var alerta = vtopEl("vtop-modal-alerta");
+    if (!alerta) return;
+    alerta.className = "vtop-alerta" + (tipo ? " is-" + tipo : "");
+    alerta.textContent = msg || "";
+    alerta.hidden = !msg;
+  }
+
+  function vtopAtualizarUiStatus(state) {
+    var badge = vtopEl("vtop-status-badge");
+    var btnSenha = vtopEl("btn-vtop-senha-pronta");
+    var btnFechar = vtopEl("btn-vtop-fechar");
+    var btnStart = vtopEl("btn-vtop-smartriser");
+    if (!badge) return;
+
+    if (!state) {
+      badge.hidden = true;
+      btnSenha.hidden = true;
+      btnFechar.hidden = true;
+      vtopAtualizarModalQr(null);
+      return;
+    }
+
+    var st = state.status || "";
+    var msg = state.message || st;
+    vtopAtualizarModalQr(state);
+    var cls = "vtop-st-idle";
+    if (st === "awaiting_credentials" || st === "awaiting_qr") cls = "vtop-st-aguardando";
+    else if (st === "done") cls = "vtop-st-done";
+    else if (st === "error") cls = "vtop-st-error";
+    else if (st === "paused") cls = "vtop-st-paused";
+    else if (st && st !== "idle") cls = "vtop-st-ativo";
+    badge.className = "pill vtop-badge " + cls;
+    badge.textContent = msg.length > 80 ? msg.slice(0, 80) + "…" : msg;
+    badge.title = msg;
+    badge.hidden = false;
+
+    // Produção: headless não aceita digitar na tela → reabre o modal pedindo credenciais
+    if (state.needs_vtop_login || state.error === "needs_vtop_login") {
+      vtopAbrirModalCredenciais(msg || "Informe usuário e senha V.tal para continuar.");
+    }
+
+    btnSenha.hidden = st !== "awaiting_credentials";
+    btnSenha.classList.toggle("btn-pulse", st === "awaiting_credentials");
+    if (st && st !== "idle") btnFechar.hidden = false;
+
+    var ativo = VTOP_ATIVOS.indexOf(st) >= 0;
+    btnStart.disabled = ativo;
+    vtopEl("btn-vtop-modal-iniciar").disabled = ativo;
+
+    if (["done", "error", "idle"].indexOf(st) < 0) return;
+    if (vtopPollTimer) {
+      clearInterval(vtopPollTimer);
+      vtopPollTimer = null;
+    }
+    if (st === "done" && vtopBlocosQueue && vtopBlocosQueue.length > 0) {
+      var concluido = vtopBlocosQueue.shift();
+      if (vtopBlocosQueue.length > 0) {
+        badge.textContent = "Concluído " + concluido + ". Iniciando " + vtopBlocosQueue[0] + " em 3s…";
+        badge.className = "pill vtop-badge vtop-st-done";
+        setTimeout(function () {
+          if (vtopBlocosQueue && vtopBlocosQueue.length > 0) {
+            vtopEl("vtop_bloco").value = "TODOS";
+            vtopIniciarSmartRiser(!!(vtopEl("vtop_usuario").value || vtopEl("vtop_senha").value));
+          }
+        }, 3000);
+      } else {
+        vtopBlocosQueue = null;
+        badge.textContent = "TODOS OS BLOCOS CONCLUÍDOS!";
+        badge.className = "pill vtop-badge vtop-st-done";
+        vtopAlerta("Todos os blocos foram processados com sucesso.", "ok");
+      }
+    } else if (st === "error" && vtopBlocosQueue && !state.needs_vtop_login) {
+      vtopBlocosQueue = null;
+      vtopAlerta("Erro na execução sequencial. Parado. Mensagem: " + msg, "erro");
+    }
+  }
+
+  function vtopAtualizarModalQr(state) {
+    var el = vtopEl("vertical-modal-vtop-qr");
+    if (!el) return;
+    var img = vtopEl("vtop-qr-img");
+    var carregando = vtopEl("vtop-qr-carregando");
+    if (!state || state.status !== "awaiting_qr") {
+      el.hidden = true;
+      img.removeAttribute("src");
+      img.hidden = true;
+      carregando.hidden = false;
+      return;
+    }
+    var qr = state.qr_image || "";
+    if (qr.indexOf("data:image/") === 0) {
+      if (img.getAttribute("src") !== qr) img.setAttribute("src", qr);
+      img.hidden = false;
+      carregando.hidden = true;
+    } else {
+      img.hidden = true;
+      carregando.hidden = false;
+    }
+    vtopEl("vtop-qr-mensagem").textContent = state.message || "";
+    el.hidden = false;
+  }
+
+  function vtopIniciarPolling(id) {
+    if (vtopPollTimer) clearInterval(vtopPollTimer);
+    vtopPollTimer = setInterval(function () {
+      fetchJson(vtopUrl(id, "status"))
+        .then(function (body) {
+          if (body.state) vtopAtualizarUiStatus(body.state);
+        })
+        .catch(function (e) {
+          console.warn("[VTOP] poll falhou", e);
+        });
+    }, 2000);
+  }
+
+  function vtopPopularSelectBlocos() {
+    var sel = vtopEl("vtop_bloco");
+    var prev = sel.value;
+    sel.innerHTML =
+      '<option value="">— só testar login (sessão) —</option>' +
+      '<option value="TODOS">— TODOS OS BLOCOS (em sequência) —</option>';
+    blocos.forEach(function (b) {
+      var nome = String(b.nome || "").trim();
+      if (!nome) return;
+      var opt = document.createElement("option");
+      opt.value = nome;
+      opt.textContent = nome + (b.vtop_obra_id ? " (obra " + b.vtop_obra_id + ")" : "");
+      sel.appendChild(opt);
+    });
+    if (prev && Array.prototype.some.call(sel.options, function (o) { return o.value === prev; })) {
+      sel.value = prev;
+    }
+  }
+
+  function vtopAbrirModalCredenciais(alertaMsg) {
+    if (!vtopIdAtual()) {
+      alert("Abra uma solicitação em modo edição antes de preencher o SmartRiser.");
+      return;
+    }
+    vtopPopularSelectBlocos();
+    vtopAlerta(alertaMsg || "", "");
+    vtopEl("vtop_usuario").value = "";
+    vtopEl("vtop_senha").value = "";
+    vtopModal.hidden = false;
+    if (vtopEl("vtop-login-senha").open) {
+      setTimeout(function () { vtopEl("vtop_usuario").focus(); }, 100);
+    }
+  }
+
+  function vtopIniciarSmartRiser(usarCredenciais) {
+    var id = vtopIdAtual();
+    if (!id) {
+      alert("Abra uma solicitação em modo edição antes de preencher o SmartRiser.");
+      return;
+    }
+    // Navegador pode autopreencher os campos mesmo com a seção fechada: só envia se aberta
+    var loginSenhaAberto = usarCredenciais === true || vtopEl("vtop-login-senha").open;
+    var usuario = loginSenhaAberto ? (vtopEl("vtop_usuario").value || "").trim() : "";
+    var senha = loginSenhaAberto ? vtopEl("vtop_senha").value || "" : "";
+    var blocoOriginal = (vtopEl("vtop_bloco").value || "").trim();
+
+    var bloco = blocoOriginal;
+    if (blocoOriginal === "TODOS") {
+      if (!vtopBlocosQueue || vtopBlocosQueue.length === 0) {
+        vtopBlocosQueue = blocos
+          .map(function (b) { return String(b.nome || "").trim(); })
+          .filter(Boolean);
+      }
+      if (vtopBlocosQueue.length === 0) {
+        alert("Nenhum bloco cadastrado para executar.");
+        return;
+      }
+      bloco = vtopBlocosQueue[0];
+      vtopAlerta("Em sequência (" + vtopBlocosQueue.length + " restante(s)). Bloco atual: " + bloco, "info");
+    } else {
+      vtopBlocosQueue = null;
+    }
+
+    var payload = {};
+    if (usuario) payload.vtop_usuario = usuario;
+    if (senha) payload.vtop_senha = senha;
+    if (bloco) payload.bloco = bloco;
+    else payload.somente_ate = "login";
+
+    var btn = vtopEl("btn-vtop-smartriser");
+    var btnModal = vtopEl("btn-vtop-modal-iniciar");
+    btn.disabled = true;
+    btnModal.disabled = true;
+    btnModal.textContent = "Iniciando…";
+
+    fetchJson(vtopUrl(id, "iniciar"), { method: "POST", json: payload })
+      .then(function (body) {
+        vtopEl("vtop_senha").value = "";
+        if (body.state) vtopAtualizarUiStatus(body.state);
+        if (body.state && (body.state.needs_vtop_login || body.state.error === "needs_vtop_login")) {
+          vtopAlerta(body.state.message || "Informe usuário e senha V.tal.", "");
+          btn.disabled = false;
+          return;
+        }
+        if (!body._ok) {
+          alert(body.error || (body.state && body.state.message) || "Não foi possível iniciar a automação.");
+          btn.disabled = false;
+          return;
+        }
+        vtopModal.hidden = true;
+        vtopIniciarPolling(id);
+      })
+      .catch(function (e) {
+        console.error(e);
+        alert("Erro de rede ao iniciar SmartRiser.");
+        btn.disabled = false;
+      })
+      .finally(function () {
+        btnModal.disabled = false;
+        btnModal.textContent = "Iniciar SmartRiser";
+      });
+  }
+
+  function vtopSenhaPronta() {
+    var id = vtopIdAtual();
+    if (!id) return;
+    fetchJson(vtopUrl(id, "senha-pronta"), { method: "POST", json: {} }).then(function (body) {
+      if (!body._ok) {
+        alert(body.error || "Não foi possível confirmar a senha.");
+        return;
+      }
+      vtopAtualizarUiStatus(body.state);
+    });
+  }
+
+  function vtopFecharNavegador() {
+    var id = vtopIdAtual();
+    var url = id ? vtopUrl(id, "fechar") : vtopModal.dataset.vtopFecharGlobalUrl;
+    return fetchJson(url, { method: "POST", json: { manter_sessao: true } }).then(function (body) {
+      vtopAtualizarUiStatus(body.state || { status: "idle", message: "Navegador fechado (sessão mantida)." });
+      vtopEl("btn-vtop-smartriser").disabled = false;
+    });
+  }
+
+  if (vtopModal) {
+    vtopEl("btn-vtop-smartriser").addEventListener("click", function () {
+      vtopAbrirModalCredenciais();
+    });
+    vtopEl("btn-vtop-modal-iniciar").addEventListener("click", function () {
+      vtopIniciarSmartRiser(false);
+    });
+    vtopEl("btn-vtop-modal-fechar").addEventListener("click", function () {
+      vtopModal.hidden = true;
+    });
+    vtopEl("btn-vtop-senha-pronta").addEventListener("click", vtopSenhaPronta);
+    vtopEl("btn-vtop-fechar").addEventListener("click", vtopFecharNavegador);
+    vtopEl("btn-vtop-qr-cancelar").addEventListener("click", function () {
+      vtopFecharNavegador().then(function () {
+        vtopAtualizarModalQr(null);
+      });
     });
   }
 
@@ -432,6 +755,11 @@
     }
     if (blocos.length === 0) {
       alert("É obrigatório incluir pelo menos uma Estrutura de blocos antes de enviar.");
+      return;
+    }
+    var blocoInvalido = blocos.filter(function (b) { return !b.nome || b.andares <= 0; })[0];
+    if (blocoInvalido) {
+      alert("Cada bloco precisa de nome e pelo menos 1 andar.");
       return;
     }
     if (!form.checkValidity()) {

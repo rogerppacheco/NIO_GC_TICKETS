@@ -7,6 +7,7 @@ from . import (
     rota_views,
     tradehub_views,
     vertical_views,
+    vertical_vtop_views,
     views,
     guia_views,
 )
@@ -174,6 +175,47 @@ urlpatterns = [
         "abrir/vertical/api/usuarios/",
         vertical_views.vertical_api_usuarios,
         name="vertical_api_usuarios",
+    ),
+    # SmartRiser / V.top — automação a partir do Projeto Vertical
+    path(
+        "abrir/vertical/api/solicitacoes/<int:pk>/vtop/iniciar/",
+        vertical_vtop_views.vtop_iniciar,
+        name="vertical_vtop_iniciar",
+    ),
+    path(
+        "abrir/vertical/api/solicitacoes/<int:pk>/vtop/senha-pronta/",
+        vertical_vtop_views.vtop_senha_pronta,
+        name="vertical_vtop_senha_pronta",
+    ),
+    path(
+        "abrir/vertical/api/solicitacoes/<int:pk>/vtop/status/",
+        vertical_vtop_views.vtop_status,
+        name="vertical_vtop_status",
+    ),
+    path(
+        "abrir/vertical/api/solicitacoes/<int:pk>/vtop/fechar/",
+        vertical_vtop_views.vtop_fechar,
+        name="vertical_vtop_fechar",
+    ),
+    path(
+        "abrir/vertical/api/solicitacoes/<int:pk>/vtop/payload/",
+        vertical_vtop_views.vtop_payload,
+        name="vertical_vtop_payload",
+    ),
+    path(
+        "abrir/vertical/api/vtop/status/",
+        vertical_vtop_views.vtop_status,
+        name="vertical_vtop_status_global",
+    ),
+    path(
+        "abrir/vertical/api/vtop/fechar/",
+        vertical_vtop_views.vtop_fechar,
+        name="vertical_vtop_fechar_global",
+    ),
+    path(
+        "abrir/vertical/api/vtop/invalidar-sessao/",
+        vertical_vtop_views.vtop_invalidar_sessao,
+        name="vertical_vtop_invalidar",
     ),
     path("abrir/minhas/", views.minhas_demandas, name="minhas_demandas"),
     path("abrir/sair/", views.portal_sair, name="portal_sair"),

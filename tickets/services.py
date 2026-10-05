@@ -134,6 +134,29 @@ def notificar_mascaras_por_email(ticket: Ticket) -> int:
     return enviados
 
 
+def _instancia_especialista_para_destino(spec, jid: str) -> str | None:
+    """Instância do especialista conectado quando o destino é ele mesmo (número ou destino do perfil)."""
+    if not spec or not jid:
+        return None
+    from gestao.messaging.envio import whatsapp_do_usuario
+    from gestao.messaging.instancia import instancia_conectada_do_usuario
+    from gestao.messaging.syncwa import normalizar_destino
+
+    try:
+        perfil = getattr(spec, "perfil_staff", None)
+        info_dest = perfil.obter_destino_mascara() if perfil else {}
+        destinos = {
+            normalizar_destino(d)
+            for d in (info_dest.get("jid"), whatsapp_do_usuario(spec))
+            if d
+        }
+        if normalizar_destino(jid) not in destinos:
+            return None
+        return instancia_conectada_do_usuario(spec)
+    except Exception:
+        return None
+
+
 def enviar_mascara_whatsapp(
     ticket: Ticket,
     mascara: Mascara,
@@ -191,7 +214,9 @@ def enviar_mascara_whatsapp(
     if not conteudo.strip():
         return False, "O conteúdo da máscara gerada está vazio."
 
-    resp = enviar_texto(jid, conteudo)
+    resp = enviar_texto(
+        jid, conteudo, instance=_instancia_especialista_para_destino(spec, jid)
+    )
     if not resp.ok:
         return False, f"Falha ao enviar via WhatsApp para {nome or jid}: {resp.error}"
 
@@ -374,8 +399,14 @@ def notificar_demanda_com_anexo(ticket: Ticket, ator=None) -> int:
     )
 
     if destino and syncwa_configurado():
+        from gestao.messaging.instancia import instancia_conectada_do_usuario
+
         jid, nome = destino
-        resp_txt = enviar_texto(jid, resumo)
+        try:
+            instancia_spec = instancia_conectada_do_usuario(spec)
+        except Exception:
+            instancia_spec = None
+        resp_txt = enviar_texto(jid, resumo, instance=instancia_spec)
         if resp_txt.ok:
             enviados += 1
         for anexo in anexos:
@@ -385,7 +416,11 @@ def notificar_demanda_com_anexo(ticket: Ticket, ator=None) -> int:
                 continue
             caption = f"{ticket.protocolo} · {nome_arq}"
             resp_doc = enviar_documento(
-                jid, conteudo=dados, file_name=nome_arq, caption=caption
+                jid,
+                conteudo=dados,
+                file_name=nome_arq,
+                caption=caption,
+                instance=instancia_spec,
             )
             if isinstance(resp_doc, SyncWAResult) and resp_doc.ok:
                 enviados += 1

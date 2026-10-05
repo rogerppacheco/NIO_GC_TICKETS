@@ -31,6 +31,7 @@ from tickets.vertical_services import (
     _int,
     _texto,
 )
+from tickets.vertical_vtop_views import pode_usar_smartriser
 from tickets.views import _portal_sessao
 
 
@@ -58,6 +59,9 @@ def _parse_json(request: HttpRequest) -> dict[str, Any]:
 def _dados_request(request: HttpRequest) -> dict[str, Any]:
     if request.content_type and "application/json" in request.content_type:
         return _parse_json(request)
+    if request.method in ("PATCH", "PUT") and "multipart/form-data" in (request.content_type or ""):
+        # Django só faz o parse de multipart em POST; sem isso a edição chega vazia.
+        request.POST, request._files = request.parse_file_upload(request.META, request)
     src = request.POST if request.method != "GET" else request.GET
     return {k: src.get(k) for k in src.keys()}
 
@@ -71,6 +75,7 @@ def vertical_portal(request: HttpRequest) -> HttpResponse:
             {
                 "visao_equipe": True,
                 "can_config": pode_gestao_vertical(request.user),
+                "can_smartriser": pode_usar_smartriser(request.user),
                 "parceiro": None,
                 "contato": None,
                 "acionado_por_nome": nome_usuario(request.user),
@@ -85,6 +90,7 @@ def vertical_portal(request: HttpRequest) -> HttpResponse:
         {
             "visao_equipe": False,
             "can_config": False,
+            "can_smartriser": False,
             "parceiro": parceiro,
             "contato": contato,
             "acionado_por_nome": contato.nome,
@@ -242,7 +248,9 @@ def vertical_api_solicitacao(request: HttpRequest, pk: int) -> JsonResponse:
         status = _texto(dados.get("status"), 50)
         if status in SolicitacaoVertical.Status.values:
             item.status = status
-    if "observacao" in dados:
+    if "observacao_form" in dados:
+        item.observacao = _texto(dados.get("observacao_form"), 4000)
+    elif "observacao" in dados:
         item.observacao = _texto(dados.get("observacao"), 4000)
     item.save()
     blocos = payload.get("_blocos") or []

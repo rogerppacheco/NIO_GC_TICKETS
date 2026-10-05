@@ -159,6 +159,58 @@ class DemandaComAnexoNotificacaoTests(TestCase):
             self.ticket.mensagens.filter(interno=True, corpo__contains="anexo").exists()
         )
 
+    def test_especialista_conectado_recebe_do_proprio_numero(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.syncwa import SyncWAResult
+        from gestao.models import InstanciaWhatsApp
+        from tickets.services import notificar_demanda_com_anexo
+
+        InstanciaWhatsApp.objects.create(user=self.spec, nome=f"nio_u{self.spec.pk}")
+        self._anexo("evidencia.png")
+        fake = SyncWAResult(ok=True)
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), \
+             patch(
+                 "gestao.messaging.evolution_connection.EvolutionConnectionService.get_status",
+                 return_value={"state": "open", "connected": True},
+             ), \
+             patch("gestao.messaging.syncwa.enviar_texto", return_value=fake) as mock_txt, \
+             patch("gestao.messaging.syncwa.enviar_documento", return_value=fake) as mock_doc:
+            notificar_demanda_com_anexo(self.ticket)
+        self.assertEqual(mock_txt.call_args.args[0], "5531999990000")
+        self.assertEqual(mock_txt.call_args.kwargs["instance"], f"nio_u{self.spec.pk}")
+        self.assertEqual(mock_doc.call_args.kwargs["instance"], f"nio_u{self.spec.pk}")
+
+    def test_especialista_desconectado_recebe_do_chip_central(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.syncwa import SyncWAResult
+        from gestao.models import InstanciaWhatsApp
+        from tickets.services import notificar_demanda_com_anexo
+
+        InstanciaWhatsApp.objects.create(user=self.spec, nome=f"nio_u{self.spec.pk}")
+        self._anexo("evidencia.png")
+        fake = SyncWAResult(ok=True)
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), \
+             patch(
+                 "gestao.messaging.evolution_connection.EvolutionConnectionService.get_status",
+                 return_value={"state": "close", "connected": False},
+             ), \
+             patch("gestao.messaging.syncwa.enviar_texto", return_value=fake) as mock_txt, \
+             patch("gestao.messaging.syncwa.enviar_documento", return_value=fake) as mock_doc:
+            notificar_demanda_com_anexo(self.ticket)
+        self.assertIsNone(mock_txt.call_args.kwargs["instance"])
+        self.assertIsNone(mock_doc.call_args.kwargs["instance"])
+
+    def test_instalacao_fisica_aceita_evidencias(self):
+        from tickets.demanda_campos import schema_tipo
+
+        schema = schema_tipo(TipoDemanda.INSTALACAO_FISICA)
+        self.assertIn("evidencias", schema["campos"])
+        for campo in ("nome_cliente", "documento_cliente"):
+            self.assertIn(campo, schema["campos"])
+            self.assertIn(campo, schema["obrigatorios"])
+
     def test_especialista_nao_recebe_quando_ele_mesmo_abre(self):
         from unittest.mock import patch
 
@@ -1385,6 +1437,34 @@ class FilaOsabTests(TestCase):
         self.assertEqual(len(r.context["tickets"]), 1)
         self.assertEqual(r.context["tickets"][0].pedido, "99999999")
 
+    def test_fila_abre_em_a_tratar_e_separa_os_outros_status(self):
+        self.ticket.status = StatusTicket.EM_ANALISE
+        self.ticket.save(update_fields=["status"])
+        novo = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.RESET_SENHA,
+            pedido="111",
+        )
+        self.client.force_login(self.gestor)
+        with override_settings(**self.storages):
+            r = self.client.get(reverse("fila"))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.context["aba_ativa"]["id"], StatusTicket.NOVO)
+        self.assertEqual([t.protocolo for t in r.context["tickets"]], [novo.protocolo])
+        self.assertContains(r, "A tratar")
+        self.assertContains(r, "Nova demanda", count=1)
+        self.assertNotContains(r, "Todos status")
+        self.assertContains(r, "status=em_analise")
+        self.assertContains(r, "has-items")
+        with override_settings(**self.storages):
+            em_analise = self.client.get(reverse("fila"), {"status": "em_analise"})
+        self.assertEqual(
+            [t.protocolo for t in em_analise.context["tickets"]],
+            [self.ticket.protocolo],
+        )
+        self.assertContains(em_analise, "is-tratar")
+        self.assertContains(em_analise, "has-items")
+
     def test_botao_responder_leva_filtros_no_next(self):
         self.client.force_login(self.gestor)
         with override_settings(**self.storages):
@@ -1757,6 +1837,55 @@ class MascaraWhatsAppTests(TestCase):
             mock_send.assert_called_once()
             jid, texto = mock_send.call_args.args
             self.assertEqual(jid, "5521999575120")
+            self.assertIsNone(mock_send.call_args.kwargs["instance"])
+
+    def test_notificar_mascaras_sai_do_numero_do_especialista_conectado(self):
+        from unittest.mock import patch
+        from gestao.messaging.syncwa import SyncWAResult
+        from gestao.models import InstanciaWhatsApp
+        from tickets.services import notificar_mascaras_por_whatsapp
+
+        InstanciaWhatsApp.objects.create(user=self.spec, nome=f"nio_u{self.spec.pk}")
+        ticket = Ticket.objects.create(
+            parceiro=self.pdv_spec,
+            tipo=TipoDemanda.SEM_SLOT,
+            pedido="PED-CONN",
+            uf="RJ",
+        )
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), \
+             patch(
+                 "gestao.messaging.evolution_connection.EvolutionConnectionService.get_status",
+                 return_value={"state": "open", "connected": True},
+             ), \
+             patch(
+                 "gestao.messaging.syncwa.enviar_texto", return_value=SyncWAResult(ok=True)
+             ) as mock_send:
+            notificar_mascaras_por_whatsapp(ticket)
+        self.assertEqual(mock_send.call_args.args[0], "5521999575120")
+        self.assertEqual(mock_send.call_args.kwargs["instance"], f"nio_u{self.spec.pk}")
+
+    def test_mascara_para_grupo_escolhido_nao_usa_instancia_do_especialista(self):
+        from unittest.mock import patch
+        from gestao.messaging.syncwa import SyncWAResult
+        from gestao.models import InstanciaWhatsApp
+        from tickets.services import enviar_mascara_whatsapp
+
+        InstanciaWhatsApp.objects.create(user=self.spec, nome=f"nio_u{self.spec.pk}")
+        ticket = Ticket.objects.create(
+            parceiro=self.pdv_spec, tipo=TipoDemanda.SEM_SLOT, pedido="PED-G", uf="RJ"
+        )
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), \
+             patch(
+                 "gestao.messaging.evolution_connection.EvolutionConnectionService.get_status",
+                 return_value={"state": "open", "connected": True},
+             ), \
+             patch(
+                 "gestao.messaging.syncwa.enviar_texto", return_value=SyncWAResult(ok=True)
+             ) as mock_send:
+            enviar_mascara_whatsapp(
+                ticket, self.mascara_slot, destino_jid="120363000000000@g.us", destino_nome="Grupo"
+            )
+        self.assertIsNone(mock_send.call_args.kwargs["instance"])
 
     def test_view_enviar_mascara_wpp(self):
         from unittest.mock import patch

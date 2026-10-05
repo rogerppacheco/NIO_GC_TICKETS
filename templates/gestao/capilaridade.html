@@ -23,10 +23,15 @@
     </form>
     {% endif %}
     {% if pode_enviar %}
+    <label class="help" style="display:flex;align-items:center;gap:0.35rem;cursor:pointer">
+      <input type="checkbox" id="cap-saudacao" checked>
+      Enviar saudação do dia antes
+    </label>
     <form method="post">
       {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       {% include "gestao/_filtros_hidden.html" %}
       <input type="hidden" name="action" value="enviar_todos">
+      <input type="hidden" name="saudacao" value="1" data-cap-saudacao>
       <button class="btn btn-primary" type="submit">Enviar todos (WhatsApp)</button>
     </form>
     {% endif %}
@@ -45,7 +50,7 @@
       </div>
     </div>
     <span class="badge" style="font-size:0.75rem;opacity:0.9;white-space:nowrap">
-      Enviada no WhatsApp antes do relatório
+      Enviada no WhatsApp antes do relatório (opcional)
     </span>
   </div>
 </div>
@@ -116,6 +121,7 @@
           {% include "gestao/_filtros_hidden.html" %}
           <input type="hidden" name="action" value="enviar_pdv">
           <input type="hidden" name="parceiro" value="{{ card.parceiro.id }}">
+          <input type="hidden" name="saudacao" value="1" data-cap-saudacao>
           <button class="btn btn-secondary" type="submit">Enviar</button>
         </form>
         {% endif %}
@@ -126,4 +132,22 @@
 {% empty %}
   <p class="help">Nenhum parceiro visível. Importe o Sysmap e a OSAB.</p>
 {% endfor %}
+{% if pode_enviar %}
+<script>
+  (function () {
+    var box = document.getElementById("cap-saudacao");
+    if (!box) return;
+    var chave = "cap-saudacao";
+    if (localStorage.getItem(chave) === "0") box.checked = false;
+    function sync() {
+      document.querySelectorAll("[data-cap-saudacao]").forEach(function (el) {
+        el.value = box.checked ? "1" : "0";
+      });
+      localStorage.setItem(chave, box.checked ? "1" : "0");
+    }
+    box.addEventListener("change", sync);
+    sync();
+  })();
+</script>
+{% endif %}
 {% endblock %}
