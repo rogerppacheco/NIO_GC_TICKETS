@@ -70,7 +70,7 @@
   <div class="panel-b">
     <p class="help" id="wa-status-text">Consultando a Evolution…</p>
     <p class="help" id="wa-connected-msg" hidden>{% if instancia_central %}Aparelho conectado. Este é o chip principal da gestão.{% elif modo_envio == "pessoal" %}Aparelho conectado. Os envios da sua carteira saem deste WhatsApp.{% else %}Aparelho conectado. Os envios ainda saem do chip da gestão até o admin mudar o modo.{% endif %}</p>
-    <p class="help" id="wa-connecting-msg" hidden style="color:var(--warn)">Aguardando pareamento — gere o QR e escaneie no celular (Aparelhos conectados).</p>
+    <p class="help" id="wa-connecting-msg" hidden style="color:var(--warn)">Aguardando pareamento — o QR se renova sozinho. Escaneie no celular (Aparelhos conectados).</p>
     <p class="help" id="wa-error" hidden style="color:var(--danger)"></p>
     <div class="fila-toolbar" style="gap:0.5rem;margin-top:0.8rem">
       <button class="btn btn-primary" type="button" id="btn-qr">Gerar QR Code</button>
@@ -78,7 +78,7 @@
     </div>
     <div id="wa-qr-wrap" hidden style="margin-top:1rem;text-align:center">
       <img id="wa-qr-img" alt="QR Code WhatsApp" width="260" height="260" style="background:#fff;padding:8px;border-radius:8px">
-      <p class="help" style="margin-top:0.6rem">No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho.</p>
+      <p class="help" style="margin-top:0.6rem">No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho. O código se renova sozinho; escaneie o que está na tela.</p>
     </div>
   </div>
 </div>
@@ -95,6 +95,19 @@
   function $(id) { return document.getElementById(id); }
   function setHidden(el, hide) { el.hidden = !!hide; }
   let poll = null;
+  let qrTimer = null;
+  let qrInFlight = false;
+  let refreshFails = 0;
+  let lastQr = "";
+
+  function stopQrRefresh() {
+    if (qrTimer) { clearInterval(qrTimer); qrTimer = null; }
+  }
+
+  function startQrRefresh() {
+    if (qrTimer) return;
+    qrTimer = setInterval(function () { gerarQr(true); }, 10000);
+  }
 
   function setError(msg) {
     const el = $("wa-error");
@@ -127,7 +140,12 @@
     setHidden($("wa-connecting-msg"), !(data.state === "connecting" && !data.connected));
     setHidden($("btn-disconnect"), data.state === "unconfigured");
     setHidden($("btn-qr"), !!data.connected);
-    if (data.connected && poll) { clearInterval(poll); poll = null; }
+    if (data.connected) {
+      if (poll) { clearInterval(poll); poll = null; }
+      stopQrRefresh();
+      setHidden($("wa-qr-wrap"), true);
+      lastQr = "";
+    }
   }
 
   async function loadStatus(silent) {
@@ -142,24 +160,50 @@
     }
   }
 
-  async function gerarQr() {
-    setError("");
-    $("btn-qr").disabled = true;
+  async function gerarQr(silent) {
+    silent = silent === true;
+    if (qrInFlight) return;
+    qrInFlight = true;
+    if (!silent) {
+      setError("");
+      $("btn-qr").disabled = true;
+    }
+    let escalar = false;
     try {
-      const res = await fetch("{% url 'gestao_whatsapp_qrcode' %}", { headers: { "Accept": "application/json" } });
+      const url = "{% url 'gestao_whatsapp_qrcode' %}" + (silent ? "?refresh=1" : "");
+      const res = await fetch(url, { headers: { "Accept": "application/json" } });
       const data = await res.json();
+      if (data.connected) {
+        refreshFails = 0;
+        applyStatus(Object.assign({ connected: true, state: data.state || "open" }, data));
+        return;
+      }
       if (!res.ok) throw new Error(data.detail || "Não foi possível gerar o QR.");
       const src = data.base64 || "";
       if (!src) throw new Error("QR não retornado pela Evolution.");
-      $("wa-qr-img").src = src;
+      if (src !== lastQr) {
+        lastQr = src;
+        $("wa-qr-img").src = src;
+      }
       setHidden($("wa-qr-wrap"), false);
-      if (poll) clearInterval(poll);
-      poll = setInterval(function () { loadStatus(true); }, 3000);
+      refreshFails = 0;
+      if (!poll) poll = setInterval(function () { loadStatus(true); }, 3000);
+      startQrRefresh();
     } catch (e) {
-      setError(e.message || "Erro ao gerar QR.");
+      if (silent) {
+        refreshFails += 1;
+        if (refreshFails >= 3) {
+          refreshFails = 0;
+          escalar = true;
+        }
+      } else {
+        setError(e.message || "Erro ao gerar QR.");
+      }
     } finally {
-      $("btn-qr").disabled = false;
+      qrInFlight = false;
+      if (!silent) $("btn-qr").disabled = false;
     }
+    if (escalar) gerarQr(false);
   }
 
   async function desconectar() {
@@ -175,8 +219,20 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Falha ao desconectar.");
-      setHidden($("wa-qr-wrap"), true);
       applyStatus(data.status || data);
+      if (data.message) $("wa-status-text").textContent = data.message;
+      const src = data.base64 || "";
+      if (src) {
+        lastQr = src;
+        $("wa-qr-img").src = src;
+        setHidden($("wa-qr-wrap"), false);
+        if (!poll) poll = setInterval(function () { loadStatus(true); }, 3000);
+        startQrRefresh();
+      } else {
+        setHidden($("wa-qr-wrap"), true);
+        stopQrRefresh();
+        lastQr = "";
+      }
       await loadStatus();
     } catch (e) {
       setError(e.message);
@@ -184,7 +240,7 @@
   }
 
   $("btn-atualizar").addEventListener("click", function () { loadStatus(false); });
-  $("btn-qr").addEventListener("click", gerarQr);
+  $("btn-qr").addEventListener("click", function () { gerarQr(false); });
   $("btn-disconnect").addEventListener("click", desconectar);
   loadStatus(false);
 })();

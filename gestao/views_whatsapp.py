@@ -86,8 +86,16 @@ def whatsapp_status_api(request: HttpRequest) -> JsonResponse:
 def whatsapp_qrcode_api(request: HttpRequest) -> JsonResponse:
     if not syncwa_configurado():
         return JsonResponse({"detail": "Evolution não configurada no servidor."}, status=503)
+    refresh = request.GET.get("refresh") == "1"
     try:
-        data = _svc(request).get_qrcode()
+        if refresh:
+            data = _svc(request).get_qrcode(
+                max_attempts=1,
+                delay_seconds=0,
+                restart_if_missing=False,
+            )
+        else:
+            data = _svc(request).get_qrcode()
         return JsonResponse(data)
     except EvolutionConnectionError as exc:
         return JsonResponse({"detail": str(exc)}, status=503)

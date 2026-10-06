@@ -1779,6 +1779,8 @@ class WhatsAppPareamentoTests(TestCase):
         r = self.client.get(reverse("gestao_whatsapp"))
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "Gerar QR Code")
+        self.assertContains(r, "se renova sozinho")
+        self.assertContains(r, "refresh=1")
         self.assertContains(r, "nio_gc_tickets")
         self.assertContains(r, "Chip de envio")
         self.assertContains(r, "Instância da gestão")
@@ -1838,6 +1840,62 @@ class WhatsAppPareamentoTests(TestCase):
             r = self.client.get(reverse("gestao_whatsapp_qrcode"))
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json()["base64"].startswith("data:image/png;base64,"))
+
+    def test_disconnect_http_500_depois_de_sessao_aberta(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.evolution_connection import EvolutionConnectionService
+
+        svc = EvolutionConnectionService(instance_name="nio_u9")
+        leituras = {"n": 0}
+
+        def fake_request(method, path, payload=None, timeout=30, *, allow_statuses=(200, 201)):
+            if "/logout/" in path:
+                return {
+                    "_http_status": 500,
+                    "response": {"message": ["Error: Connection Closed"]},
+                }
+            if "/connectionState/" in path:
+                leituras["n"] += 1
+                estado = "open" if leituras["n"] == 1 else "close"
+                return {"_http_status": 200, "instance": {"state": estado}}
+            raise AssertionError(path)
+
+        with patch.object(svc, "_request", side_effect=fake_request) as req:
+            data = svc.disconnect()
+        self.assertTrue(data["success"])
+        self.assertFalse(data["status"]["connected"])
+        self.assertEqual(data["status"]["state"], "close")
+        self.assertTrue(any("/logout/" in call.args[1] for call in req.call_args_list))
+        self.assertFalse(any("/delete/" in call.args[1] for call in req.call_args_list))
+
+    def test_disconnect_connecting_reinicia_sem_logout(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.evolution_connection import EvolutionConnectionService
+
+        svc = EvolutionConnectionService(instance_name="nio_u9")
+
+        def fake_request(method, path, payload=None, timeout=30, *, allow_statuses=(200, 201)):
+            if "/connectionState/" in path:
+                return {"_http_status": 200, "instance": {"state": "connecting"}}
+            if "/restart/" in path:
+                return {
+                    "_http_status": 200,
+                    "base64": "data:image/png;base64,BBB",
+                    "count": 2,
+                }
+            raise AssertionError(path)
+
+        with patch.object(svc, "_request", side_effect=fake_request) as req:
+            data = svc.disconnect()
+        self.assertTrue(data["success"])
+        self.assertTrue(data["reset"])
+        self.assertTrue(data["base64"].startswith("data:image/png;base64,"))
+        self.assertEqual(data["status"]["state"], "connecting")
+        paths = [call.args[1] for call in req.call_args_list]
+        self.assertTrue(any("/restart/" in path for path in paths))
+        self.assertFalse(any("/logout/" in path for path in paths))
 
     def test_desconectar(self):
         from unittest.mock import patch
@@ -1936,6 +1994,79 @@ class WhatsAppPareamentoTests(TestCase):
         self.assertEqual(r.status_code, 200)
         create.assert_called()
         self.assertTrue(r.json()["base64"].startswith("data:image/png;base64,"))
+
+    def test_qr_reinicia_connecting_sem_codigo(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.evolution_connection import EvolutionConnectionService
+
+        svc = EvolutionConnectionService(instance_name="nio_u9")
+        connect_calls = {"n": 0}
+
+        def fake_request(method, path, payload=None, timeout=30, *, allow_statuses=(200, 201)):
+            if "/instance/connect/" in path:
+                connect_calls["n"] += 1
+                if connect_calls["n"] == 1:
+                    return {}
+                return {"base64": "data:image/png;base64,BBB", "count": 2}
+            return {"_http_status": 200}
+
+        with patch.object(
+            svc, "get_status", return_value={"state": "connecting", "connected": False}
+        ), patch.object(svc, "_request", side_effect=fake_request) as req:
+            data = svc.get_qrcode()
+        self.assertEqual(data["base64"], "data:image/png;base64,BBB")
+        paths = [call.args[1] for call in req.call_args_list]
+        self.assertTrue(any("/restart/" in path for path in paths))
+
+    def test_refresh_nao_reinicia_pareamento(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.evolution_connection import (
+            EvolutionConnectionError,
+            EvolutionConnectionService,
+        )
+
+        svc = EvolutionConnectionService(instance_name="nio_u9")
+        with patch.object(
+            svc, "get_status", return_value={"state": "connecting", "connected": False}
+        ), patch.object(svc, "_request", return_value={}), patch.object(
+            svc, "_reset_pairing"
+        ) as reset:
+            with self.assertRaises(EvolutionConnectionError):
+                svc.get_qrcode(max_attempts=1, delay_seconds=0, restart_if_missing=False)
+        reset.assert_not_called()
+
+    def test_qr_nao_altera_sessao_conectada(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.evolution_connection import EvolutionConnectionService
+
+        svc = EvolutionConnectionService(instance_name="nio_u9")
+        with patch.object(
+            svc, "get_status", return_value={"state": "open", "connected": True}
+        ), patch.object(svc, "_request") as req:
+            data = svc.get_qrcode()
+        req.assert_not_called()
+        self.assertTrue(data["connected"])
+        self.assertEqual(data["base64"], "")
+
+    def test_qrcode_refresh_consulta_sem_reiniciar(self):
+        from unittest.mock import patch
+
+        with patch(
+            "gestao.messaging.evolution_connection.EvolutionConnectionService.get_qrcode",
+            return_value={
+                "instanceName": "nio_gc_tickets",
+                "base64": "data:image/png;base64,AAA",
+                "count": 2,
+                "connected": False,
+            },
+        ) as qr:
+            r = self.client.get(reverse("gestao_whatsapp_qrcode"), {"refresh": "1"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(qr.call_args.kwargs["max_attempts"], 1)
+        self.assertFalse(qr.call_args.kwargs["restart_if_missing"])
 
 
 @override_settings(
