@@ -924,10 +924,14 @@ class FilaFiltroForm(forms.Form):
         empty_label="Todos parceiros",
         widget=forms.Select(attrs={"class": "fila-pick", "aria-label": "Parceiro"}),
     )
-    especialista = forms.ModelChoiceField(
+    gerencia = forms.ChoiceField(
         required=False,
-        queryset=get_user_model().objects.none(),
-        empty_label="Meus parceiros",
+        choices=[("", "Minha gerência")],
+        widget=forms.Select(attrs={"class": "fila-pick", "aria-label": "Gerência"}),
+    )
+    especialista = forms.ChoiceField(
+        required=False,
+        choices=[("", "Meus parceiros")],
         label="Especialista",
         widget=forms.Select(attrs={"class": "fila-pick", "aria-label": "Especialista"}),
     )
@@ -937,20 +941,35 @@ class FilaFiltroForm(forms.Form):
         widget=forms.Select(attrs={"class": "fila-pick", "aria-label": "Situação OSAB"}),
     )
 
-    def __init__(self, *args, parceiros_qs=None, especialistas_qs=None, situacoes_osab=None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        parceiros_qs=None,
+        especialistas_qs=None,
+        situacoes_osab=None,
+        gerencias=None,
+        rotulo_minha_gerencia="Minha gerência",
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         if parceiros_qs is not None:
             self.fields["parceiro"].queryset = parceiros_qs
-        if especialistas_qs is not None:
-            self.fields["especialista"].queryset = especialistas_qs
-        else:
-            from .acesso import qs_equipe
+        from .acesso import FILA_TODOS_PARCEIROS, GERENCIA_TODAS, qs_equipe
 
-            self.fields["especialista"].queryset = qs_equipe()
-        campo = self.fields["especialista"]
-        campo.label_from_instance = lambda u: (
-            (u.get_full_name() or u.first_name or u.username).strip()
-        )
+        escolhas_ger = [("", rotulo_minha_gerencia), (GERENCIA_TODAS, "Todas as gerências")]
+        for nome in gerencias or []:
+            escolhas_ger.append((nome, nome))
+        self.fields["gerencia"].choices = escolhas_ger
+
+        equipe = especialistas_qs if especialistas_qs is not None else qs_equipe()
+        escolhas_esp = [
+            ("", "Meus parceiros"),
+            (FILA_TODOS_PARCEIROS, "Todos os parceiros"),
+        ]
+        for usuario in equipe:
+            nome = (usuario.get_full_name() or usuario.first_name or usuario.username).strip()
+            escolhas_esp.append((str(usuario.pk), nome))
+        self.fields["especialista"].choices = escolhas_esp
         if situacoes_osab is None:
             from gestao.models import VendaOSAB
 

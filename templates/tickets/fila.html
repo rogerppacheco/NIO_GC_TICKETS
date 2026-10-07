@@ -35,6 +35,9 @@
       </svg>
       Excel
     </button>
+    <button type="submit" name="export" value="excel_todos" class="btn btn-secondary fila-excel" title="Baixar todas as demandas de todos os especialistas, de todas as gerências">
+      Excel todos
+    </button>
   </div>
 
   <div class="fila-toolbar">
@@ -43,9 +46,8 @@
   {% if form.situacao_osab %}
     {{ form.situacao_osab }}
   {% endif %}
-  {% if form.especialista %}
-    {{ form.especialista }}
-  {% endif %}
+  {{ form.gerencia }}
+  {{ form.especialista }}
   {{ form.parceiro }}
   {% if filtros_ativos %}
     <a class="btn btn-ghost fila-clear" href="{% url 'fila' %}">Limpar</a>

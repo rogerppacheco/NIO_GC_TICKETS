@@ -16,12 +16,18 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
 from .acesso import (
+    FILA_TODOS_PARCEIROS,
+    GERENCIA_TODAS,
+    destino_pos_login,
     eh_admin,
-    eh_gestor,
     eh_gerencia,
+    eh_gestor,
     escopo_gestao,
     escopo_parceiros,
+    especialistas_seletor_fila,
+    gerencia_de,
     gestor_required,
+    listar_gerencias,
     parceiro_de,
     parceiros_da_fila,
     parceiros_inativos_cadastro,
@@ -29,12 +35,10 @@ from .acesso import (
     parceiros_visiveis,
     pode_importar_bases,
     qs_equipe,
-    qs_equipe_da_gerencia,
     tem_acesso_interno,
     ticket_para_usuario,
     tickets_da_fila,
     tickets_visiveis,
-    destino_pos_login,
 )
 from .demanda_campos import (
     catalogo_campos_resposta,
@@ -258,6 +262,99 @@ ABAS_FILA = (
 )
 
 
+def _resposta_excel_tickets(tickets, nome_arquivo: str) -> HttpResponse:
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Tickets"
+
+    headers = [
+        "Protocolo", "Parceiro", "Contato", "Tipo", "Fila (Status)", "Prioridade",
+        "Solicitante", "Tel/WhatsApp", "Pedido", "Pedidos Extras",
+        "Situação OSAB", "Atualização OSAB",
+        "CPF/CNPJ", "TT", "TT Vendedor", "TT Backoffice",
+        "CEP", "Logradouro", "Nº", "Complemento", "Bairro", "Cidade", "UF",
+        "Data Desejada", "Turno", "Nome do Cliente", "Data Instalação",
+        "Data Alternativa", "Turno Alternativo", "SA", "Tipo Pendência",
+        "Recorrência", "Situação do Pedido", "Cargo", "RG", "E-mail",
+        "Descrição", "Observações",
+        "STATUS (Resultado)", "Resposta Pública", "Nota Interna", "Destino Encaminhamento",
+        "Atendente", "Criado Em", "Atualizado Em", "Primeiro Atendimento", "Resolvido Em",
+        "Tempo de Retorno", "Especialista", "Gerência",
+    ]
+    ws.append(headers)
+
+    def fmt_date(dt):
+        return dt.strftime("%d/%m/%Y %H:%M") if dt else ""
+
+    def fmt_date_only(dt):
+        return dt.strftime("%d/%m/%Y") if dt else ""
+
+    for t in tickets:
+        especialista = t.parceiro.especialista if t.parceiro else None
+        perfil = getattr(especialista, "perfil_staff", None) if especialista else None
+        ws.append([
+            t.protocolo,
+            t.parceiro.nome if t.parceiro else "",
+            t.contato.nome if t.contato else "",
+            t.get_tipo_display(),
+            t.get_status_display(),
+            t.get_prioridade_display(),
+            t.solicitante_nome,
+            t.solicitante_contato,
+            t.pedido or "",
+            t.pedidos_extras or "",
+            getattr(t, "osab_situacao", ""),
+            fmt_date(getattr(t, "osab_atualizacao", None)),
+            t.documento_cliente,
+            t.tt,
+            t.tt_vendedor,
+            t.tt_backoffice,
+            t.cep,
+            t.logradouro,
+            t.numero_fachada,
+            t.complemento,
+            t.bairro,
+            t.cidade,
+            t.uf,
+            fmt_date_only(t.data_desejada),
+            t.get_turno_display() if t.turno else "",
+            t.nome_cliente,
+            fmt_date_only(t.data_instalacao),
+            fmt_date_only(t.data_alternativa),
+            t.get_turno_alternativo_display() if t.turno_alternativo else "",
+            t.sa,
+            t.tipo_pendencia,
+            t.get_recorrencia_display() if t.recorrencia else "",
+            t.get_variacao_sem_slot_display() if t.variacao_sem_slot else "",
+            t.cargo_acesso,
+            t.rg,
+            t.email_solicitante,
+            t.descricao or "",
+            t.observacoes or "",
+            t.resultado_status or "",
+            t.resposta_publica or "",
+            t.nota_interna or "",
+            t.destino_encaminhamento,
+            t.atendente.get_full_name() or t.atendente.username if t.atendente else "",
+            fmt_date(t.criado_em),
+            fmt_date(t.atualizado_em),
+            fmt_date(t.primeiro_atendimento_em),
+            fmt_date(t.resolvido_em),
+            t.tempo_retorno_tratamento or "",
+            (especialista.get_full_name() or especialista.username) if especialista else "",
+            (perfil.gerencia if perfil else "") or "",
+        ])
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = f'attachment; filename="{nome_arquivo}"'
+    wb.save(response)
+    return response
+
+
 def _abas_da_fila(request: HttpRequest, contagens: dict[str, int], ativa: str) -> list[dict]:
     params = request.GET.copy()
     params.pop("export", None)
@@ -278,26 +375,42 @@ def _abas_da_fila(request: HttpRequest, contagens: dict[str, int], ativa: str) -
 
 @login_required
 def fila(request: HttpRequest) -> HttpResponse:
-    especialistas_qs = qs_equipe_da_gerencia(request.user)
     get_data = request.GET.copy()
+    gerencias = listar_gerencias() if tem_acesso_interno(request.user) else []
+    gerencia_raw = (get_data.get("gerencia") or "").strip()
+    if gerencia_raw and gerencia_raw != GERENCIA_TODAS and gerencia_raw not in gerencias:
+        gerencia_raw = ""
+        get_data.pop("gerencia", None)
+
+    especialistas_qs = especialistas_seletor_fila(request.user, gerencia_raw)
     spec_sel = None
+    escopo = "meus"
     raw_spec = (get_data.get("especialista") or "").strip()
-    if raw_spec.isdigit():
+    if raw_spec == FILA_TODOS_PARCEIROS:
+        escopo = "todos"
+    elif raw_spec.isdigit():
         spec_sel = especialistas_qs.filter(pk=int(raw_spec)).first()
         if not spec_sel:
             get_data.pop("especialista", None)
+    elif raw_spec:
+        get_data.pop("especialista", None)
 
-    parceiros_qs = parceiros_da_fila(request.user, spec_sel)
+    parceiros_qs = parceiros_da_fila(
+        request.user, spec_sel, escopo=escopo, gerencia=gerencia_raw
+    )
     raw_pdv = (get_data.get("parceiro") or "").strip()
     if raw_pdv.isdigit() and not parceiros_qs.filter(pk=int(raw_pdv)).exists():
         get_data.pop("parceiro", None)
 
+    nome_ger = gerencia_de(request.user)
     form = FilaFiltroForm(
         get_data or None,
         parceiros_qs=parceiros_qs,
         especialistas_qs=especialistas_qs,
+        gerencias=gerencias,
+        rotulo_minha_gerencia=f"Minha gerência ({nome_ger})" if nome_ger else "Minha gerência",
     )
-    qs = tickets_da_fila(request.user, spec_sel)
+    qs = tickets_da_fila(request.user, spec_sel, escopo=escopo, gerencia=gerencia_raw)
 
     if form.is_valid():
         q = form.cleaned_data.get("q") or ""
@@ -350,98 +463,29 @@ def fila(request: HttpRequest) -> HttpResponse:
     )
     filtros_ativos = any(
         (request.GET.get(k) or "").strip()
-        for k in ("q", "tipo", "parceiro", "especialista", "situacao_osab")
+        for k in ("q", "tipo", "parceiro", "especialista", "situacao_osab", "gerencia")
     ) or (request.GET.get("status") or "").strip() not in ("", StatusTicket.NOVO)
 
-    if request.GET.get("export") == "excel":
-        import openpyxl
-        
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Tickets Abertos"
-        
-        headers = [
-            "Protocolo", "Parceiro", "Contato", "Tipo", "Fila (Status)", "Prioridade",
-            "Solicitante", "Tel/WhatsApp", "Pedido", "Pedidos Extras",
-            "Situação OSAB", "Atualização OSAB",
-            "CPF/CNPJ", "TT", "TT Vendedor", "TT Backoffice", 
-            "CEP", "Logradouro", "Nº", "Complemento", "Bairro", "Cidade", "UF",
-            "Data Desejada", "Turno", "Nome do Cliente", "Data Instalação", 
-            "Data Alternativa", "Turno Alternativo", "SA", "Tipo Pendência", 
-            "Recorrência", "Situação do Pedido", "Cargo", "RG", "E-mail", 
-            "Descrição", "Observações",
-            "STATUS (Resultado)", "Resposta Pública", "Nota Interna", "Destino Encaminhamento", 
-            "Atendente", "Criado Em", "Atualizado Em", "Primeiro Atendimento", "Resolvido Em", 
-            "Tempo de Retorno"
-        ]
-        ws.append(headers)
-        
+    exportacao = (request.GET.get("export") or "").strip()
+    if exportacao == "excel_todos" and tem_acesso_interno(request.user):
+        todos = list(
+            Ticket.objects.select_related(
+                "parceiro",
+                "atendente",
+                "contato",
+                "parceiro__especialista",
+                "parceiro__especialista__perfil_staff",
+            ).order_by("-criado_em")
+        )
+        _anexar_osab_fila(todos)
+        nome = f"tickets_todos_{timezone.localtime().strftime('%Y%m%d_%H%M')}.xlsx"
+        return _resposta_excel_tickets(todos, nome)
+
+    if exportacao == "excel":
         export_list = list(qs if status_pedido == ABA_TODOS else abertos)
         _anexar_osab_fila(export_list)
-        
-        for t in export_list:
-            def fmt_date(dt):
-                return dt.strftime("%d/%m/%Y %H:%M") if dt else ""
-                
-            def fmt_date_only(dt):
-                return dt.strftime("%d/%m/%Y") if dt else ""
-
-            ws.append([
-                t.protocolo,
-                t.parceiro.nome if t.parceiro else "",
-                t.contato.nome if t.contato else "",
-                t.get_tipo_display(),
-                t.get_status_display(),
-                t.get_prioridade_display(),
-                t.solicitante_nome,
-                t.solicitante_contato,
-                t.pedido or "",
-                t.pedidos_extras or "",
-                getattr(t, 'osab_situacao', ''),
-                fmt_date(getattr(t, 'osab_atualizacao', None)),
-                t.documento_cliente,
-                t.tt,
-                t.tt_vendedor,
-                t.tt_backoffice,
-                t.cep,
-                t.logradouro,
-                t.numero_fachada,
-                t.complemento,
-                t.bairro,
-                t.cidade,
-                t.uf,
-                fmt_date_only(t.data_desejada),
-                t.get_turno_display() if t.turno else "",
-                t.nome_cliente,
-                fmt_date_only(t.data_instalacao),
-                fmt_date_only(t.data_alternativa),
-                t.get_turno_alternativo_display() if t.turno_alternativo else "",
-                t.sa,
-                t.tipo_pendencia,
-                t.get_recorrencia_display() if t.recorrencia else "",
-                t.get_variacao_sem_slot_display() if t.variacao_sem_slot else "",
-                t.cargo_acesso,
-                t.rg,
-                t.email_solicitante,
-                t.descricao or "",
-                t.observacoes or "",
-                t.resultado_status or "",
-                t.resposta_publica or "",
-                t.nota_interna or "",
-                t.destino_encaminhamento,
-                t.atendente.get_full_name() or t.atendente.username if t.atendente else "",
-                fmt_date(t.criado_em),
-                fmt_date(t.atualizado_em),
-                fmt_date(t.primeiro_atendimento_em),
-                fmt_date(t.resolvido_em),
-                t.tempo_retorno_tratamento or "",
-            ])
-            
-        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        filename = f"tickets_abertos_{timezone.localtime().strftime('%Y%m%d_%H%M')}.xlsx"
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
-        wb.save(response)
-        return response
+        nome = f"tickets_abertos_{timezone.localtime().strftime('%Y%m%d_%H%M')}.xlsx"
+        return _resposta_excel_tickets(export_list, nome)
 
     tickets = list(qs[:200])
     _anexar_osab_fila(tickets)

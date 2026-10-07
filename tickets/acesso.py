@@ -89,48 +89,91 @@ def ids_parceiros_da_gerencia(gerencia: str):
     )
 
 
-def qs_equipe_da_gerencia(user):
-    """Equipe da gerência selecionada (admin) ou da gerência do perfil."""
+FILA_TODOS_PARCEIROS = "__todos__"
+
+
+def _equipe_por_nome_gerencia(gerencia: str):
     qs = qs_equipe()
-    gerencia = gerencia_de(user)
-    if not gerencia:
-        return qs if eh_admin(user) else qs.none()
-    ids_perfil = qs.filter(perfil_staff__gerencia__iexact=gerencia).values("pk")
+    texto = (gerencia or "").strip()
+    if not texto:
+        return qs.none()
+    ids_perfil = qs.filter(perfil_staff__gerencia__iexact=texto).values("pk")
     ids_pdv = (
-        ids_parceiros_da_gerencia(gerencia)
+        ids_parceiros_da_gerencia(texto)
         .exclude(especialista_id=None)
         .values("especialista_id")
     )
     return qs.filter(Q(pk__in=ids_perfil) | Q(pk__in=ids_pdv)).distinct()
 
 
-def especialista_alvo_fila(user, especialista=None):
+def qs_equipe_da_gerencia(user):
+    """Equipe da gerência selecionada (admin) ou da gerência do perfil."""
+    gerencia = gerencia_de(user)
+    if not gerencia:
+        return qs_equipe() if eh_admin(user) else qs_equipe().none()
+    return _equipe_por_nome_gerencia(gerencia)
+
+
+def especialistas_seletor_fila(user, gerencia: str = ""):
+    """Quem aparece no seletor da fila. Vazio = gerência do usuário."""
+    if not getattr(user, "is_authenticated", False) or not tem_acesso_interno(user):
+        return qs_equipe().none()
+    if gerencia == GERENCIA_TODAS:
+        return qs_equipe()
+    if (gerencia or "").strip():
+        return _equipe_por_nome_gerencia(gerencia)
+    return qs_equipe_da_gerencia(user)
+
+
+def especialista_alvo_fila(user, especialista=None, gerencia: str = ""):
     """Quem está sendo coberto na fila. Sem seleção válida, o próprio usuário."""
     if especialista is None or getattr(especialista, "pk", None) == getattr(user, "pk", None):
         return user
     if not getattr(user, "is_authenticated", False) or not tem_acesso_interno(user):
         return user
-    if qs_equipe_da_gerencia(user).filter(pk=especialista.pk).exists():
+    if especialistas_seletor_fila(user, gerencia).filter(pk=especialista.pk).exists():
         return especialista
     return user
 
 
-def parceiros_da_fila(user, especialista=None):
-    alvo = especialista_alvo_fila(user, especialista)
-    return Parceiro.objects.filter(especialista=alvo, ativo=True)
+def parceiros_da_fila(user, especialista=None, escopo: str = "meus", gerencia: str = ""):
+    if escopo == "todos" and tem_acesso_interno(user):
+        qs = Parceiro.objects.filter(ativo=True)
+        if gerencia == GERENCIA_TODAS or (
+            not (gerencia or "").strip() and eh_admin(user) and not gerencia_de(user)
+        ):
+            return qs.order_by("nome")
+        nome = (gerencia or "").strip() or gerencia_de(user)
+        if nome:
+            return qs.filter(pk__in=ids_parceiros_da_gerencia(nome).values("id")).order_by(
+                "nome"
+            )
+        return qs.filter(especialista=user).order_by("nome")
+    alvo = especialista_alvo_fila(user, especialista, gerencia)
+    return Parceiro.objects.filter(especialista=alvo, ativo=True).order_by("nome")
 
 
-def tickets_da_fila(user, especialista=None):
-    """Fila padrão: só os PDVs do usuário. Com especialista, os PDVs dele (mesma gerência)."""
+def tickets_da_fila(user, especialista=None, escopo: str = "meus", gerencia: str = ""):
+    """Fila padrão: só os PDVs do usuário. 'todos' abre a gerência escolhida ou todas."""
     qs = Ticket.objects.select_related(
         "parceiro",
         "atendente",
+        "contato",
         "parceiro__especialista",
         "parceiro__especialista__perfil_staff",
     )
     if not getattr(user, "is_authenticated", False) or not tem_acesso_interno(user):
         return qs.none()
-    alvo = especialista_alvo_fila(user, especialista)
+    if escopo == "todos":
+        if gerencia == GERENCIA_TODAS or (
+            not (gerencia or "").strip() and eh_admin(user) and not gerencia_de(user)
+        ):
+            return qs
+        nome = (gerencia or "").strip() or gerencia_de(user)
+        if not nome:
+            return qs.filter(parceiro__especialista=user)
+        return qs.filter(parceiro__in=ids_parceiros_da_gerencia(nome))
+    alvo = especialista_alvo_fila(user, especialista, gerencia)
     return qs.filter(parceiro__especialista=alvo)
 
 
@@ -327,14 +370,12 @@ def parceiros_inativos_cadastro(user):
 
 
 def pode_ver_ticket(user, ticket: Ticket) -> bool:
+    if not ticket:
+        return False
     if tickets_visiveis(user).filter(pk=ticket.pk).exists():
         return True
-    if not tem_acesso_interno(user) or not ticket or not getattr(ticket, "parceiro", None):
-        return False
-    spec_id = ticket.parceiro.especialista_id
-    if not spec_id:
-        return False
-    return qs_equipe_da_gerencia(user).filter(pk=spec_id).exists()
+    # Equipe interna consulta qualquer demanda (fila de todas as gerências).
+    return tem_acesso_interno(user)
 
 
 def ticket_para_usuario(user, protocolo: str) -> Ticket:

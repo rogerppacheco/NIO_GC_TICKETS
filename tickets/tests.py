@@ -635,12 +635,12 @@ class EspecialistaAcessoTests(TestCase):
         self.assertEqual(tickets_visiveis(self.spec).count(), 1)
 
 
-    def test_especialista_nao_abre_ticket_alheio(self):
+    def test_especialista_consulta_ticket_de_outro_parceiro(self):
         self.client.force_login(self.spec)
         r = self.client.get(
             reverse("ticket_detalhe", args=[self.ticket_outro.protocolo])
         )
-        self.assertEqual(r.status_code, 404)
+        self.assertEqual(r.status_code, 200)
 
     def test_criar_especialista_pelo_gestor(self):
         self.client.force_login(self.gestor)
@@ -1623,10 +1623,83 @@ class FilaCoberturaTests(TestCase):
         self.assertEqual(abrir.status_code, 200)
         self.assertContains(abrir, "Selecione a situação")
 
-    def test_especialista_nao_abre_ticket_de_outra_gerencia(self):
+    def test_especialista_abre_ticket_de_outra_gerencia(self):
         self.client.force_login(self.ana)
         r = self.client.get(reverse("ticket_detalhe", args=[self.ticket_carla.protocolo]))
-        self.assertEqual(r.status_code, 404)
+        self.assertEqual(r.status_code, 200)
+
+    def test_todos_os_parceiros_fica_na_propria_gerencia(self):
+        self.client.force_login(self.ana)
+        r = self.client.get(reverse("fila"), {"especialista": "__todos__"})
+        self.assertEqual(
+            set(self._protocolos(r)),
+            {self.ticket_ana.protocolo, self.ticket_bruno.protocolo},
+        )
+        self.assertContains(r, "Todos os parceiros")
+        self.assertNotContains(r, self.ticket_carla.protocolo)
+
+    def test_todas_as_gerencias_lista_todos_os_especialistas(self):
+        self.client.force_login(self.ana)
+        r = self.client.get(
+            reverse("fila"),
+            {"gerencia": "__todas__", "especialista": "__todos__"},
+        )
+        self.assertEqual(
+            set(self._protocolos(r)),
+            {
+                self.ticket_admin.protocolo,
+                self.ticket_ana.protocolo,
+                self.ticket_bruno.protocolo,
+                self.ticket_carla.protocolo,
+            },
+        )
+        self.assertContains(r, "Todas as gerências")
+        self.assertContains(r, f'value="{self.carla.pk}"')
+
+    def test_gerencia_especifica_mostra_o_especialista_de_la(self):
+        self.client.force_login(self.ana)
+        r = self.client.get(
+            reverse("fila"),
+            {"gerencia": "SP METRO", "especialista": self.carla.pk},
+        )
+        self.assertEqual(self._protocolos(r), [self.ticket_carla.protocolo])
+
+    def test_todas_as_gerencias_sem_trocar_carteira_continua_nos_meus(self):
+        self.client.force_login(self.ana)
+        r = self.client.get(reverse("fila"), {"gerencia": "__todas__"})
+        self.assertEqual(self._protocolos(r), [self.ticket_ana.protocolo])
+        self.assertContains(r, f'value="{self.carla.pk}"')
+
+    def test_excel_padrao_so_os_meus(self):
+        from io import BytesIO
+
+        import openpyxl
+
+        self.client.force_login(self.ana)
+        r = self.client.get(reverse("fila"), {"export": "excel"})
+        self.assertEqual(r.status_code, 200)
+        wb = openpyxl.load_workbook(BytesIO(r.content))
+        textos = [c for row in wb.active.iter_rows(values_only=True) for c in row]
+        self.assertIn(self.ticket_ana.protocolo, textos)
+        self.assertNotIn(self.ticket_carla.protocolo, textos)
+
+    def test_excel_todos_traz_todas_as_gerencias(self):
+        from io import BytesIO
+
+        import openpyxl
+
+        self.client.force_login(self.ana)
+        r = self.client.get(reverse("fila"), {"export": "excel_todos"})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("tickets_todos_", r["Content-Disposition"])
+        wb = openpyxl.load_workbook(BytesIO(r.content))
+        textos = [c for row in wb.active.iter_rows(values_only=True) for c in row]
+        self.assertIn("Especialista", textos)
+        self.assertIn("Gerência", textos)
+        self.assertIn(self.ticket_ana.protocolo, textos)
+        self.assertIn(self.ticket_bruno.protocolo, textos)
+        self.assertIn(self.ticket_carla.protocolo, textos)
+        self.assertIn("SP METRO", textos)
 
     def test_gerencia_fila_padrao_so_os_seus(self):
         self.client.force_login(self.ger)
