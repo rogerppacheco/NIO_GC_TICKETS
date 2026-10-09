@@ -11,9 +11,12 @@
     viacep: root.dataset.viacepUrl,
     nominatim: root.dataset.nominatimUrl,
     config: root.dataset.configUrl,
+    pdvs: root.dataset.pdvsUrl,
   };
   var canConfig = root.dataset.canConfig === "1";
   var blocos = [];
+  var pdvsCache = [];
+  var pdvDetalhe = { id: "", codigo: "", nome: "" };
 
   function csrfToken() {
     var el = document.querySelector("[name=csrfmiddlewaretoken]");
@@ -355,6 +358,99 @@
     }
   }
 
+  function rotuloPdv(p) {
+    var codigo = (p.codigo_pdv || "").trim();
+    var nome = (p.nome || "").trim();
+    if (codigo && nome) return codigo + " — " + nome;
+    return codigo || nome || ("PDV " + p.id);
+  }
+
+  function pdvSelecionado() {
+    var formSel = document.getElementById("inp_pdv");
+    var modalSel = document.getElementById("vtop_pdv");
+    return String((formSel && formSel.value) || (modalSel && modalSel.value) || "");
+  }
+
+  function opcoesPdv(termo, selecionado) {
+    var q = (termo || "").trim().toLowerCase();
+    var lista = pdvsCache.filter(function (p) {
+      if (!q || String(p.id) === String(selecionado || "")) return true;
+      return rotuloPdv(p).toLowerCase().indexOf(q) >= 0;
+    });
+    if (pdvDetalhe.id && !lista.some(function (p) { return String(p.id) === pdvDetalhe.id; })) {
+      var rotuloAtual = ((pdvDetalhe.codigo || "") + " " + (pdvDetalhe.nome || "")).toLowerCase();
+      if (!q || rotuloAtual.indexOf(q) >= 0 || String(selecionado) === pdvDetalhe.id) {
+        lista = [{
+          id: pdvDetalhe.id,
+          codigo_pdv: pdvDetalhe.codigo,
+          nome: pdvDetalhe.nome,
+        }].concat(lista);
+      }
+    }
+    return lista;
+  }
+
+  function renderSelectPdv(sel, termo) {
+    if (!sel) return;
+    var atual = sel.value || "";
+    sel.innerHTML = '<option value="">Selecione o PDV</option>';
+    opcoesPdv(termo, atual).forEach(function (p) {
+      var opt = document.createElement("option");
+      opt.value = String(p.id);
+      opt.textContent = rotuloPdv(p);
+      sel.appendChild(opt);
+    });
+    if (atual && Array.prototype.some.call(sel.options, function (o) { return o.value === String(atual); })) {
+      sel.value = String(atual);
+    }
+  }
+
+  function atualizarHintPdv() {
+    var hint = document.getElementById("inp_pdv_hint");
+    var sel = document.getElementById("inp_pdv");
+    if (!hint || !sel) return;
+    var opt = sel.options[sel.selectedIndex];
+    if (sel.value && opt) hint.textContent = "Código SAP do Cadastro: " + opt.textContent;
+    else hint.textContent = "Este código vai para o Cadastro do SmartRiser. Sem PDV vinculado o preenchimento não inicia.";
+  }
+
+  function sincronizarPdvModal() {
+    var modalSel = document.getElementById("vtop_pdv");
+    if (!modalSel) return;
+    var formSel = document.getElementById("inp_pdv");
+    var valor = (formSel && formSel.value) || "";
+    var busca = document.getElementById("vtop_pdv_busca");
+    renderSelectPdv(modalSel, busca ? busca.value : "");
+    if (valor && Array.prototype.some.call(modalSel.options, function (o) { return o.value === valor; })) {
+      modalSel.value = valor;
+    }
+  }
+
+  function aplicarPdvSelecionado(id) {
+    var valor = id ? String(id) : "";
+    var formSel = document.getElementById("inp_pdv");
+    if (formSel) {
+      var busca = document.getElementById("inp_pdv_busca");
+      renderSelectPdv(formSel, busca ? busca.value : "");
+      if (valor && Array.prototype.some.call(formSel.options, function (o) { return o.value === valor; })) {
+        formSel.value = valor;
+      } else {
+        formSel.value = "";
+      }
+    }
+    sincronizarPdvModal();
+    atualizarHintPdv();
+  }
+
+  function carregarPdvs() {
+    if (!urls.pdvs || !document.getElementById("inp_pdv")) return;
+    fetchJson(urls.pdvs).then(function (body) {
+      if (!body._ok || !Array.isArray(body.data)) return;
+      pdvsCache = body.data;
+      aplicarPdvSelecionado(pdvDetalhe.id || pdvSelecionado());
+    });
+  }
+
   function cancelarEdicao() {
     document.getElementById("form-vertical").reset();
     document.getElementById("edit_mode_id").value = "";
@@ -368,6 +464,11 @@
     setPreview("preview-fachada", "");
     document.getElementById("resumoEnvio").hidden = true;
     document.getElementById("inp_observacao_form").value = "";
+    pdvDetalhe = { id: "", codigo: "", nome: "" };
+    var buscaPdv = document.getElementById("inp_pdv_busca");
+    if (buscaPdv) buscaPdv.value = "";
+    renderSelectPdv(document.getElementById("inp_pdv"), "");
+    aplicarPdvSelecionado("");
     blocos = [];
     atualizarTabelaBlocos();
     vtopOcultarControles();
@@ -400,6 +501,15 @@
       setPreview("preview-carta", d.link_carta_sindico);
       setPreview("preview-fachada", d.link_fotos_fachada);
       document.getElementById("inp_observacao_form").value = d.observacao_form || d.observacao || "";
+      pdvDetalhe = {
+        id: d.parceiro_id ? String(d.parceiro_id) : "",
+        codigo: d.parceiro_codigo || "",
+        nome: d.parceiro_nome || "",
+      };
+      var buscaPdvEdit = document.getElementById("inp_pdv_busca");
+      if (buscaPdvEdit) buscaPdvEdit.value = "";
+      renderSelectPdv(document.getElementById("inp_pdv"), "");
+      aplicarPdvSelecionado(pdvDetalhe.id);
       blocos = d.blocos || [];
       atualizarTabelaBlocos();
       document.getElementById("tab-nova-label").textContent = "Editar solicitação";
@@ -595,6 +705,8 @@
       return;
     }
     vtopPopularSelectBlocos();
+    renderSelectPdv(vtopEl("vtop_pdv"), (vtopEl("vtop_pdv_busca") || {}).value || "");
+    sincronizarPdvModal();
     vtopAlerta(alertaMsg || "", "");
     vtopEl("vtop_usuario").value = "";
     vtopEl("vtop_senha").value = "";
@@ -634,8 +746,19 @@
     }
 
     var payload = {};
+    var pdvId = pdvSelecionado();
+    if (bloco && document.getElementById("inp_pdv") && !pdvId) {
+      vtopAlerta(
+        "Acionamento sem PDV vinculado: não há código SAP para o Cadastro do SmartRiser.",
+        "erro"
+      );
+      var campoPdv = vtopEl("vtop_pdv");
+      if (campoPdv) campoPdv.focus();
+      return;
+    }
     if (usuario) payload.vtop_usuario = usuario;
     if (senha) payload.vtop_senha = senha;
+    if (pdvId) payload.parceiro_id = pdvId;
     if (bloco) payload.bloco = bloco;
     else payload.somente_ate = "login";
 
@@ -655,7 +778,15 @@
           return;
         }
         if (!body._ok) {
-          alert(body.error || (body.state && body.state.message) || "Não foi possível iniciar a automação.");
+          var msgErro = body.error || (body.state && body.state.message) || "Não foi possível iniciar a automação.";
+          var faltaPdv = body.faltando && body.faltando.indexOf("codigo_sap") >= 0;
+          if (faltaPdv) {
+            vtopAlerta(msgErro, "erro");
+            var campo = vtopEl("vtop_pdv");
+            if (campo) campo.focus();
+          } else {
+            alert(msgErro);
+          }
           btn.disabled = false;
           return;
         }
@@ -811,6 +942,44 @@
   document.getElementById("btn-submit").addEventListener("click", enviarFormulario);
   document.getElementById("btn-cancelar-edicao").addEventListener("click", cancelarEdicao);
   document.getElementById("inp_cep").addEventListener("blur", buscarCep);
+  var inpPdv = document.getElementById("inp_pdv");
+  if (inpPdv) {
+    inpPdv.addEventListener("change", function () {
+      var opt = inpPdv.options[inpPdv.selectedIndex];
+      var texto = opt ? opt.textContent : "";
+      var partes = texto.split(" — ");
+      pdvDetalhe = {
+        id: inpPdv.value,
+        codigo: (partes[0] || "").trim(),
+        nome: partes.slice(1).join(" — ").trim(),
+      };
+      sincronizarPdvModal();
+      atualizarHintPdv();
+    });
+  }
+  var buscaPdv = document.getElementById("inp_pdv_busca");
+  if (buscaPdv) {
+    buscaPdv.addEventListener("input", function () {
+      renderSelectPdv(inpPdv, buscaPdv.value);
+      atualizarHintPdv();
+    });
+  }
+  var vtopPdv = document.getElementById("vtop_pdv");
+  if (vtopPdv) {
+    vtopPdv.addEventListener("change", function () {
+      if (inpPdv && inpPdv.value !== vtopPdv.value) {
+        inpPdv.value = vtopPdv.value;
+        inpPdv.dispatchEvent(new Event("change"));
+      }
+    });
+  }
+  var vtopBuscaPdv = document.getElementById("vtop_pdv_busca");
+  if (vtopBuscaPdv) {
+    vtopBuscaPdv.addEventListener("input", function () {
+      renderSelectPdv(vtopPdv, vtopBuscaPdv.value);
+    });
+  }
+  carregarPdvs();
   var btnCfg = document.getElementById("btn-cfg-salvar");
   if (btnCfg) btnCfg.addEventListener("click", salvarConfig);
   document.getElementById("btn-st-salvar").addEventListener("click", salvarStatus);

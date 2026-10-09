@@ -176,6 +176,11 @@ urlpatterns = [
         vertical_views.vertical_api_usuarios,
         name="vertical_api_usuarios",
     ),
+    path(
+        "abrir/vertical/api/pdvs/",
+        vertical_views.vertical_api_pdvs,
+        name="vertical_api_pdvs",
+    ),
     # SmartRiser / V.top — automação a partir do Projeto Vertical
     path(
         "abrir/vertical/api/solicitacoes/<int:pk>/vtop/iniciar/",

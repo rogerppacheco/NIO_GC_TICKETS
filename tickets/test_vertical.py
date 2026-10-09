@@ -69,6 +69,8 @@ class VerticalPortalTests(TestCase):
         self.assertNotContains(r, "Meus acionamentos")
         self.assertContains(r, 'data-acionado-por="Spec"')
         self.assertContains(r, 'id="inp_acionado_por"')
+        self.assertContains(r, 'id="inp_pdv"')
+        self.assertContains(r, 'id="vtop_pdv"')
         self.assertNotContains(r, 'name="criado_por_id"')
         self.assertNotContains(r, "Configuração de resumo")
 
@@ -91,6 +93,7 @@ class VerticalPortalTests(TestCase):
         self.assertContains(r, 'data-acionado-por="Contato Vertical"')
         self.assertContains(r, 'value="Contato Vertical"')
         self.assertContains(r, "Meus acionamentos")
+        self.assertNotContains(r, 'id="inp_pdv"')
         self.assertNotContains(r, 'name="criado_por_id"')
 
     def test_criar_e_dashboard(self):
@@ -172,6 +175,68 @@ class VerticalPortalTests(TestCase):
         item.refresh_from_db()
         self.assertEqual(item.status, SolicitacaoVertical.Status.EM_PROJETO)
         self.assertEqual(item.observacao, "ok")
+
+    def test_gestor_vincula_pdv_na_edicao(self):
+        item = SolicitacaoVertical.objects.create(
+            nome_condominio="Cond sem PDV",
+            nome_sindico="Ana",
+            contato_sindico="31977776666",
+            cep="30140071",
+            numero="50",
+            criado_por=self.gestor,
+        )
+        self.client.force_login(self.gestor)
+        lista = self.client.get(reverse("vertical_api_pdvs"))
+        self.assertEqual(lista.status_code, 200)
+        ids = [p["id"] for p in lista.json()["data"]]
+        self.assertIn(self.pdv.id, ids)
+        self.assertEqual(lista.json()["data"][0]["codigo_pdv"], "VERT1")
+
+        r = self.client.patch(
+            reverse("vertical_api_solicitacao", args=[item.id]),
+            data='{"parceiro_id": %d}' % self.pdv.id,
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 200, r.content)
+        item.refresh_from_db()
+        self.assertEqual(item.parceiro_id, self.pdv.id)
+        detalhe = r.json()["data"]["item"]
+        self.assertEqual(detalhe["parceiro_codigo"], "VERT1")
+        self.assertEqual(detalhe["parceiro_nome"], "PDV Vertical")
+
+    def test_especialista_so_vincula_pdv_da_carteira(self):
+        self.pdv.especialista = self.spec
+        self.pdv.save(update_fields=["especialista"])
+        outro = Parceiro.objects.create(codigo_pdv="VERT2", nome="PDV Alheio")
+        item = SolicitacaoVertical.objects.create(
+            nome_condominio="Meu Cond",
+            nome_sindico="Ana",
+            contato_sindico="31977776666",
+            cep="30140071",
+            numero="50",
+            criado_por=self.spec,
+        )
+        self.client.force_login(self.spec)
+        visiveis = [p["codigo_pdv"] for p in self.client.get(reverse("vertical_api_pdvs")).json()["data"]]
+        self.assertEqual(visiveis, ["VERT1"])
+        negado = self.client.patch(
+            reverse("vertical_api_solicitacao", args=[item.id]),
+            data='{"parceiro_id": %d}' % outro.id,
+            content_type="application/json",
+        )
+        self.assertEqual(negado.status_code, 422)
+        ok = self.client.patch(
+            reverse("vertical_api_solicitacao", args=[item.id]),
+            data='{"parceiro_id": %d}' % self.pdv.id,
+            content_type="application/json",
+        )
+        self.assertEqual(ok.status_code, 200, ok.content)
+        item.refresh_from_db()
+        self.assertEqual(item.parceiro_id, self.pdv.id)
+
+    def test_pdv_nao_lista_nem_troca_pdv(self):
+        self._login_pdv()
+        self.assertEqual(self.client.get(reverse("vertical_api_pdvs")).status_code, 403)
 
     def test_especialista_nao_altera_status_nem_exclui(self):
         item = SolicitacaoVertical.objects.create(
@@ -450,6 +515,21 @@ class VerticalSmartRiserTests(TestCase):
 
         self.item.parceiro = None
         self.assertEqual(codigo_sap_do_acionamento(self.item), "1069102")
+
+    @patch("tickets.vertical_vtop_views.get_vtop_service")
+    def test_iniciar_grava_pdv_e_usa_sap(self, get_svc):
+        self._gravar([{"nome": "BLOCO 01", "andares": 2, "aptos": 4, "total": 8}])
+        SolicitacaoVertical.objects.filter(pk=self.item.pk).update(
+            parceiro=None, contato=None, criado_por=self.gestor
+        )
+        get_svc.return_value.iniciar.return_value = {"ok": True, "state": {"status": "starting", "extras": {}}}
+        self.client.force_login(self.gestor)
+        r = self._iniciar('{"bloco": "BLOCO 01", "parceiro_id": %d}' % self.pdv.id)
+        self.assertEqual(r.status_code, 200, r.content)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.parceiro_id, self.pdv.id)
+        payload = get_svc.return_value.iniciar.call_args.kwargs["payload"]
+        self.assertEqual(payload["codigo_sap"], "1069102")
 
     def test_iniciar_sem_pdv_bloqueia(self):
         self._gravar([{"nome": "BLOCO 01", "andares": 2, "aptos": 4, "total": 8}])

@@ -21,6 +21,7 @@
   data-viacep-url="{% url 'vertical_api_viacep' 'CEP' %}"
   data-nominatim-url="{% url 'vertical_api_nominatim' %}"
   data-config-url="{% url 'vertical_api_config' %}"
+  data-pdvs-url="{% url 'vertical_api_pdvs' %}"
   data-can-config="{% if can_config %}1{% else %}0{% endif %}"
   data-visao-equipe="{% if visao_equipe %}1{% else %}0{% endif %}"
   data-acionado-por="{{ acionado_por_nome }}"
@@ -98,6 +99,15 @@
           <label>Acionado por
             <input type="text" id="inp_acionado_por" class="inp" value="{{ acionado_por_nome }}" readonly>
           </label>
+          {% if visao_equipe %}
+          <label>PDV (código SAP) *
+            <input type="search" id="inp_pdv_busca" class="inp" placeholder="Buscar código ou nome do PDV" autocomplete="off">
+            <select name="parceiro_id" id="inp_pdv" class="inp" required>
+              <option value="">Selecione o PDV</option>
+            </select>
+            <span class="help" id="inp_pdv_hint">Este código vai para o Cadastro do SmartRiser. Sem PDV vinculado o preenchimento não inicia.</span>
+          </label>
+          {% endif %}
         </div>
 
         <div class="vertical-grid">
@@ -276,6 +286,13 @@
       com o app <strong>V.tal Pass</strong> — o cadastro começa sozinho após a leitura.
     </p>
     <div id="vtop-modal-alerta" class="vtop-alerta" role="alert" hidden></div>
+    <label>PDV (código SAP) *
+      <input type="search" id="vtop_pdv_busca" class="inp" placeholder="Buscar código ou nome do PDV" autocomplete="off">
+      <select id="vtop_pdv" class="inp">
+        <option value="">Selecione o PDV</option>
+      </select>
+      <span class="help">Sem PDV vinculado não há código SAP para o Cadastro do SmartRiser.</span>
+    </label>
     <label>Bloco / complemento
       <select id="vtop_bloco" class="inp">
         <option value="">— só testar login (sessão) —</option>

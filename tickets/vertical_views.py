@@ -21,11 +21,13 @@ from tickets.vertical_services import (
     consultar_nominatim,
     consultar_viacep,
     ler_config_resumo,
+    listar_pdvs_acionamento,
     nome_usuario,
     payload_criar,
     parceiro_do_pedido,
     pode_gestao_vertical,
     qs_solicitacoes,
+    resolver_parceiro_informado,
     salvar_config_resumo,
     serializar_solicitacao,
     _int,
@@ -153,6 +155,17 @@ def vertical_api_solicitacoes(request: HttpRequest) -> JsonResponse:
     if not tem_acesso_interno(request.user):
         _parceiro, contato = _portal_sessao(request)
 
+    parceiro = parceiro_do_pedido(request)
+    if tem_acesso_interno(request.user) and str(dados.get("parceiro_id") or "").strip():
+        parceiro, erro_pdv = resolver_parceiro_informado(request.user, dados.get("parceiro_id"))
+        if erro_pdv:
+            return _json_error(
+                "validation_error",
+                erro_pdv,
+                status=422,
+                fields={"parceiro_id": erro_pdv},
+            )
+
     blocos = payload.pop("_blocos")
     item = SolicitacaoVertical.objects.create(
         **payload,
@@ -161,14 +174,14 @@ def vertical_api_solicitacoes(request: HttpRequest) -> JsonResponse:
         destinatarios_resumo=cfg["destinatarios"] if cfg["ativo"] else "",
         criado_por=request.user,
         contato=contato,
-        parceiro=parceiro_do_pedido(request),
+        parceiro=parceiro,
         status=SolicitacaoVertical.Status.SEM_TRATAMENTO,
     )
     if blocos:
         gravar_blocos(item, blocos)
         item.refresh_from_db()
         
-    parceiro_obj = parceiro_do_pedido(request)
+    parceiro_obj = item.parceiro
     protocolo_str = ""
     if parceiro_obj:
         from tickets.models import Ticket, TipoDemanda
@@ -252,6 +265,16 @@ def vertical_api_solicitacao(request: HttpRequest, pk: int) -> JsonResponse:
         item.observacao = _texto(dados.get("observacao_form"), 4000)
     elif "observacao" in dados:
         item.observacao = _texto(dados.get("observacao"), 4000)
+    if tem_acesso_interno(request.user) and "parceiro_id" in dados:
+        pdv, erro_pdv = resolver_parceiro_informado(request.user, dados.get("parceiro_id"))
+        if erro_pdv:
+            return _json_error(
+                "validation_error",
+                erro_pdv,
+                status=422,
+                fields={"parceiro_id": erro_pdv},
+            )
+        item.parceiro = pdv
     item.save()
     blocos = payload.get("_blocos") or []
     if dados.get("dados_blocos_json") or dados.get("input_blocos_json"):
@@ -309,6 +332,15 @@ def vertical_api_config(request: HttpRequest) -> JsonResponse:
     dados = _dados_request(request)
     ativo = str(dados.get("ativo", "1")).lower() not in {"0", "false", "off", "nao", "não"}
     return _json_ok(salvar_config_resumo(_texto(dados.get("destinatarios"), 500), ativo))
+
+
+@login_required
+@require_GET
+def vertical_api_pdvs(request: HttpRequest) -> JsonResponse:
+    """PDVs que a equipe pode vincular na edição do acionamento."""
+    if not tem_acesso_interno(request.user):
+        return _json_error("forbidden", "Acesso negado.", status=403)
+    return _json_ok(listar_pdvs_acionamento(request.user))
 
 
 @login_required

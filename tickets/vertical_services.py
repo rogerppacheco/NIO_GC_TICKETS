@@ -13,7 +13,7 @@ from typing import Any
 from django.db.models import Q, QuerySet, Sum
 from django.http import HttpRequest
 
-from tickets.acesso import eh_gerencia, eh_gestor, parceiro_de
+from tickets.acesso import eh_gerencia, eh_gestor, parceiro_de, parceiros_visiveis
 from tickets.models import BlocoVertical, SolicitacaoVertical
 
 logger = logging.getLogger(__name__)
@@ -142,6 +142,9 @@ def serializar_solicitacao(
         "criado_por_id": item.criado_por_id,
         "criado_por_nome": nome_acionado(item),
         "parceiro_id": item.parceiro_id,
+        "parceiro_codigo": (
+            item.parceiro.codigo_pdv if item.parceiro_id and item.parceiro else ""
+        ),
         "parceiro_nome": (item.parceiro.nome if item.parceiro_id and item.parceiro else ""),
     }
     if detalhe:
@@ -471,3 +474,29 @@ def consultar_nominatim(q: str = "", postalcode: str = "") -> list[dict[str, Any
 
 def parceiro_do_pedido(request) -> Any:
     return parceiro_de(request.user) if getattr(request, "user", None) else None
+
+
+def listar_pdvs_acionamento(user) -> list[dict[str, Any]]:
+    """PDVs que o usuário pode vincular a um acionamento (código SAP do SmartRiser)."""
+    return [
+        {"id": p.id, "codigo_pdv": p.codigo_pdv, "nome": p.nome}
+        for p in parceiros_visiveis(user).filter(ativo=True).order_by("nome", "codigo_pdv")
+    ]
+
+
+def resolver_parceiro_informado(user, bruto: Any):
+    """PDV explícito do formulário. Retorna (parceiro, erro)."""
+    texto = str(bruto or "").strip()
+    if not texto:
+        return None, (
+            "Selecione o PDV do acionamento. Sem ele não há código SAP "
+            "para o Cadastro do SmartRiser."
+        )
+    try:
+        pk = int(texto)
+    except (TypeError, ValueError):
+        return None, "PDV inválido."
+    pdv = parceiros_visiveis(user).filter(pk=pk).first()
+    if not pdv:
+        return None, "PDV não encontrado na sua carteira."
+    return pdv, None

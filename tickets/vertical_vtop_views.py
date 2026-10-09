@@ -11,7 +11,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from tickets.acesso import eh_admin, eh_especialista, eh_gerencia
 from tickets.models import SolicitacaoVertical
-from tickets.vertical_services import qs_solicitacoes
+from tickets.vertical_services import qs_solicitacoes, resolver_parceiro_informado
 from tickets.vertical_vtop_service import (
     get_vtop_service,
     montar_payload_vertical,
@@ -74,6 +74,16 @@ def vtop_iniciar(request: HttpRequest, pk: int) -> JsonResponse:
         return JsonResponse({"ok": False, "error": "Solicitação não encontrada."}, status=404)
 
     data = _body(request)
+    if str(data.get("parceiro_id") or "").strip():
+        pdv, erro_pdv = resolver_parceiro_informado(request.user, data.get("parceiro_id"))
+        if erro_pdv:
+            return JsonResponse(
+                {"ok": False, "error": erro_pdv, "faltando": ["codigo_sap"]},
+                status=400,
+            )
+        if item.parceiro_id != pdv.id:
+            item.parceiro = pdv
+            item.save(update_fields=["parceiro", "atualizado_em"])
     payload = _payload_com_overrides(item, data)
     somente_ate = (data.get("somente_ate") or "").strip().lower() or None
 
