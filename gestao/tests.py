@@ -296,6 +296,122 @@ class SysmapImportTests(TestCase):
         self.assertEqual(t.situacao_empresa, "Desativado")
         self.assertFalse(t.ativo)
 
+    def test_consolidacao_prefere_realocacao_sobre_desalocacao_historica(self):
+        """Realocação: desalocação do contrato antigo não pode vencer a alocação vigente."""
+        arquivo = _xlsx(
+            [
+                [
+                    "RECORD PAP LTDA",
+                    "BRUNO",
+                    "123",
+                    "a@x.com",
+                    "TT190547",
+                    "CLT",
+                    "VENDEDOR",
+                    "Ativo",
+                    "Ativo",
+                    "Desalocado",
+                    "06/05/2025",
+                    "30/01/2026",
+                    "",
+                ],
+                [
+                    "RECORD PAP LTDA",
+                    "BRUNO",
+                    "123",
+                    "a@x.com",
+                    "TT190547",
+                    "CLT",
+                    "VENDEDOR",
+                    "Ativo",
+                    "Ativo",
+                    "Alocado",
+                    "29/01/2026",
+                    "",
+                    "",
+                ],
+            ],
+            [
+                "Razão Social",
+                "Terceiro",
+                "CPF",
+                "Email",
+                "Chave de Acesso",
+                "Vínculo",
+                "Cargo/Função",
+                "Situação Terceiro Empresa",
+                "Situação Funcional",
+                "Situação Terceiro Contrato",
+                "Data Alocação",
+                "Data Desalocação",
+                "Data Inativação",
+            ],
+        )
+        importar_sysmap(arquivo, "terceiros.xlsx")
+        t = CadastroTerceiro.objects.get(chave_acesso="TT190547")
+        self.assertEqual(t.situacao_contrato, "Alocado")
+        self.assertEqual(t.situacao_empresa, "Ativo")
+        self.assertTrue(t.ativo)
+        self.assertEqual(t.data_alocacao, date(2026, 1, 29))
+        self.assertIsNone(t.data_desalocacao)
+
+    def test_consolidacao_rehire_apos_inativacao(self):
+        """Inativação antiga não vence realocação posterior (rehire)."""
+        arquivo = _xlsx(
+            [
+                [
+                    "RECORD PAP LTDA",
+                    "JOAO",
+                    "123",
+                    "a@x.com",
+                    "TT576724",
+                    "CLT",
+                    "VENDEDOR",
+                    "Desativado",
+                    "Desligamento - Término de contrato",
+                    "Desativado",
+                    "01/01/2024",
+                    "01/06/2025",
+                    "01/06/2025",
+                ],
+                [
+                    "RECORD PAP LTDA",
+                    "JOAO",
+                    "123",
+                    "a@x.com",
+                    "TT576724",
+                    "CLT",
+                    "VENDEDOR",
+                    "Ativo",
+                    "Ativo",
+                    "Alocado",
+                    "15/09/2025",
+                    "",
+                    "",
+                ],
+            ],
+            [
+                "Razão Social",
+                "Terceiro",
+                "CPF",
+                "Email",
+                "Chave de Acesso",
+                "Vínculo",
+                "Cargo/Função",
+                "Situação Terceiro Empresa",
+                "Situação Funcional",
+                "Situação Terceiro Contrato",
+                "Data Alocação",
+                "Data Desalocação",
+                "Data Inativação",
+            ],
+        )
+        importar_sysmap(arquivo, "terceiros.xlsx")
+        t = CadastroTerceiro.objects.get(chave_acesso="TT576724")
+        self.assertEqual(t.situacao_empresa, "Ativo")
+        self.assertEqual(t.situacao_contrato, "Alocado")
+        self.assertTrue(t.ativo)
+
     def test_desativado_nao_entra_na_capilaridade(self):
         from gestao.pipelines.osab import linhas_capilaridade_pdv
 

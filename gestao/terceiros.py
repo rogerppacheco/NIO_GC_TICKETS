@@ -233,11 +233,23 @@ def _limpar_texto(valor) -> str:
     return str(valor).strip()
 
 
+def _datas_linha(linha: pd.Series, mapa: dict[str, str]) -> tuple[date | None, date | None, date | None]:
+    return (
+        _parse_data(linha.get(mapa["data_inativacao"])),
+        _parse_data(linha.get(mapa["data_desalocacao"])),
+        _parse_data(linha.get(mapa["data_alocacao"])),
+    )
+
+
+def _alocacao_vigente(linha: pd.Series, mapa: dict[str, str]) -> bool:
+    """Alocação aberta: tem data de alocação e não foi desalocada/inativada nesta linha."""
+    inativ, desaloc, aloc = _datas_linha(linha, mapa)
+    return bool(aloc) and not desaloc and not inativ
+
+
 def _score_linha(linha: pd.Series, mapa: dict[str, str]) -> tuple:
-    """Linha mais recente vence (inativação > desalocação > alocação)."""
-    inativ = _parse_data(linha.get(mapa["data_inativacao"]))
-    desaloc = _parse_data(linha.get(mapa["data_desalocacao"]))
-    aloc = _parse_data(linha.get(mapa["data_alocacao"]))
+    """Desempate para linhas encerradas (inativação > desalocação > alocação)."""
+    inativ, desaloc, aloc = _datas_linha(linha, mapa)
     if inativ:
         return (3, inativ.toordinal())
     if desaloc:
@@ -247,19 +259,48 @@ def _score_linha(linha: pd.Series, mapa: dict[str, str]) -> tuple:
     return (0, 0)
 
 
+def _escolher_linha_tt(linhas: list[pd.Series], mapa: dict[str, str]) -> pd.Series:
+    """
+    Sysmap exporta histórico por TT (realocação / inativação).
+
+    - Se há alocação vigente e inativação posterior (ou no mesmo dia) → inativado.
+    - Se há alocação vigente sem inativação posterior → vigente (mesmo com
+      desalocação histórica no dia seguinte — típico de realocação).
+    - Sem vigente → linha encerrada mais recente pelo score.
+    """
+    vigentes = [l for l in linhas if _alocacao_vigente(l, mapa)]
+    if vigentes:
+        vigente = max(
+            vigentes,
+            key=lambda l: (_datas_linha(l, mapa)[2] or date.min).toordinal(),
+        )
+        aloc_vig = _datas_linha(vigente, mapa)[2]
+        inativacoes = []
+        for l in linhas:
+            inativ = _datas_linha(l, mapa)[0]
+            if inativ is not None:
+                inativacoes.append((inativ, l))
+        if inativacoes and aloc_vig is not None:
+            inativ, linha_inativ = max(inativacoes, key=lambda item: item[0])
+            if inativ >= aloc_vig:
+                return linha_inativ
+        return vigente
+    return max(linhas, key=lambda l: _score_linha(l, mapa))
+
+
 def _consolidar(df: pd.DataFrame, mapa: dict[str, str]) -> tuple[pd.DataFrame, int]:
-    melhor: dict[str, pd.Series] = {}
-    duplicados = 0
+    por_chave: dict[str, list[pd.Series]] = {}
     for _, linha in df.iterrows():
         chave = normalizar_chave_tt(linha.get(mapa["chave_acesso"]))
         if not chave:
             continue
-        if chave not in melhor:
-            melhor[chave] = linha
-            continue
-        duplicados += 1
-        if _score_linha(linha, mapa) > _score_linha(melhor[chave], mapa):
-            melhor[chave] = linha
+        por_chave.setdefault(chave, []).append(linha)
+
+    melhor: dict[str, pd.Series] = {}
+    duplicados = 0
+    for chave, linhas in por_chave.items():
+        duplicados += max(0, len(linhas) - 1)
+        melhor[chave] = _escolher_linha_tt(linhas, mapa)
     if not melhor:
         return pd.DataFrame(), duplicados
     return pd.DataFrame(list(melhor.values())), duplicados
