@@ -1343,6 +1343,45 @@ class GuiaPendencia(models.Model):
         return f"{self.codigo} - {self.descricao}"
 
 
+class ConviteReuniao(models.Model):
+    """Link de reunião enviado ao WhatsApp do especialista logado."""
+
+    class Status(models.TextChoices):
+        ENVIADO = "enviado", "Enviado"
+        ERRO = "erro", "Erro"
+
+    especialista = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="convites_reuniao",
+    )
+    assunto = models.CharField(max_length=160)
+    inicio = models.DateTimeField()
+    link = models.URLField(max_length=500)
+    destino_jid = models.CharField(max_length=40, blank=True)
+    mensagem = models.TextField()
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ERRO,
+        db_index=True,
+    )
+    erro = models.TextField(blank=True)
+    syncwa_message_id = models.CharField(max_length=80, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-criado_em"]
+        verbose_name = "Convite de reunião"
+        verbose_name_plural = "Convites de reunião"
+        indexes = [
+            models.Index(fields=["especialista", "-criado_em"], name="convite_reuniao_user_criado"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.assunto} · {self.get_status_display()}"
+
+
 from tickets.consultas.vtal_models import (  # noqa: E402, F401
     VtalDadosViabilidade,
     VtalFonteDados,

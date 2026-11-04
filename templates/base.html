@@ -40,6 +40,9 @@
               <a href="{% url 'repositorio_lista' %}">Processos</a>
               <a href="{% url 'comunicados_gerir' %}">Comunicados</a>
               <a href="{% url 'rota_portal' %}">Rota</a>
+              {% if eh_especialista %}
+              <a href="{% url 'reunioes' %}">Reuniões</a>
+              {% endif %}
               <a href="{% url 'tradehub' %}">Kit de marca</a>
               {% if eh_gestor %}
                 <a href="{% url 'mascaras' %}">Máscaras</a>

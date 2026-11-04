@@ -1,5 +1,6 @@
 from .acesso import (
     eh_admin,
+    eh_especialista,
     eh_gerencia,
     eh_gestor,
     eh_parceiro,
@@ -17,6 +18,7 @@ def nav_counts(request):
         "eh_gestor": False,
         "eh_admin": False,
         "eh_gerencia": False,
+        "eh_especialista": False,
         "eh_parceiro": False,
         "tem_acesso_interno": False,
         "comunicados_nao_lidos": 0,
@@ -29,6 +31,7 @@ def nav_counts(request):
         ctx["eh_gestor"] = eh_gestor(user)
         ctx["eh_admin"] = eh_admin(user)
         ctx["eh_gerencia"] = eh_gerencia(user)
+        ctx["eh_especialista"] = eh_especialista(user)
         ctx["eh_parceiro"] = eh_parceiro(user)
         ctx["tem_acesso_interno"] = tem_acesso_interno(user)
         nome = (user.first_name or "").strip() or (user.get_full_name() or "").strip()

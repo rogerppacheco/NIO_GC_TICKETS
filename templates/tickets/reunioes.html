@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% block title %}Reuniões · NIO ESPECIALISTA Tickets{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Reuniões</h1>
+    <p>Monte o convite e envie o link para o seu WhatsApp.</p>
+  </div>
+</div>
+
+<div class="reuniao-layout">
+  <form method="post" class="panel" id="reuniao-form">
+    {% csrf_token %}
+    <div class="panel-h">
+      <h2>Novo convite</h2>
+    </div>
+    <div class="panel-b">
+      <div class="reuniao-destino">
+        <span class="reuniao-avatar" aria-hidden="true">{{ nav_primeiro_nome|default:user.username|slice:":1"|upper }}</span>
+        <div class="reuniao-quem">
+          <div class="reuniao-quem-top">
+            <strong>{{ user.get_full_name|default:user.username }}</strong>
+            <span class="pill em_analise">Você</span>
+          </div>
+          {% if tem_telefone %}
+            <span class="help">WhatsApp {{ telefone }}</span>
+          {% else %}
+            <span class="help warn">Sem WhatsApp no perfil. <a href="{% url 'meu_perfil' %}">Cadastrar número</a></span>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if not whatsapp_ok %}
+        <p class="reuniao-aviso">O envio por WhatsApp não está disponível neste ambiente.</p>
+      {% endif %}
+
+      <div class="reuniao-field">
+        <label for="{{ form.assunto.id_for_label }}">{{ form.assunto.label }}</label>
+        {{ form.assunto }}
+        {% for err in form.assunto.errors %}<div class="help warn">{{ err }}</div>{% endfor %}
+        <div class="reuniao-chips" aria-label="Assuntos frequentes">
+          <button type="button" data-assunto="Alinhamento semanal">Alinhamento</button>
+          <button type="button" data-assunto="Treinamento">Treinamento</button>
+          <button type="button" data-assunto="Acompanhamento 1:1">1:1</button>
+          <button type="button" data-assunto="Follow-up">Follow-up</button>
+        </div>
+      </div>
+
+      <div class="reuniao-quando">
+        <div>
+          <label for="{{ form.data.id_for_label }}">{{ form.data.label }}</label>
+          {{ form.data }}
+          {% for err in form.data.errors %}<div class="help warn">{{ err }}</div>{% endfor %}
+        </div>
+        <div>
+          <label for="{{ form.hora.id_for_label }}">{{ form.hora.label }}</label>
+          {{ form.hora }}
+          {% for err in form.hora.errors %}<div class="help warn">{{ err }}</div>{% endfor %}
+        </div>
+      </div>
+      <div class="reuniao-chips" aria-label="Atalhos de horário">
+        <button type="button" data-quando="30">Em 30 min</button>
+        <button type="button" data-quando="60">Em 1 hora</button>
+        <button type="button" data-quando="amanha-9">Amanhã 9h</button>
+        <button type="button" data-quando="amanha-14">Amanhã 14h</button>
+      </div>
+
+      <div class="reuniao-field">
+        <label for="{{ form.link.id_for_label }}">{{ form.link.label }}</label>
+        {{ form.link }}
+        <div class="help">Cole o link do Meet, Teams ou Zoom. Se faltar o https, ele é completado.</div>
+        {% for err in form.link.errors %}<div class="help warn">{{ err }}</div>{% endfor %}
+      </div>
+
+      <div class="reuniao-preview">
+        <div class="reuniao-preview-h">
+          <span>Prévia no WhatsApp</span>
+          <button type="button" class="btn btn-ghost" id="reuniao-copiar">Copiar</button>
+        </div>
+        <div class="reuniao-bubble" id="reuniao-preview" aria-live="polite">Preencha assunto, data, horário e link para ver a mensagem.</div>
+      </div>
+
+      <div class="reuniao-acoes">
+        <button class="btn btn-primary" type="submit" {% if not pode_enviar %}disabled{% endif %}>Enviar para o meu WhatsApp</button>
+      </div>
+    </div>
+  </form>
+
+  <section class="panel" aria-label="Envios recentes">
+    <div class="panel-h">
+      <h2>Enviados</h2>
+    </div>
+    <div class="panel-b">
+      {% if historico %}
+        <div class="reuniao-lista">
+          {% for item in historico %}
+          <article class="reuniao-item">
+            <div class="reuniao-item-top">
+              <strong>{{ item.assunto }}</strong>
+              <span class="pill {% if item.status == 'enviado' %}resolvido{% else %}cancelado{% endif %}">{{ item.get_status_display }}</span>
+            </div>
+            <p class="help">{{ item.inicio|date:"d/m/Y" }} às {{ item.inicio|time:"H:i" }}</p>
+            <a class="break-link" href="{{ item.link }}" target="_blank" rel="noopener noreferrer">{{ item.link }}</a>
+            <div class="reuniao-item-acoes">
+              <button
+                type="button"
+                class="btn btn-secondary"
+                data-repetir
+                data-assunto="{{ item.assunto }}"
+                data-data="{{ item.inicio|date:'Y-m-d' }}"
+                data-hora="{{ item.inicio|time:'H:i' }}"
+                data-link="{{ item.link }}"
+              >Usar de novo</button>
+            </div>
+          </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="reuniao-vazio">
+          <strong>Nenhum link enviado ainda</strong>
+          <p class="help">O histórico fica aqui, só com os convites desta conta.</p>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var form = document.getElementById("reuniao-form");
+  if (!form) return;
+  var assunto = form.querySelector("[name=assunto]");
+  var data = form.querySelector("[name=data]");
+  var hora = form.querySelector("[name=hora]");
+  var link = form.querySelector("[name=link]");
+  var preview = document.getElementById("reuniao-preview");
+  var copiar = document.getElementById("reuniao-copiar");
+  var dias = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo"];
+
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function isoData(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function isoHora(d) { return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+
+  function texto() {
+    var titulo = (assunto.value || "").replace(/\s+/g, " ").trim();
+    var url = (link.value || "").trim();
+    if (url && !/^https?:\/\//i.test(url) && /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}/i.test(url)) {
+      url = "https://" + url;
+    }
+    if (!titulo || !data.value || !hora.value || !url) return "";
+    var partes = data.value.split("-");
+    var quando = new Date(Number(partes[0]), Number(partes[1]) - 1, Number(partes[2]));
+    var dia = dias[quando.getDay() === 0 ? 6 : quando.getDay() - 1];
+    var br = pad(quando.getDate()) + "/" + pad(quando.getMonth() + 1) + "/" + quando.getFullYear();
+    return "*Reunião: " + titulo + "*\n\n📅 " + dia + ", " + br + "\n🕐 " + hora.value.slice(0, 5) + "\n\n" + url;
+  }
+
+  function desenhar() {
+    var msg = texto();
+    preview.textContent = msg || "Preencha assunto, data, horário e link para ver a mensagem.";
+    preview.classList.toggle("is-vazio", !msg);
+    copiar.disabled = !msg;
+  }
+
+  form.addEventListener("input", desenhar);
+
+  form.querySelectorAll("[data-assunto]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      assunto.value = btn.getAttribute("data-assunto");
+      assunto.focus();
+      desenhar();
+    });
+  });
+
+  form.querySelectorAll("[data-quando]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var agora = new Date();
+      var alvo = new Date(agora.getTime());
+      var tipo = btn.getAttribute("data-quando");
+      if (tipo === "30") alvo.setMinutes(alvo.getMinutes() + 30);
+      else if (tipo === "60") alvo.setMinutes(alvo.getMinutes() + 60);
+      else if (tipo === "amanha-9") {
+        alvo.setDate(alvo.getDate() + 1);
+        alvo.setHours(9, 0, 0, 0);
+      } else if (tipo === "amanha-14") {
+        alvo.setDate(alvo.getDate() + 1);
+        alvo.setHours(14, 0, 0, 0);
+      }
+      data.value = isoData(alvo);
+      hora.value = isoHora(alvo);
+      desenhar();
+    });
+  });
+
+  document.querySelectorAll("[data-repetir]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      assunto.value = btn.getAttribute("data-assunto") || "";
+      data.value = btn.getAttribute("data-data") || "";
+      hora.value = btn.getAttribute("data-hora") || "";
+      link.value = btn.getAttribute("data-link") || "";
+      desenhar();
+      form.scrollIntoView({ behavior: "smooth", block: "start" });
+      assunto.focus();
+    });
+  });
+
+  function copiarFallback(msg) {
+    var area = document.createElement("textarea");
+    area.value = msg;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.left = "-9999px";
+    document.body.appendChild(area);
+    area.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    document.body.removeChild(area);
+    return ok;
+  }
+
+  copiar.addEventListener("click", function () {
+    var msg = texto();
+    if (!msg) return;
+    var pronto = function (ok) {
+      copiar.textContent = ok ? "Copiado" : "Não copiou";
+      setTimeout(function () { copiar.textContent = "Copiar"; }, 1600);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(msg).then(function () { pronto(true); }).catch(function () {
+        pronto(copiarFallback(msg));
+      });
+      return;
+    }
+    pronto(copiarFallback(msg));
+  });
+
+  desenhar();
+})();
+</script>
+{% endblock %}

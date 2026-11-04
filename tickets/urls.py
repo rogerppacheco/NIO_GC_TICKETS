@@ -10,6 +10,7 @@ from . import (
     vertical_vtop_views,
     views,
     guia_views,
+    reuniao_views,
 )
 
 urlpatterns = [
@@ -62,6 +63,7 @@ urlpatterns = [
     path("tickets/<str:protocolo>/", views.ticket_detalhe, name="ticket_detalhe"),
     path("campos-resposta/", views.config_resposta_lista, name="config_resposta_lista"),
     path("campos-resposta/<str:tipo>/", views.config_resposta_editar, name="config_resposta_editar"),
+    path("reunioes/", reuniao_views.reunioes, name="reunioes"),
     path("abrir/", views.portal_inicio, name="portal_inicio"),
     path("abrir/demanda/", views.abrir_demanda, name="abrir_demanda"),
     path("tradehub/", tradehub_views.tradehub_inicio, name="tradehub"),
