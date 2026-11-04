@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('tickets', '0039_blocovertical_vtop'),
+        ('tickets', '0040_comunicado_anexo'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
