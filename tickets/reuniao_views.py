@@ -7,7 +7,7 @@ from django.views.decorators.http import require_http_methods
 
 from gestao.messaging.syncwa import syncwa_configurado
 
-from .acesso import especialista_required
+from .acesso import reuniao_required
 from .models import ConviteReuniao
 from .reuniao import (
     ConviteReuniaoForm,
@@ -18,7 +18,7 @@ from .reuniao import (
 )
 
 
-@especialista_required
+@reuniao_required
 @require_http_methods(["GET", "POST"])
 def reunioes(request: HttpRequest) -> HttpResponse:
     jid = telefone_do_especialista(request.user)

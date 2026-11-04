@@ -13,12 +13,12 @@
     <p>Abra uma solicitação na fila do especialista.</p>
     <span class="consulta-tag">Equipe NIO</span>
   </a>
-  {% if eh_especialista %}
+  {% if eh_especialista or eh_gestor %}
   <a class="consulta-card" href="{% url 'reunioes' %}">
     <span class="consulta-ico">📅</span>
     <h2>Reuniões</h2>
     <p>Envie o link da reunião para o seu WhatsApp, com assunto, data e horário.</p>
-    <span class="consulta-tag">Só o especialista</span>
+    <span class="consulta-tag">Seu WhatsApp</span>
   </a>
   {% endif %}
   <a class="consulta-card" href="{% url 'rota_portal' %}">

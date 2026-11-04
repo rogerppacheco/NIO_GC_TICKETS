@@ -53,7 +53,7 @@
       </div>
     </details>
 
-    {% if eh_especialista %}
+    {% if eh_especialista or eh_gestor %}
     <details class="app-acc-item" data-acc {% if name == "reunioes" %}open{% endif %}>
       <summary>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3v3M16 3v3M4 9h16M6 5h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>

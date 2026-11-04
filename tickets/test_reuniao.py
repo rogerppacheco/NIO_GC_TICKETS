@@ -36,7 +36,11 @@ class ReuniaoAcessoTests(TestCase):
         self.gestor = User.objects.create_user(
             username="adm-reuniao", password="senha-adm-ok1", first_name="Admin"
         )
-        PerfilStaff.objects.create(user=self.gestor, papel=PerfilStaff.Papel.GESTOR)
+        PerfilStaff.objects.create(
+            user=self.gestor,
+            papel=PerfilStaff.Papel.GESTOR,
+            whatsapp="31977776666",
+        )
         self.pdv = Parceiro.objects.create(codigo_pdv="REU1", nome="PDV Reuniao")
         self.parceiro = User.objects.create_user(
             username=self.pdv.codigo_pdv, password="senha-pdv-ok1", first_name="Loja"
@@ -49,22 +53,25 @@ class ReuniaoAcessoTests(TestCase):
         self.assertEqual(resp.status_code, 302)
         self.assertIn("/login/", resp["Location"])
 
-    def test_somente_especialista_abre_e_ve_o_modulo(self):
-        self.client.force_login(self.spec)
-        pagina = self.client.get(reverse("reunioes"))
-        self.assertEqual(pagina.status_code, 200)
-        self.assertContains(pagina, "Enviar para o meu WhatsApp")
-        self.assertContains(pagina, "+55 (31) 98888-7777")
-        portal = self.client.get(reverse("portal_inicio"))
-        self.assertContains(portal, reverse("reunioes"))
-        self.assertContains(portal, "Reuniões")
+    def test_especialista_e_admin_abrem_e_veem_o_modulo(self):
+        for user, telefone in (
+            (self.spec, "+55 (31) 98888-7777"),
+            (self.gestor, "+55 (31) 97777-6666"),
+        ):
+            self.client.force_login(user)
+            pagina = self.client.get(reverse("reunioes"))
+            self.assertEqual(pagina.status_code, 200)
+            self.assertContains(pagina, "Enviar para o meu WhatsApp")
+            self.assertContains(pagina, telefone)
+            portal = self.client.get(reverse("portal_inicio"))
+            self.assertContains(portal, reverse("reunioes"))
+            self.assertContains(portal, "Reuniões")
 
     def test_outros_perfis_nao_veem_nem_abrem(self):
-        for user in (self.ger, self.gestor):
-            self.client.force_login(user)
-            self.assertEqual(self.client.get(reverse("reunioes")).status_code, 404)
-            portal = self.client.get(reverse("portal_inicio"))
-            self.assertNotContains(portal, reverse("reunioes"))
+        self.client.force_login(self.ger)
+        self.assertEqual(self.client.get(reverse("reunioes")).status_code, 404)
+        portal = self.client.get(reverse("portal_inicio"))
+        self.assertNotContains(portal, reverse("reunioes"))
         self.client.force_login(self.parceiro)
         resp = self.client.get(reverse("reunioes"))
         self.assertEqual(resp.status_code, 302)

@@ -388,11 +388,15 @@ def ticket_para_usuario(user, protocolo: str) -> Ticket:
     return ticket
 
 
-def especialista_required(view_func):
+def pode_usar_reuniao(user) -> bool:
+    return eh_especialista(user) or eh_admin(user)
+
+
+def reuniao_required(view_func):
     @login_required
     @wraps(view_func)
     def _wrapped(request: HttpRequest, *args, **kwargs) -> HttpResponse:
-        if not eh_especialista(request.user):
+        if not pode_usar_reuniao(request.user):
             raise Http404("Página não encontrada.")
         return view_func(request, *args, **kwargs)
 
