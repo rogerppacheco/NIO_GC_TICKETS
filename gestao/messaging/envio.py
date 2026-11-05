@@ -923,26 +923,7 @@ def _caption_curta(rel: RelatorioComissionamento) -> str:
     )
 
 
-def formatar_mensagem_comissionamento(rel: RelatorioComissionamento) -> str:
-    msg = (rel.mensagem or "").strip()
-    if not msg:
-        return ""
-
-    email_esp = ""
-    if rel.parceiro and rel.parceiro.especialista and rel.parceiro.especialista.email:
-        email_esp = rel.parceiro.especialista.email.strip()
-    if not email_esp:
-        email_esp = "rogerio.pacheco@niointernet.com.br"
-
-    if "Orientação para envio do email" in msg or "Orientaçaõ para envio do email" in msg:
-        msg_atualizada = re.sub(
-            r"Com c[óo]pia para:\s*[^ \t\n\r]+(?:\s*@@?\s*[^ \t\n\r]+)?\s*e\s*PP-GestaodosParceiros@niointernet\.com\.br",
-            f"Com cópia para: {email_esp} e PP-GestaodosParceiros@niointernet.com.br",
-            msg,
-            flags=re.IGNORECASE,
-        )
-        return msg_atualizada
-
+def _empresa_ciclo_comissionamento(msg: str, rel: RelatorioComissionamento) -> tuple[str, str]:
     m_razao = re.search(r"RAZ[ÃA]O SOCIAL:\s*(.+)", msg, flags=re.IGNORECASE)
     empresa = m_razao.group(1).strip() if m_razao else ""
     if not empresa or empresa == "-":
@@ -951,17 +932,28 @@ def formatar_mensagem_comissionamento(rel: RelatorioComissionamento) -> str:
     m_ciclo = re.search(r"REFER[ÊE]NCIA:\s*(?:COMISSAO\s*)?([^\n\r]+)", msg, flags=re.IGNORECASE)
     ciclo = m_ciclo.group(1).strip() if m_ciclo else ""
     ciclo = re.sub(r"^COMISS[ÃA]O\s*", "", ciclo, flags=re.IGNORECASE).strip()
+    if ciclo == "-":
+        ciclo = ""
+    return empresa, ciclo
 
-    assunto_email = f"{empresa}_{ciclo}" if ciclo and ciclo != "-" else f"{empresa}_[CICLO]"
 
-    bloco = (
-        "\n\nOrientação para envio do email: \n\n"
-        "Enviar o email para recebimentonfes@niointernet.com.br\n"
-        f"Com cópia para: {email_esp} e PP-GestaodosParceiros@niointernet.com.br\n\n"
-        "No corpo do email retirar assinatura e não escrever nada no corpo do email \n"
-        f"E o assunto do email deverá ser {assunto_email}"
-    )
-    return msg + bloco
+def formatar_mensagem_comissionamento(rel: RelatorioComissionamento) -> str:
+    from gestao.pipelines.comissionamento import bloco_orientacao_nf, sem_bloco_orientacao_nf
+
+    msg = (rel.mensagem or "").strip()
+    if not msg:
+        return ""
+
+    email_esp = ""
+    if rel.parceiro and rel.parceiro.especialista and rel.parceiro.especialista.email:
+        email_esp = rel.parceiro.especialista.email.strip()
+
+    base = sem_bloco_orientacao_nf(msg)
+    empresa, ciclo = _empresa_ciclo_comissionamento(base or msg, rel)
+    bloco = bloco_orientacao_nf(empresa, ciclo, email_esp)
+    if not base:
+        return bloco
+    return f"{base}\n\n{bloco}"
 
 
 def enviar_comissionamento_pdv(
@@ -1104,7 +1096,11 @@ def formatar_html_email_comissionamento(rel: RelatorioComissionamento, nome_esp:
 
     msg = formatar_mensagem_comissionamento(rel) or rel.mensagem or ""
 
-    partes = re.split(r"(?i)\n*(?=Orienta[çc][ãa]o para envio do email:?)", msg, maxsplit=1)
+    partes = re.split(
+        r"(?i)\n*(?=\*EMISSÃO DE NOTA FISCAL\*|EMISSÃO DE NOTA FISCAL|Orienta[çc][ãa][oõ] para envio do email:?)",
+        msg,
+        maxsplit=1,
+    )
     corpo_dados = partes[0].strip()
     corpo_orientacao = partes[1].strip() if len(partes) > 1 else ""
 

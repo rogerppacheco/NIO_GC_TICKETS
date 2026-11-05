@@ -269,6 +269,92 @@ def gerar_planilha_comissionamento_formatada(pedido_df: pd.DataFrame, linha_df: 
     return out.getvalue()
 
 
+_EMAIL_NF = "recebimentonfes@niointernet.com.br"
+_EMAIL_COPIA_GESTAO = "PP-GestaodosParceiros@niointernet.com.br"
+_EMAIL_COPIA_PADRAO = "rogerio.pacheco@niointernet.com.br"
+_RE_BLOCO_NF = re.compile(
+    r"\n*(?:\*EMISSÃO DE NOTA FISCAL\*|EMISSÃO DE NOTA FISCAL|"
+    r"Orienta[cç][aã][oõ] para envio do email:?).*\Z",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+
+
+def titulo_email_nf(razao: str, ciclo: str) -> str:
+    """Título do e-mail da NF: razão social em maiúsculas, sem acento nem caractere especial, mais o ciclo."""
+    bruto = unicodedata.normalize("NFKD", str(razao or ""))
+    sem_acento = "".join(c for c in bruto if not unicodedata.combining(c))
+    empresa = re.sub(r"[^A-Za-z0-9 ]+", " ", sem_acento).upper()
+    empresa = re.sub(r"\s+", " ", empresa).strip()
+
+    ciclo_bruto = unicodedata.normalize("NFKD", str(ciclo or ""))
+    ciclo_limpo = "".join(c for c in ciclo_bruto if not unicodedata.combining(c))
+    ciclo_limpo = re.sub(r"[^A-Za-z0-9]+", "", ciclo_limpo).upper()
+    if ciclo_limpo == "-":
+        ciclo_limpo = ""
+
+    if empresa and ciclo_limpo:
+        return f"{empresa} {ciclo_limpo}"
+    if empresa:
+        return f"{empresa} [CICLO]"
+    if ciclo_limpo:
+        return f"[RAZAO SOCIAL] {ciclo_limpo}"
+    return "[RAZAO SOCIAL] [CICLO]"
+
+
+def bloco_orientacao_nf(razao: str, ciclo: str, email_copia: str = "") -> str:
+    """Texto que segue a planilha no WhatsApp e no e-mail do especialista."""
+    email_dest = (email_copia or "").strip() or _EMAIL_COPIA_PADRAO
+    titulo = titulo_email_nf(razao, ciclo)
+    return (
+        "*EMISSÃO DE NOTA FISCAL*\n"
+        "Novo tomador de serviço em Alagoas\n"
+        "\n"
+        "Em 1/11/2026, a Nio unificou o tomador de serviço das notas fiscais em Alagoas. "
+        "Use os dados abaixo em todas as notas, independentemente da sua lotação.\n"
+        "\n"
+        "*O que preencher na nota fiscal*\n"
+        "UF: AL\n"
+        "RAZÃO SOCIAL: CLIENT CO SERVICOS DE REDE NORDESTE S.A.\n"
+        "CNPJ: 53.420.564/0001-40\n"
+        "I.E.: 24167872-2\n"
+        "I.M.: 0901708120\n"
+        "LOGRADOURO: AV ALVARO OTACILIO, 3731 ANDAR TERREO PAVMTO1\n"
+        "BAIRRO: JATIUCA\n"
+        "MUNICÍPIO: MACEIÓ\n"
+        "CEP: 57.036-850\n"
+        "CENTRO LOGÍSTICO: 0140\n"
+        "\n"
+        "*Campo Observação*\n"
+        "Não houve outras mudanças no processo de emissão.\n"
+        "Preencha o campo Observação exatamente neste padrão:\n"
+        "PEDIDO DE COMPRA: 4500XXXXXXX ITEM: 10\n"
+        "\n"
+        "Troque 4500XXXXXXX pelo número do pedido e 10 pelo item da planilha. "
+        "Se o pedido tiver mais de um item, use uma linha para cada item.\n"
+        "\n"
+        "Regras deste campo:\n"
+        "- Respeite a ordem e o padrão acima\n"
+        "- Escreva em CAIXA ALTA\n"
+        "- Utilize dois pontos (:)\n"
+        "- Não utilize traços nem pontos\n"
+        "- Utilize uma linha para cada item do pedido\n"
+        "\n"
+        "*Como enviar o e-mail*\n"
+        "- Anexe a nota fiscal em PDF\n"
+        f"- Para: {_EMAIL_NF}\n"
+        f"- Com cópia para: {email_dest} e {_EMAIL_COPIA_GESTAO}\n"
+        "- Título: razão social em MAIÚSCULAS, sem acento e sem caractere especial, seguida do ciclo\n"
+        f"- Título deste envio: *{titulo}*\n"
+        "- Exemplo do padrão: XPTO 1QNOV26\n"
+        "- Deixe o corpo do e-mail vazio. Não escreva saudação, explicação, imagem ou logo. Não haverá leitura humana.\n"
+        "- Envie um pedido por nota fiscal e uma nota fiscal por e-mail."
+    )
+
+
+def sem_bloco_orientacao_nf(mensagem: str) -> str:
+    return _RE_BLOCO_NF.sub("", mensagem or "").strip()
+
+
 def montar_mensagem(
     caminho_anexo: Path | str,
     pdv_nome: str,
@@ -359,16 +445,8 @@ def montar_mensagem(
                 ciclo_assunto = re.sub(r"^COMISS[ÃA]O\s*", "", raw_c, flags=re.IGNORECASE).strip()
 
     empresa_final = empresa_assunto or pdv_nome
-    assunto_email = f"{empresa_final}_{ciclo_assunto}" if ciclo_assunto else f"{empresa_final}_[CICLO]"
-
-    email_dest = (email_copia or "").strip() or "rogerio.pacheco@niointernet.com.br"
-    msg.append(
-        "\nOrientação para envio do email: \n\n"
-        "Enviar o email para recebimentonfes@niointernet.com.br\n"
-        f"Com cópia para: {email_dest} e PP-GestaodosParceiros@niointernet.com.br\n\n"
-        "No corpo do email retirar assinatura e não escrever nada no corpo do email \n"
-        f"E o assunto do email deverá ser {assunto_email}"
-    )
+    msg.append("")
+    msg.append(bloco_orientacao_nf(empresa_final, ciclo_assunto, email_copia))
 
     return "\n".join(msg), total_valor_pedido, total_comissao
 

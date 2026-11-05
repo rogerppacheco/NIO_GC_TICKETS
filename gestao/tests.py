@@ -3077,12 +3077,18 @@ class ComissionamentoTests(TestCase):
         self.assertEqual(rel.qtd_linha, 1)
         self.assertTrue(rel.arquivo)
         self.assertIn("Comissionamento", rel.mensagem)
-        self.assertIn("Orientação para envio do email:", rel.mensagem)
+        self.assertIn("*EMISSÃO DE NOTA FISCAL*", rel.mensagem)
+        self.assertIn("CLIENT CO SERVICOS DE REDE NORDESTE S.A.", rel.mensagem)
+        self.assertIn("CNPJ: 53.420.564/0001-40", rel.mensagem)
+        self.assertIn("PEDIDO DE COMPRA: 4500XXXXXXX ITEM: 10", rel.mensagem)
         self.assertIn("recebimentonfes@niointernet.com.br", rel.mensagem)
         self.assertIn("rogerio.pacheco@niointernet.com.br", rel.mensagem)
         self.assertIn("PP-GestaodosParceiros@niointernet.com.br", rel.mensagem)
-        self.assertIn("No corpo do email retirar assinatura e não escrever nada no corpo do email", rel.mensagem)
-        self.assertIn("E o assunto do email deverá ser", rel.mensagem)
+        self.assertIn("Deixe o corpo do e-mail vazio.", rel.mensagem)
+        self.assertIn(
+            "Título deste envio: *LUISA SERVICOS DE TELEFONIA MOVEL LTDA 202608*",
+            rel.mensagem,
+        )
 
         import openpyxl
         rel.arquivo.open("rb")
@@ -3116,6 +3122,42 @@ class ComissionamentoTests(TestCase):
         rel = RelatorioComissionamento.objects.get()
         self.assertIn("Com cópia para: samuel.pires@niointernet.com.br e PP-GestaodosParceiros@niointernet.com.br", rel.mensagem)
         self.assertNotIn("rogerio.pacheco@niointernet.com.br", rel.mensagem)
+
+    def test_mensagem_antiga_ganha_tomador_de_alagoas(self):
+        from gestao.models import LoteImportacao, RelatorioComissionamento
+        from gestao.messaging.envio import formatar_mensagem_comissionamento
+
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.COMISSIONAMENTO,
+            arquivo_nome="ciclo.xlsx",
+            ok=True,
+        )
+        rel = RelatorioComissionamento.objects.create(
+            lote=lote,
+            parceiro=self.pdv,
+            pdv_nome="INOVA MG",
+            mensagem=(
+                "📁 *Comissionamento por PDV*\n"
+                "PDV: *INOVA MG*\n"
+                "\n"
+                "RAZÃO SOCIAL: LUISA SERVICOS DE TELEFONIA MOVEL LTDA\n"
+                "REFERÊNCIA: COMISSAO 1QNOV26\n"
+                "\n"
+                "Orientação para envio do email: \n"
+                "Enviar o email para recebimentonfes@niointernet.com.br\n"
+                "E o assunto do email deverá ser LUISA SERVICOS_1QNOV26"
+            ),
+        )
+        texto = formatar_mensagem_comissionamento(rel)
+        self.assertIn("*Comissionamento por PDV*", texto)
+        self.assertIn("CLIENT CO SERVICOS DE REDE NORDESTE S.A.", texto)
+        self.assertIn("PEDIDO DE COMPRA: 4500XXXXXXX ITEM: 10", texto)
+        self.assertIn(
+            "Título deste envio: *LUISA SERVICOS DE TELEFONIA MOVEL LTDA 1QNOV26*",
+            texto,
+        )
+        self.assertNotIn("Orientação para envio do email", texto)
+        self.assertNotIn("E o assunto do email deverá ser", texto)
 
     def test_botao_baixar_planilha_presente_na_view(self):
         from django.contrib.auth import get_user_model
@@ -3244,7 +3286,9 @@ class ComissionamentoTests(TestCase):
         self.assertIn("<strong>Comissionamento por PDV</strong>", html_out)
         self.assertIn("PDV: <strong>INOVA MG</strong>", html_out)
         self.assertIn("LUISA SERVICOS DE TELEFONIA MOVEL LTDA", html_out)
-        self.assertIn("Orientação para envio do email", html_out)
+        self.assertIn("EMISSÃO DE NOTA FISCAL", html_out)
+        self.assertIn("CLIENT CO SERVICOS DE REDE NORDESTE S.A.", html_out)
+        self.assertIn("Como enviar o e-mail", html_out)
         self.assertIn("#fefce8", html_out)  # Bloco de destaque para instruções
 
     def test_enviar_lote_email_view(self):
