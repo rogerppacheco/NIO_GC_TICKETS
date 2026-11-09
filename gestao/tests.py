@@ -4397,6 +4397,69 @@ class ResultadosTests(TestCase):
         lote.refresh_from_db()
         self.assertEqual(lote.resumo["vendas_por_id"][str(fab.id)]["plano"], 12.0)
 
+    def test_forecast_nov_pp_fixa_planos_apos_parcial(self):
+        from django.apps import apps
+        from importlib import import_module
+        from gestao.models import ConfiguracaoOSAB, LoteImportacao
+        from gestao.pipelines.parcial_vendas import sincronizar_planos_dia_metas
+
+        fab = Parceiro.objects.create(codigo_pdv="fab2", nome="FABRETTI")
+        fsm = Parceiro.objects.create(codigo_pdv="fsm2", nome="F.S.M")
+        ConfiguracaoOSAB.objects.create(
+            parceiro=fab, ano=2026, mes=11, plano_dia=99.0, plano_dia_fixo=False
+        )
+        ConfiguracaoOSAB.objects.create(
+            parceiro=fsm, ano=2026, mes=11, plano_dia=9.45, plano_dia_fixo=False
+        )
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.PARCIAL,
+            arquivo_nome="data.xlsx",
+            ok=True,
+            resumo={
+                "ano": 2026,
+                "mes": 11,
+                "turno": 15,
+                "rotulo_turno": "15h",
+                "vendas_por_id": {
+                    str(fsm.id): {
+                        "parceiro_id": fsm.id,
+                        "pdv": "F.S.M",
+                        "vendas": 5,
+                        "plano": 9.45,
+                    },
+                },
+                "linhas": [
+                    {"parceiro_id": fsm.id, "pdv": "F.S.M", "vendas": 5, "plano": 9.45},
+                ],
+            },
+        )
+        mig = import_module("gestao.migrations.0033_fixar_plano_dia_forecast_nov_pp")
+        mig.aplicar_e_fixar_forecast_nov_pp(apps, None)
+
+        cfg_fab = ConfiguracaoOSAB.objects.get(parceiro=fab, ano=2026, mes=11)
+        cfg_fsm = ConfiguracaoOSAB.objects.get(parceiro=fsm, ano=2026, mes=11)
+        self.assertAlmostEqual(cfg_fab.plano_dia, 11.235141229275127)
+        self.assertTrue(cfg_fab.plano_dia_fixo)
+        self.assertAlmostEqual(cfg_fsm.plano_dia, 9.894152522960209)
+        self.assertTrue(cfg_fsm.plano_dia_fixo)
+
+        lote.refresh_from_db()
+        self.assertEqual(lote.resumo["vendas_por_id"][str(fsm.id)]["plano"], 10.0)
+
+        # Novo parcial com plano diferente não deve alterar Metas fixadas
+        n = sincronizar_planos_dia_metas(
+            {
+                "ano": 2026,
+                "mes": 11,
+                "vendas_por_id": {
+                    str(fsm.id): {"parceiro_id": fsm.id, "plano": 1.0},
+                },
+            }
+        )
+        self.assertEqual(n, 0)
+        cfg_fsm.refresh_from_db()
+        self.assertAlmostEqual(cfg_fsm.plano_dia, 9.894152522960209)
+
     def test_parcial_import_lê_excel_da_gerencia_inteira(self):
         from gestao.pipelines.parcial_vendas import aplicar_escopo_parcial, processar_parcial_excel
 
