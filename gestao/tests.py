@@ -4355,6 +4355,48 @@ class ResultadosTests(TestCase):
         self.assertAlmostEqual(cfg.plano_dia, 12.3)
         self.assertTrue(cfg.plano_dia_fixo)
 
+    def test_forecast_nov_pp_atualiza_planos_e_lote(self):
+        from django.apps import apps
+        from importlib import import_module
+        from gestao.models import ConfiguracaoOSAB, LoteImportacao
+
+        fab = Parceiro.objects.create(codigo_pdv="fab1", nome="FABRETTI")
+        fsm = Parceiro.objects.create(codigo_pdv="fsm1", nome="F.S.M")
+        norte = Parceiro.objects.create(codigo_pdv="nor1", nome="NORTE TECNOLOGIA")
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.PARCIAL,
+            arquivo_nome="parcial.xlsx",
+            ok=True,
+            resumo={
+                "ano": 2026,
+                "mes": 11,
+                "turno": 15,
+                "rotulo_turno": "15h",
+                "vendas_por_id": {
+                    str(fab.id): {"parceiro_id": fab.id, "pdv": "FABRETTI", "vendas": 12, "plano": 10.0},
+                },
+                "linhas": [
+                    {"parceiro_id": fab.id, "pdv": "FABRETTI", "vendas": 12, "plano": 10.0},
+                ],
+            },
+        )
+        mig = import_module("gestao.migrations.0032_atualizar_plano_dia_forecast_nov_pp")
+        mig.aplicar_forecast_nov_pp(apps, None)
+        self.assertAlmostEqual(
+            ConfiguracaoOSAB.objects.get(parceiro=fab, ano=2026, mes=11).plano_dia,
+            11.235141229275127,
+        )
+        self.assertAlmostEqual(
+            ConfiguracaoOSAB.objects.get(parceiro=fsm, ano=2026, mes=11).plano_dia,
+            9.894152522960209,
+        )
+        self.assertAlmostEqual(
+            ConfiguracaoOSAB.objects.get(parceiro=norte, ano=2026, mes=11).plano_dia,
+            1.460067135421973,
+        )
+        lote.refresh_from_db()
+        self.assertEqual(lote.resumo["vendas_por_id"][str(fab.id)]["plano"], 12.0)
+
     def test_parcial_import_lê_excel_da_gerencia_inteira(self):
         from gestao.pipelines.parcial_vendas import aplicar_escopo_parcial, processar_parcial_excel
 
