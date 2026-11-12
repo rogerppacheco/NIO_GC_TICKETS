@@ -11,6 +11,10 @@ RAZAO_ALIASES_PDV = {
     "VIP TELEFONIA E EQUIPAMENTOS": "POINT CELL",
     "NORTE TECH": "NORTE TECNOLOGIA",
     "F S M COMERCIO": "F.S.M",
+    "DSC CELULARES": "NEXA",
+    "NEXA ENERGIA FIBRA": "NEXA",
+    "UMUFIBRA": "FIBRA FACIL",
+    "FS SERVICOS DE TELECOMUNICACOES": "FIBRA FACIL",
 }
 
 
@@ -74,13 +78,15 @@ def resolver_parceiro_id(nome: str, indice: list[tuple[int, str, str, str]] | No
         if razao_cad and razao_norm == razao_cad:
             return pid
 
-    alvo = RAZAO_ALIASES_PDV.get(razao_norm)
-    if not alvo:
-        for prefixo, pdv_nome in RAZAO_ALIASES_PDV.items():
-            if razao_norm.startswith(prefixo):
-                alvo = pdv_nome
-                break
-    if alvo:
+    alvos: list[str] = []
+    if razao_norm in RAZAO_ALIASES_PDV:
+        alvos.append(RAZAO_ALIASES_PDV[razao_norm])
+    for prefixo, pdv_nome in RAZAO_ALIASES_PDV.items():
+        if razao_norm.startswith(prefixo) and pdv_nome not in alvos:
+            alvos.append(pdv_nome)
+        elif normalizar_pdv(pdv_nome) == razao_norm and prefixo not in alvos:
+            alvos.append(prefixo)
+    for alvo in alvos:
         alvo_norm = normalizar_pdv(alvo)
         for pid, _, pdv_norm, _ in indice:
             if pdv_norm == alvo_norm:
@@ -320,6 +326,10 @@ def _indice_cadastro(cadastro=None) -> tuple[dict[str, Parceiro], dict[str, Parc
         chave = normalizar_pdv(p.nome)
         if chave:
             por_norm.setdefault(chave, p)
+    for alias_norm, pdv_alvo in RAZAO_ALIASES_PDV.items():
+        parceiro_alvo = por_norm.get(normalizar_pdv(pdv_alvo))
+        if parceiro_alvo is not None:
+            por_norm.setdefault(normalizar_pdv(alias_norm), parceiro_alvo)
     return por_exato, por_norm
 
 

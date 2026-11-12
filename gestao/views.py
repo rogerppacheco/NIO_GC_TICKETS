@@ -1002,7 +1002,8 @@ def resultados_view(request: HttpRequest) -> HttpResponse:
                     _lote(request, LoteImportacao.Tipo.PARCIAL, arquivo.name, True, resumo)
                     aviso = ""
                     if resumo.get("sem_cadastro"):
-                        aviso = f" {len(resumo['sem_cadastro'])} PDV(s) da planilha sem cadastro."
+                        exemplos = ", ".join(resumo["sem_cadastro"][:5])
+                        aviso = f" {len(resumo['sem_cadastro'])} PDV(s) da planilha sem cadastro ({exemplos})."
                     if n_planos:
                         aviso += f" Plano dia atualizado em Metas para {n_planos} PDV(s)."
                     pct_txt = (

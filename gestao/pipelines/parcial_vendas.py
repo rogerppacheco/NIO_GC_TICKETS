@@ -396,6 +396,8 @@ def aplicar_escopo_parcial(dados: dict, parceiros: list) -> dict:
     for pid in sorted(mapa.keys(), key=lambda x: (mapa[x].nome or "").upper()):
         if pid in por_id:
             linha = _recalcular_linha(por_id[pid], planos_meta, planos_fixos)
+            if (mapa[pid].nome or "").strip():
+                linha["pdv"] = (mapa[pid].nome or "").strip()
             if not linha.get("especialista_id") and mapa[pid].especialista_id:
                 linha = _linha_parceiro(
                     mapa[pid],

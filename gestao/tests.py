@@ -117,6 +117,21 @@ class ParceiroMatchTests(TestCase):
             pdv.id,
         )
 
+    def test_aliases_nexa_e_fibra_facil(self):
+        from gestao.parceiros import classificar_parceiros_osab
+
+        nexa = Parceiro.objects.create(codigo_pdv="nx", nome="NEXA")
+        fibra = Parceiro.objects.create(codigo_pdv="ff", nome="FIBRA FACIL")
+        self.assertEqual(resolver_parceiro_id("NEXA"), nexa.id)
+        self.assertEqual(resolver_parceiro_id("DSC CELULARES"), nexa.id)
+        self.assertEqual(resolver_parceiro_id("NEXA ENERGIA & FIBRA LTDA"), nexa.id)
+        self.assertEqual(resolver_parceiro_id("FIBRA FACIL"), fibra.id)
+        self.assertEqual(resolver_parceiro_id("UMUFIBRA"), fibra.id)
+        self.assertEqual(resolver_parceiro_id("FS SERVICOS DE TELECOMUNICACOES LTDA"), fibra.id)
+
+        classif = classificar_parceiros_osab(["DSC CELULARES", "UMUFIBRA", "NEXA", "FIBRA FACIL"])
+        self.assertEqual(classif["faltando"], [])
+
 
 class SysmapImportTests(TestCase):
     def setUp(self):
@@ -4459,6 +4474,44 @@ class ResultadosTests(TestCase):
         self.assertEqual(n, 0)
         cfg_fsm.refresh_from_db()
         self.assertAlmostEqual(cfg_fsm.plano_dia, 9.894152522960209)
+
+    def test_renomeia_dsc_e_umufibra_migration(self):
+        from django.apps import apps
+        from importlib import import_module
+        from gestao.models import ConfiguracaoOSAB, LoteImportacao
+
+        dsc = Parceiro.objects.create(codigo_pdv="dsc1", nome="DSC CELULARES")
+        umu = Parceiro.objects.create(codigo_pdv="umu1", nome="UMUFIBRA")
+        lote = LoteImportacao.objects.create(
+            tipo=LoteImportacao.Tipo.PARCIAL,
+            arquivo_nome="data - 2026-11-12T082122.323.xlsx",
+            ok=True,
+            resumo={
+                "ano": 2026,
+                "mes": 11,
+                "turno": 8,
+                "rotulo_turno": "8h",
+                "data_ref": "2026-11-12",
+                "sem_cadastro": ["FIBRA FACIL", "NEXA"],
+                "vendas_por_id": {},
+                "linhas": [
+                    {"parceiro_id": dsc.id, "pdv": "DSC CELULARES", "vendas": 0, "plano": 9.0, "elegivel": True},
+                    {"parceiro_id": umu.id, "pdv": "UMUFIBRA", "vendas": 0, "plano": 5.0, "elegivel": True},
+                ],
+                "total_pp": 347,
+            },
+        )
+        mig = import_module("gestao.migrations.0034_renomear_dsc_umufibra")
+        mig.renomear_dsc_e_umufibra(apps, None)
+        dsc.refresh_from_db()
+        umu.refresh_from_db()
+        self.assertEqual(dsc.nome, "NEXA")
+        self.assertEqual(umu.nome, "FIBRA FACIL")
+        lote.refresh_from_db()
+        self.assertEqual(lote.resumo["sem_cadastro"], [])
+        self.assertEqual(lote.resumo["total_pp"], 18)
+        self.assertEqual(lote.resumo["vendas_por_id"][str(dsc.id)]["vendas"], 8)
+        self.assertEqual(lote.resumo["vendas_por_id"][str(umu.id)]["vendas"], 10)
 
     def test_parcial_import_lê_excel_da_gerencia_inteira(self):
         from gestao.pipelines.parcial_vendas import aplicar_escopo_parcial, processar_parcial_excel

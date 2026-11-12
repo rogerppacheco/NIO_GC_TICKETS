@@ -29,6 +29,8 @@ from tickets.models import Parceiro
 # Nome comercial → razão Sym quando o match automático não alcança.
 RAZOES_MANUAIS_CONHECIDAS = {
     "K&K": "KEK TELECOM INTERMEDIACAO LTDA",
+    "NEXA": "NEXA ENERGIA & FIBRA LTDA",
+    "FIBRA FACIL": "FS SERVICOS DE TELECOMUNICACOES LTDA",
 }
 
 
