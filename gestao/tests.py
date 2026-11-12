@@ -2730,12 +2730,15 @@ class DestinatarioEnvioTests(TestCase):
     def test_motivacional_capilaridade(self):
         from datetime import date, datetime
         from gestao.motivacional import (
+            CHAMADAS_FECHAMENTO_CAPILARIDADE,
             FRASES_MOTIVACIONAIS_VENDAS,
             montar_mensagem_motivacional_pdv,
             obter_frase_do_dia,
         )
 
-        self.assertGreaterEqual(len(FRASES_MOTIVACIONAIS_VENDAS), 50)
+        self.assertGreaterEqual(len(FRASES_MOTIVACIONAIS_VENDAS), 100)
+        self.assertEqual(len(set(FRASES_MOTIVACIONAIS_VENDAS)), len(FRASES_MOTIVACIONAIS_VENDAS))
+        self.assertGreaterEqual(len(CHAMADAS_FECHAMENTO_CAPILARIDADE), 10)
         d1 = date(2026, 9, 4)
         d2 = date(2026, 9, 5)
         f1 = obter_frase_do_dia(d1)
@@ -2752,6 +2755,19 @@ class DestinatarioEnvioTests(TestCase):
         self.assertIn("🌤️ *Boa tarde, time", tarde)
         noite = montar_mensagem_motivacional_pdv(self.pdv, d1, datetime(2026, 9, 4, 20, 0))
         self.assertIn("🌙 *Boa noite, time", noite)
+
+        # Se a frase do dia já foi enviada no histórico do PDV, pula para a próxima inédita
+        from gestao.models import EnvioWhatsApp
+
+        EnvioWhatsApp.objects.create(
+            tipo=EnvioWhatsApp.Tipo.CAPILARIDADE,
+            status=EnvioWhatsApp.Status.ENVIADO,
+            parceiro=self.pdv,
+            destino_jid="5531999999999",
+            mensagem=msg,
+        )
+        msg_seguinte = montar_mensagem_motivacional_pdv(self.pdv, agora=manha)
+        self.assertNotIn(f"_{f1}_", msg_seguinte)
 
     def test_destinos_especialista_usa_whatsapp_do_perfil(self):
         from gestao.messaging.envio import destinos_para_envio
