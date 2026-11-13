@@ -189,14 +189,19 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
             novo = VendaOSAB.objects.create(pedido=pedido, **dados)
             existentes[pedido] = novo
             inseridos += 1
-    from tickets.services import resolver_tickets_osab_concluido
+    from tickets.services import (
+        fechar_tickets_osab_cancelado,
+        resolver_tickets_osab_concluido,
+    )
 
     tickets_resolvidos = resolver_tickets_osab_concluido()
+    tickets_fechados = fechar_tickets_osab_cancelado()
     return {
         "inseridos": inseridos,
         "atualizados": atualizados,
         "ignorados": ignorados,
         "tickets_resolvidos": tickets_resolvidos,
+        "tickets_fechados": tickets_fechados,
     }
 
 

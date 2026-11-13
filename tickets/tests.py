@@ -1565,6 +1565,57 @@ class FilaOsabTests(TestCase):
         call_command("resolver_tickets_osab_concluido")
         self.assertEqual(resolver_tickets_osab_concluido(), 0)
 
+    def test_fechar_tickets_osab_cancelado_atualiza_todos_status(self):
+        from gestao.models import VendaOSAB
+        from tickets.services import fechar_tickets_osab_cancelado
+
+        VendaOSAB.objects.create(
+            pedido="10721324",
+            pdv_nome="PDV",
+            situacao="Cancelado",
+            dt_ref=timezone.now(),
+        )
+        VendaOSAB.objects.create(
+            pedido="40000001",
+            pdv_nome="PDV",
+            situacao="CANCELADO",
+            dt_ref=timezone.now(),
+        )
+        VendaOSAB.objects.create(
+            pedido="50000001",
+            pdv_nome="PDV",
+            situacao="Em Cancelamento",
+            dt_ref=timezone.now(),
+        )
+        self.ticket.status = StatusTicket.EM_ANALISE
+        self.ticket.save(update_fields=["status"])
+
+        t_cancelado = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.REPARO,
+            pedido="40000001.0",
+            status=StatusTicket.CANCELADO,
+        )
+        t_em_cancelamento = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.SEM_SLOT,
+            pedido="50000001",
+            status=StatusTicket.EM_ANALISE,
+        )
+
+        atualizados = fechar_tickets_osab_cancelado()
+        self.assertEqual(atualizados, 2)
+
+        for t in (self.ticket, t_cancelado):
+            t.refresh_from_db()
+            self.assertEqual(t.status, StatusTicket.FECHADO)
+            self.assertIsNotNone(t.resolvido_em)
+
+        t_em_cancelamento.refresh_from_db()
+        self.assertEqual(t_em_cancelamento.status, StatusTicket.EM_ANALISE)
+        self.assertEqual(fechar_tickets_osab_cancelado(), 0)
+
+
 
 
 @override_settings(STORAGES=STORAGES_TESTE)

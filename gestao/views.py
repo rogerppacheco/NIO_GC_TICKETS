@@ -626,6 +626,8 @@ def osab_view(request: HttpRequest) -> HttpResponse:
                     )
                     if vendas.get("tickets_resolvidos"):
                         msg = f"{msg} Tickets resolvidos automaticamente (OSAB Concluído): {vendas['tickets_resolvidos']}."
+                    if vendas.get("tickets_fechados"):
+                        msg = f"{msg} Tickets fechados automaticamente (OSAB Cancelado): {vendas['tickets_fechados']}."
                     if cad:
                         msg = f"{msg} {_msg_cadastro_osab(cad)}"
                     messages.success(request, msg)
