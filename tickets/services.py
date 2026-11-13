@@ -479,3 +479,83 @@ def notificar_demanda_com_anexo(ticket: Ticket, ator=None) -> int:
             interno=True,
         )
     return enviados
+
+
+def chave_pedido_osab(pedido: str | None) -> str:
+    if not pedido:
+        return ""
+    chave = str(pedido).strip()
+    if chave.endswith(".0") and chave[:-2].isdigit():
+        chave = chave[:-2]
+    return chave
+
+
+def eh_situacao_osab_concluida(situacao: str | None) -> bool:
+    if not situacao:
+        return False
+    import unicodedata
+
+    texto = unicodedata.normalize("NFKD", str(situacao))
+    texto = "".join(c for c in texto if not unicodedata.combining(c)).casefold().strip()
+    return texto == "concluido"
+
+
+def resolver_tickets_osab_concluido(Ticket_model=None, VendaOSAB_model=None) -> int:
+    """Marca como Resolvido todos os tickets cujo pedido está com situação OSAB = Concluído."""
+    from django.db.models import Q
+    from django.utils import timezone
+
+    from .models import StatusTicket
+
+    if Ticket_model is None:
+        Ticket_model = Ticket
+    if VendaOSAB_model is None:
+        from gestao.models import VendaOSAB as VendaOSAB_model
+
+    vendas_qs = (
+        VendaOSAB_model.objects.filter(
+            Q(situacao__iexact="Concluído")
+            | Q(situacao__iexact="Concluido")
+            | Q(situacao__icontains="conclu")
+        )
+        .exclude(pedido="")
+        .values_list("pedido", "situacao")
+    )
+    pedidos_concluidos = {
+        chave_pedido_osab(pedido)
+        for pedido, situacao in vendas_qs
+        if eh_situacao_osab_concluida(situacao)
+    }
+    pedidos_concluidos.discard("")
+    if not pedidos_concluidos:
+        return 0
+
+    candidatos = (
+        Ticket_model.objects.exclude(pedido="")
+        .exclude(status=StatusTicket.RESOLVIDO)
+        .values_list("id", "pedido", "resolvido_em")
+    )
+    ids_sem_resolvido_em: list[int] = []
+    ids_com_resolvido_em: list[int] = []
+    for ticket_id, pedido, resolvido_em in candidatos:
+        if chave_pedido_osab(pedido) in pedidos_concluidos:
+            if resolvido_em is None:
+                ids_sem_resolvido_em.append(ticket_id)
+            else:
+                ids_com_resolvido_em.append(ticket_id)
+
+    agora = timezone.now()
+    total = 0
+    if ids_sem_resolvido_em:
+        total += Ticket_model.objects.filter(id__in=ids_sem_resolvido_em).update(
+            status=StatusTicket.RESOLVIDO,
+            resolvido_em=agora,
+            atualizado_em=agora,
+        )
+    if ids_com_resolvido_em:
+        total += Ticket_model.objects.filter(id__in=ids_com_resolvido_em).update(
+            status=StatusTicket.RESOLVIDO,
+            atualizado_em=agora,
+        )
+    return total
+

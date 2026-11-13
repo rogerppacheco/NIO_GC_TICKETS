@@ -490,8 +490,20 @@ class OsabCapilaridadeTests(TestCase):
                 "VELOCIDADE",
             ],
         )
+        from tickets.models import StatusTicket, Ticket, TipoDemanda
+
+        ticket_p1 = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.PRIORIDADE_ELITE,
+            pedido="P1",
+            status=StatusTicket.EM_ANALISE,
+        )
         resumo = processar_osab(arquivo, "OSAB.xlsx", hoje.year, hoje.month)
         self.assertEqual(resumo["vendas"]["inseridos"], 1)
+        self.assertEqual(resumo["vendas"]["tickets_resolvidos"], 1)
+        ticket_p1.refresh_from_db()
+        self.assertEqual(ticket_p1.status, StatusTicket.RESOLVIDO)
+        self.assertIsNotNone(ticket_p1.resolvido_em)
         self.assertEqual(VendaOSAB.objects.get(pedido="P1").parceiro_id, self.pdv.id)
         self.assertGreaterEqual(resumo["capilaridade"]["linhas"], 1)
         self.assertTrue(HistoricoOSAB.objects.filter(parceiro=self.pdv).exists())

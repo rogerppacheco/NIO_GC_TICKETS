@@ -1498,6 +1498,74 @@ class FilaOsabTests(TestCase):
         self.assertContains(r, "tipo=status_pedido")
         self.assertContains(r, "situacao_osab=__sem__")
 
+    def test_resolver_tickets_osab_concluido_atualiza_todos_status(self):
+        from django.core.management import call_command
+
+        from gestao.models import VendaOSAB
+        from tickets.services import resolver_tickets_osab_concluido
+
+        VendaOSAB.objects.create(
+            pedido="10721324",
+            pdv_nome="PDV",
+            situacao="Concluído",
+            dt_ref=timezone.now(),
+        )
+        VendaOSAB.objects.create(
+            pedido="20000001",
+            pdv_nome="PDV",
+            situacao="concluido",
+            dt_ref=timezone.now(),
+        )
+        VendaOSAB.objects.create(
+            pedido="30000001",
+            pdv_nome="PDV",
+            situacao="Em Aprovisionamento",
+            dt_ref=timezone.now(),
+        )
+        self.ticket.status = StatusTicket.EM_ANALISE
+        self.ticket.save(update_fields=["status"])
+
+        t_encaminhado = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.REPARO,
+            pedido="10721324.0",
+            status=StatusTicket.ENCAMINHADO,
+        )
+        t_fechado = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.STATUS_PEDIDO,
+            pedido="20000001",
+            status=StatusTicket.FECHADO,
+        )
+        t_cancelado = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.PENDENCIA_INDEVIDA,
+            pedido=" 20000001 ",
+            status=StatusTicket.CANCELADO,
+        )
+        t_aprov = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.SEM_SLOT,
+            pedido="30000001",
+            status=StatusTicket.EM_ANALISE,
+        )
+
+        atualizados = resolver_tickets_osab_concluido()
+        self.assertEqual(atualizados, 4)
+
+        for t in (self.ticket, t_encaminhado, t_fechado, t_cancelado):
+            t.refresh_from_db()
+            self.assertEqual(t.status, StatusTicket.RESOLVIDO)
+            self.assertIsNotNone(t.resolvido_em)
+
+        t_aprov.refresh_from_db()
+        self.assertEqual(t_aprov.status, StatusTicket.EM_ANALISE)
+
+        # Segunda execução é idempotente
+        call_command("resolver_tickets_osab_concluido")
+        self.assertEqual(resolver_tickets_osab_concluido(), 0)
+
+
 
 @override_settings(STORAGES=STORAGES_TESTE)
 class FilaCoberturaTests(TestCase):
