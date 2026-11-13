@@ -90,6 +90,7 @@ MASCARAS = [
             "*MÁSCARA PADRÃO DE ACIONAMENTO PARA REPAROS DE OSS RECÉM INSTALADAS:*\n\n"
             "- *OS:* {{os}}\n"
             "- *NOME DO CLIENTE:* {{nome_cliente}}\n"
+            "- *CPF DO CLIENTE:* {{documento}}\n"
             "- *ENDEREÇO COMPLETO:* {{endereco}}\n"
             "- *CONTATO DO CLIENTE:* {{contato}}\n"
             "- *PDV:* {{pdv}} - {{parceiro}}\n"

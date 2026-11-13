@@ -177,6 +177,7 @@ CAMPOS_POR_TIPO: dict[str, dict] = {
         "campos": [
             "pedido",
             "nome_cliente",
+            "documento_cliente",
             "cep",
             "logradouro",
             "numero_fachada",
@@ -197,6 +198,7 @@ CAMPOS_POR_TIPO: dict[str, dict] = {
         "obrigatorios": [
             "pedido",
             "nome_cliente",
+            "documento_cliente",
             "cep",
             "numero_fachada",
             "solicitante_contato",
@@ -610,6 +612,7 @@ LABELS_POR_TIPO: dict[str, dict[str, str]] = {
         "turno_alternativo": "Opção 2 — Turno",
         "data_instalacao": "Data da instalação",
         "nome_cliente": "Nome do cliente",
+        "documento_cliente": "CPF do cliente",
         "motivo_reparo": "Solicitação",
         "descricao": "Descreva a solicitação",
     },
@@ -683,6 +686,7 @@ CAMPOS_CONTEXTO_RESPOSTA: dict[str, list[str]] = {
     TipoDemanda.REPARO: [
         "pedido",
         "nome_cliente",
+        "documento_cliente",
         "data_instalacao",
         "data_desejada",
         "turno",

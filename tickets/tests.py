@@ -3141,3 +3141,78 @@ class ComunicadoTests(TestCase):
         self.assertIn("Parceiros Nio", msg)
         self.assertIn("*Com arquivo*", texto.call_args.args[1])
         self.assertEqual(documento.call_args.kwargs["file_name"], "aviso.pdf")
+
+
+class ReparoDemandaTests(TestCase):
+    def setUp(self):
+        self.pdv = Parceiro.objects.create(codigo_pdv="1068919", nome="MULTI TELECOM")
+
+    def _dados(self, **extra):
+        data = {
+            "parceiro": str(self.pdv.pk),
+            "tipo": TipoDemanda.REPARO,
+            "pedido": "12034212",
+            "nome_cliente": "Amanda Silva Ferreira",
+            "documento_cliente": "12345678901",
+            "cep": "39402637",
+            "numero_fachada": "2478",
+            "solicitante_contato": "38997356575",
+            "data_instalacao": "2026-11-10",
+            "data_desejada": "2026-11-12",
+            "turno": "manha",
+            "data_alternativa": "2026-11-12",
+            "turno_alternativo": "tarde",
+            "motivo_reparo": "Internet não funciona (total)",
+        }
+        data.update(extra)
+        return data
+
+    def test_schema_reparo_exige_cpf_do_cliente(self):
+        cfg = schema_tipo(TipoDemanda.REPARO)
+        self.assertIn("documento_cliente", cfg["campos"])
+        self.assertIn("documento_cliente", cfg["obrigatorios"])
+        labels = schema_para_js()[TipoDemanda.REPARO]["labels"]
+        self.assertEqual(labels["documento_cliente"], "CPF do cliente")
+
+    def test_formulario_reparo_exige_cpf(self):
+        form = TicketCreateForm(data=self._dados(documento_cliente=""))
+        self.assertFalse(form.is_valid())
+        self.assertIn("documento_cliente", form.errors)
+        self.assertIn("CPF do cliente", str(form.errors["documento_cliente"]))
+
+        form_ok = TicketCreateForm(data=self._dados())
+        self.assertTrue(form_ok.is_valid(), form_ok.errors)
+
+    def test_mascara_reparo_inclui_cpf_do_cliente(self):
+        from tickets.management.commands.seed_nio import MASCARAS
+        from tickets.services import render_mascara
+
+        template = next(
+            m["template"] for m in MASCARAS if m["tipos"] == TipoDemanda.REPARO
+        )
+        ticket = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.REPARO,
+            pedido="12034212",
+            nome_cliente="Amanda Silva Ferreira",
+            documento_cliente="12345678901",
+            endereco_completo=(
+                "AVENIDA LEONEL BEIRÃO DE JESUS, 2478, JOÃO ALVES, "
+                "MONTES CLAROS - MG, 39402-637"
+            ),
+            solicitante_contato="(38) 99735-6575",
+            data_instalacao="2026-11-10",
+            data_desejada="2026-11-12",
+            turno="manha",
+            data_alternativa="2026-11-12",
+            turno_alternativo="tarde",
+            descricao="INTERNET DA CLIENTE FOI INSTALADA NORMALMENTE",
+        )
+        ticket.refresh_from_db()
+        texto = render_mascara(Mascara(template=template), ticket)
+        self.assertIn("- *NOME DO CLIENTE:* AMANDA SILVA FERREIRA", texto)
+        self.assertIn("- *CPF DO CLIENTE:* 12345678901", texto)
+        itens = contexto_demanda_para_resposta(ticket)
+        nomes = [i["name"] for i in itens]
+        self.assertIn("documento_cliente", nomes)
+
