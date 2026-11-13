@@ -56,6 +56,7 @@ urlpatterns = [
     path("acessos/<int:pk>/resetar/", acessos_views.acesso_resetar, name="acesso_resetar"),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("fila/", views.fila, name="fila"),
+    path("fila/sincronizar-osab/", views.fila_sincronizar_osab, name="fila_sincronizar_osab"),
     path("tickets/novo/", views.ticket_criar, name="ticket_criar"),
     path("tickets/<str:protocolo>/responder/", views.ticket_responder, name="ticket_responder"),
     path("tickets/<str:protocolo>/mascaras.json", views.ticket_mascaras_json, name="ticket_mascaras_json"),

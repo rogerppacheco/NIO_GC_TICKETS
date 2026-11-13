@@ -508,6 +508,31 @@ def fila(request: HttpRequest) -> HttpResponse:
 
 
 @login_required
+@require_POST
+def fila_sincronizar_osab(request: HttpRequest) -> HttpResponse:
+    if not tem_acesso_interno(request.user):
+        return redirect("login")
+    from .services import sincronizar_status_tickets_osab
+
+    res = sincronizar_status_tickets_osab()
+    resolvidos = res["resolvidos"]
+    fechados = res["fechados"]
+    if resolvidos or fechados:
+        messages.success(
+            request,
+            f"Sincronização OSAB concluída: {resolvidos} ticket(s) para Resolvido (OSAB Concluído) "
+            f"e {fechados} para Fechado (OSAB Cancelado).",
+        )
+    else:
+        messages.info(
+            request,
+            "Sincronização OSAB concluída: todos os tickets já estavam atualizados conforme a OSAB.",
+        )
+    return redirect(_proximo_seguro(request, reverse("fila")))
+
+
+
+@login_required
 def ticket_criar(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         form = TicketCreateForm(request.POST, request.FILES)

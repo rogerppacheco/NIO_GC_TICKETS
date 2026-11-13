@@ -1615,6 +1615,43 @@ class FilaOsabTests(TestCase):
         self.assertEqual(t_em_cancelamento.status, StatusTicket.EM_ANALISE)
         self.assertEqual(fechar_tickets_osab_cancelado(), 0)
 
+    def test_botao_sincronizar_osab_na_fila(self):
+        from gestao.models import VendaOSAB
+
+        VendaOSAB.objects.create(
+            pedido="10721324",
+            pdv_nome="PDV",
+            situacao="Concluído",
+            dt_ref=timezone.now(),
+        )
+        VendaOSAB.objects.create(
+            pedido="90000001",
+            pdv_nome="PDV",
+            situacao="Cancelado",
+            dt_ref=timezone.now(),
+        )
+        t_canc = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.SEM_SLOT,
+            pedido="90000001",
+            status=StatusTicket.EM_ANALISE,
+        )
+        self.client.force_login(self.gestor)
+        with override_settings(**self.storages):
+            r_fila = self.client.get(reverse("fila"))
+            self.assertContains(r_fila, "Sincronizar OSAB")
+            destino = reverse("fila") + "?status=todos"
+            r = self.client.post(
+                reverse("fila_sincronizar_osab"),
+                {"next": destino},
+            )
+        self.assertRedirects(r, destino)
+        self.ticket.refresh_from_db()
+        t_canc.refresh_from_db()
+        self.assertEqual(self.ticket.status, StatusTicket.RESOLVIDO)
+        self.assertEqual(t_canc.status, StatusTicket.FECHADO)
+
+
 
 
 

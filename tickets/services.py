@@ -612,3 +612,22 @@ def fechar_tickets_osab_cancelado(Ticket_model=None, VendaOSAB_model=None) -> in
     )
 
 
+def sincronizar_status_tickets_osab(Ticket_model=None, VendaOSAB_model=None) -> dict[str, int]:
+    """Sincroniza todos os tickets com a OSAB:
+    - OSAB Concluído -> Resolvido
+    - OSAB Cancelado -> Fechado
+    """
+    resolvidos = resolver_tickets_osab_concluido(
+        Ticket_model=Ticket_model, VendaOSAB_model=VendaOSAB_model
+    )
+    fechados = fechar_tickets_osab_cancelado(
+        Ticket_model=Ticket_model, VendaOSAB_model=VendaOSAB_model
+    )
+    return {
+        "resolvidos": resolvidos,
+        "fechados": fechados,
+        "total": resolvidos + fechados,
+    }
+
+
+

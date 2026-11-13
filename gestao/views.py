@@ -582,8 +582,17 @@ def osab_view(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         action = request.POST.get("action") or ""
         if action == "recalcular" and _pode_importar(request):
+            from tickets.services import sincronizar_status_tickets_osab
+
             resumo = calcular_osab(ano, mes, parceiros=_parceiros_recorte(request))
-            messages.success(request, f"OSAB recalculada: {resumo['pdvs']} PDV(s).")
+            sync_res = sincronizar_status_tickets_osab()
+            msg = f"OSAB recalculada: {resumo['pdvs']} PDV(s)."
+            if sync_res["total"]:
+                msg = (
+                    f"{msg} Tickets atualizados ({sync_res['resolvidos']} Resolvido, "
+                    f"{sync_res['fechados']} Fechado)."
+                )
+            messages.success(request, msg)
             return _voltar(request, "gestao_osab")
         if action == "cadastrar_parceiros" and _pode_importar(request):
             recorte = _parceiros_recorte(request)
