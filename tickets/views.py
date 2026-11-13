@@ -1909,10 +1909,12 @@ def ticket_enviar_mascara_api(request: HttpRequest, protocolo: str) -> HttpRespo
 
 @gestor_required
 def config_resposta_lista(request: HttpRequest) -> HttpResponse:
+    from .models import tipos_demanda_ordenados
+
     garantir_config_resposta_padrao()
     configs = {c.tipo: c for c in ConfigRespostaTipo.objects.all()}
     itens = []
-    for codigo, label in TipoDemanda.choices:
+    for codigo, label in tipos_demanda_ordenados():
         cfg = configs.get(codigo)
         ativos = len(cfg.campos_ativos()) if cfg else 0
         total = len(cfg.campos) if cfg else 0

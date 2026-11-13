@@ -18,6 +18,7 @@ from .models import (
     StatusTicket,
     Ticket,
     TipoDemanda,
+    tipos_demanda_ordenados,
 )
 
 
@@ -596,7 +597,7 @@ class TicketCreateForm(forms.ModelForm):
                 self.fields[name].label = label
                 self.fields[name].required = False
         self.fields["tipo"].required = True
-        self.fields["tipo"].choices = [("", "Selecione o tipo...")] + list(TipoDemanda.choices)
+        self.fields["tipo"].choices = [("", "Selecione o tipo...")] + tipos_demanda_ordenados()
         if "parceiro" in self.fields:
             self.fields["parceiro"].required = True
         # Placeholder amigável por campo
@@ -774,6 +775,7 @@ class TicketTreatForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["tipo"].choices = tipos_demanda_ordenados()
         situacoes = [
             (valor, rotulo)
             for valor, rotulo in StatusTicket.choices
@@ -915,7 +917,7 @@ class FilaFiltroForm(forms.Form):
     )
     tipo = forms.ChoiceField(
         required=False,
-        choices=[("", "Todos tipos")] + list(TipoDemanda.choices),
+        choices=[("", "Todos tipos")] + tipos_demanda_ordenados(),
         widget=forms.Select(attrs={"class": "fila-pick", "aria-label": "Tipo"}),
     )
     parceiro = forms.ModelChoiceField(

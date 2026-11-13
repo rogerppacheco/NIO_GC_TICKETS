@@ -1651,6 +1651,27 @@ class FilaOsabTests(TestCase):
         self.assertEqual(self.ticket.status, StatusTicket.RESOLVIDO)
         self.assertEqual(t_canc.status, StatusTicket.FECHADO)
 
+    def test_tipos_demanda_em_ordem_alfabetica_na_fila_e_nova_demanda(self):
+        from tickets.forms import (
+            FilaFiltroForm,
+            TicketCreateForm,
+            TicketPublicCreateForm,
+            TicketTreatForm,
+        )
+        from tickets.models import tipos_demanda_ordenados
+
+        esperados = [rotulo for _, rotulo in tipos_demanda_ordenados()]
+        self.assertEqual(esperados[0], "Abrir chamado com TI")
+        self.assertEqual(esperados[-1], "Vazamento de dados")
+
+        for form in (TicketCreateForm(), TicketPublicCreateForm(), FilaFiltroForm()):
+            rotulos = [rotulo for valor, rotulo in form.fields["tipo"].choices if valor]
+            self.assertEqual(rotulos, esperados)
+
+        treat = TicketTreatForm(instance=self.ticket)
+        self.assertEqual([r for _, r in treat.fields["tipo"].choices], esperados)
+
+
 
 
 

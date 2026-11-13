@@ -162,6 +162,17 @@ class TipoDemanda(models.TextChoices):
     OUTROS = "outros", "Outros / suporte geral"
 
 
+def tipos_demanda_ordenados() -> list[tuple[str, str]]:
+    """Retorna as opções de TipoDemanda em ordem alfabética pelo rótulo (ignorando acentos/caixa)."""
+
+    def _chave(par: tuple[str, str]) -> str:
+        norm = unicodedata.normalize("NFKD", str(par[1] or ""))
+        return "".join(c for c in norm if not unicodedata.combining(c)).casefold().strip()
+
+    return sorted(TipoDemanda.choices, key=_chave)
+
+
+
 class VariacaoSemSlot(models.TextChoices):
     SEM_AGENDA = "sem_agenda", "Pedido sem slot para agendar"
     AGENDADO_D1 = "agendado_d1", "Já agendado — sem slot D+1"
