@@ -578,6 +578,41 @@ body.page-fila .messages li {
 .pill.encaminhado { background: #eef3ff; color: #3538cd; border-color: #c7d2fe; }
 .pill.resolvido, .pill.fechado { background: #ecfdf3; color: var(--ok); border-color: #abe7c5; }
 .pill.cancelado { background: #fef3f2; color: var(--danger); border-color: #f3c6c2; }
+.pill.reincidente { background: #fff1e8; color: #9a3412; border-color: #fdba74; }
+.pill.csat { background: #fffbeb; color: #92400e; border-color: #fcd34d; }
+
+.csat-box,
+.reabrir-box {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+.csat-stars {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.csat-star {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #d6d3d1;
+  font-size: 1.55rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.1rem 0.15rem;
+}
+.csat-star:hover,
+.csat-star.is-active {
+  color: #f59e0b;
+}
+.csat-atual { margin: 0.2rem 0 0.4rem; }
+.reabrir-form textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 4.5rem;
+}
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;

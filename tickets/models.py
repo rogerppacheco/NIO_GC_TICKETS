@@ -4,6 +4,7 @@ import unicodedata
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.db.models import Max
 from django.db.models.signals import post_delete
@@ -348,6 +349,29 @@ class Ticket(models.Model):
         null=True,
         blank=True,
         help_text="Tempo entre clicar em Responder e Salvar resposta (primeira vez).",
+    )
+    avaliacao_retorno = models.PositiveSmallIntegerField(
+        "Nota do retorno (CSAT)",
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        help_text="Avaliação do parceiro sobre o retorno (1 a 5 estrelas).",
+    )
+    avaliacao_retorno_em = models.DateTimeField(
+        "Avaliado em",
+        null=True,
+        blank=True,
+    )
+    reincidente = models.BooleanField(
+        "Reincidente",
+        default=False,
+        db_index=True,
+        help_text="Marcado quando o parceiro reabre o mesmo protocolo após resolução.",
+    )
+    reaberto_em = models.DateTimeField(
+        "Reaberto em",
+        null=True,
+        blank=True,
     )
 
     class Meta:

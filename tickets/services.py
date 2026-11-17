@@ -5,9 +5,87 @@ import re
 from pathlib import Path
 from typing import Any
 
+from django.core.exceptions import ValidationError
+from django.utils import timezone
 from django.utils.formats import date_format
 
-from .models import Anexo, Mascara, Mensagem, Ticket
+from .models import Anexo, Mascara, Mensagem, StatusTicket, Ticket
+
+
+def ticket_tem_retorno(ticket: Ticket) -> bool:
+    return bool((ticket.resultado_status or "").strip() or (ticket.resposta_publica or "").strip())
+
+
+def pode_avaliar_retorno(ticket: Ticket) -> bool:
+    return (
+        ticket.status in {StatusTicket.RESOLVIDO, StatusTicket.FECHADO}
+        and ticket_tem_retorno(ticket)
+    )
+
+
+def pode_reabrir_como_reincidente(ticket: Ticket) -> bool:
+    return ticket.status in {StatusTicket.RESOLVIDO, StatusTicket.FECHADO}
+
+
+def avaliar_retorno(ticket: Ticket, nota: int) -> Ticket:
+    """Grava CSAT 1–5 do parceiro sobre o retorno atual."""
+    try:
+        nota_int = int(nota)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("Informe uma nota de 1 a 5.") from exc
+    if nota_int < 1 or nota_int > 5:
+        raise ValidationError("Informe uma nota de 1 a 5.")
+    if not pode_avaliar_retorno(ticket):
+        raise ValidationError(
+            "Só é possível avaliar tickets resolvidos/fechados que já tenham retorno."
+        )
+    ticket.avaliacao_retorno = nota_int
+    ticket.avaliacao_retorno_em = timezone.now()
+    ticket.save(update_fields=["avaliacao_retorno", "avaliacao_retorno_em", "atualizado_em"])
+    return ticket
+
+
+def reabrir_como_reincidente(ticket: Ticket, *, motivo: str, autor=None) -> Ticket:
+    """Reabre o mesmo protocolo como Novo com marcação Reincidente."""
+    if not pode_reabrir_como_reincidente(ticket):
+        raise ValidationError(
+            "Só é possível reabrir tickets resolvidos ou fechados."
+        )
+    texto = (motivo or "").strip()
+    if not texto:
+        raise ValidationError("Informe o motivo da reabertura.")
+
+    agora = timezone.now()
+    autor_nome = ""
+    if autor is not None:
+        autor_nome = (
+            getattr(autor, "get_full_name", lambda: "")()
+            or getattr(autor, "get_username", lambda: "")()
+            or getattr(autor, "username", "")
+            or ""
+        ).strip()
+
+    Mensagem.objects.create(
+        ticket=ticket,
+        autor=autor if getattr(autor, "pk", None) else None,
+        autor_nome=autor_nome or "Parceiro",
+        interno=False,
+        corpo=f"Reabertura como reincidente:\n{texto}",
+    )
+    ticket.status = StatusTicket.NOVO
+    ticket.reincidente = True
+    ticket.reaberto_em = agora
+    ticket.resolvido_em = None
+    ticket.save(
+        update_fields=[
+            "status",
+            "reincidente",
+            "reaberto_em",
+            "resolvido_em",
+            "atualizado_em",
+        ]
+    )
+    return ticket
 
 
 def _fmt_date(value) -> str:

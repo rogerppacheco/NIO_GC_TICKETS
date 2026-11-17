@@ -9,6 +9,9 @@
   </div>
   <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
     <span class="pill {{ ticket.status }}">{{ ticket.get_status_display }}</span>
+    {% if ticket.reincidente %}
+      <span class="pill reincidente">Reincidente</span>
+    {% endif %}
     <a class="btn btn-secondary" href="{% url 'consulta_busca' %}">Outro protocolo</a>
     {% if portal_contato %}
       <a class="btn btn-secondary" href="{% url 'minhas_demandas' %}">Demandas do PDV</a>
@@ -39,6 +42,48 @@
           <p><label>Status / agendamento</label></p>
           <div class="long-text">{{ ticket.retorno_dados.status_agendamento|texto_formatado }}</div>
         {% endif %}
+
+        {% if pode_avaliar or ticket.avaliacao_retorno %}
+          <div class="csat-box">
+            <p><label>Sua nota para este retorno</label></p>
+            {% if ticket.avaliacao_retorno %}
+              <p class="csat-atual">Nota atual: <strong>{{ ticket.avaliacao_retorno }}/5</strong>
+                {% if ticket.avaliacao_retorno_em %}
+                  <span class="help">· {{ ticket.avaliacao_retorno_em|date:"d/m/Y H:i" }}</span>
+                {% endif %}
+              </p>
+            {% endif %}
+            {% if pode_avaliar %}
+              <form method="post" class="csat-stars">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="avaliar">
+                {% for n in "12345" %}
+                  <button class="csat-star{% if ticket.avaliacao_retorno == forloop.counter %} is-active{% endif %}"
+                          type="submit" name="nota" value="{{ forloop.counter }}"
+                          title="{{ forloop.counter }} estrela{{ forloop.counter|pluralize:'s' }}"
+                          aria-label="Nota {{ forloop.counter }} de 5">★</button>
+                {% endfor %}
+              </form>
+              <p class="help">Toque em uma estrela para avaliar (1 a 5).</p>
+            {% endif %}
+          </div>
+        {% endif %}
+
+        {% if pode_reabrir %}
+          <div class="reabrir-box">
+            <p><label>Não resolveu?</label></p>
+            <p class="help">Reabra o mesmo protocolo como reincidente. Ele volta para a fila A tratar.</p>
+            <form method="post" class="reabrir-form">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="reabrir">
+              <textarea name="motivo" rows="3" required
+                        placeholder="Descreva o motivo da reabertura"></textarea>
+              <button class="btn btn-primary" type="submit" style="margin-top:0.6rem">
+                Reabrir como reincidente
+              </button>
+            </form>
+          </div>
+        {% endif %}
       {% else %}
         <p class="help">Ainda sem retorno. Acompanhe por este protocolo — a equipe NIO responde pela fila interna.</p>
       {% endif %}
@@ -57,23 +102,23 @@
   <div class="panel">
     <div class="panel-h"><h2>Histórico</h2></div>
     <div class="panel-b thread">
-      {% for m in mensagens %}
-        <div class="bubble">
-          <div class="meta">{{ m.autor_nome|default:"Sistema" }} · {{ m.criado_em|date:"d/m/Y H:i" }}</div>
-          <div class="long-text" style="max-height:12rem;margin-top:0.2rem">{{ m.corpo|texto_formatado }}</div>
-        </div>
-      {% empty %}
-        <p class="help">Sem mensagens ainda.</p>
-      {% endfor %}
-      
-      {% if msg_form %}
-        <form method="post" style="margin-top:0.5rem">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="mensagem">
-          {{ msg_form.corpo }}
-          <button class="btn btn-primary" type="submit" style="margin-top:0.6rem">Enviar resposta</button>
-        </form>
-      {% endif %}
+    {% for m in mensagens %}
+      <div class="bubble">
+        <div class="meta">{{ m.autor_nome|default:"Sistema" }} · {{ m.criado_em|date:"d/m/Y H:i" }}</div>
+        <div class="long-text" style="max-height:12rem;margin-top:0.2rem">{{ m.corpo|texto_formatado }}</div>
+      </div>
+    {% empty %}
+      <p class="help">Sem mensagens ainda.</p>
+    {% endfor %}
+
+    {% if msg_form %}
+      <form method="post" style="margin-top:0.5rem">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="mensagem">
+        {{ msg_form.corpo }}
+        <button class="btn btn-primary" type="submit" style="margin-top:0.6rem">Enviar resposta</button>
+      </form>
+    {% endif %}
     </div>
   </div>
 </div>

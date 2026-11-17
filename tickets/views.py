@@ -78,10 +78,14 @@ from .models import (
     TipoDemanda,
 )
 from .services import (
+    avaliar_retorno,
     enviar_mascara_whatsapp,
     notificar_demanda_com_anexo,
     notificar_mascaras_por_email,
     notificar_mascaras_por_whatsapp,
+    pode_avaliar_retorno,
+    pode_reabrir_como_reincidente,
+    reabrir_como_reincidente,
     render_mascara,
 )
 from gestao.messaging.syncwa import syncwa_configurado
@@ -280,6 +284,7 @@ def _resposta_excel_tickets(tickets, nome_arquivo: str) -> HttpResponse:
         "Recorrência", "Situação do Pedido", "Cargo", "RG", "E-mail",
         "Descrição", "Observações",
         "STATUS (Resultado)", "Resposta Pública", "Nota Interna", "Destino Encaminhamento",
+        "Avaliação", "Reincidente",
         "Atendente", "Criado Em", "Atualizado Em", "Primeiro Atendimento", "Resolvido Em",
         "Tempo de Retorno", "Especialista", "Gerência",
     ]
@@ -337,6 +342,8 @@ def _resposta_excel_tickets(tickets, nome_arquivo: str) -> HttpResponse:
             t.resposta_publica or "",
             t.nota_interna or "",
             t.destino_encaminhamento,
+            t.avaliacao_retorno if t.avaliacao_retorno is not None else "",
+            "Sim" if t.reincidente else "Não",
             t.atendente.get_full_name() or t.atendente.username if t.atendente else "",
             fmt_date(t.criado_em),
             fmt_date(t.atualizado_em),
@@ -804,15 +811,39 @@ def consulta_busca(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def consulta_protocolo(request: HttpRequest, protocolo: str) -> HttpResponse:
+    from django.core.exceptions import ValidationError
+
     from .acesso import pode_ver_ticket
 
     ticket = Ticket.objects.select_related("parceiro").filter(protocolo=protocolo.upper()).first()
     if not ticket or not pode_ver_ticket(request.user, ticket):
         raise Http404("Ticket não encontrado.")
-        
+
     msg_form = None
-    if ticket.status == StatusTicket.AGUARDANDO_PARCEIRO:
-        if request.method == "POST" and request.POST.get("action") == "mensagem":
+    if request.method == "POST":
+        action = (request.POST.get("action") or "").strip()
+        if action == "avaliar":
+            try:
+                avaliar_retorno(ticket, request.POST.get("nota"))
+                messages.success(request, "Obrigado! Sua nota foi registrada.")
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+            return redirect("consulta_protocolo", protocolo=ticket.protocolo)
+        if action == "reabrir":
+            try:
+                reabrir_como_reincidente(
+                    ticket,
+                    motivo=request.POST.get("motivo") or "",
+                    autor=request.user if request.user.is_authenticated else None,
+                )
+                messages.success(
+                    request,
+                    "Demanda reaberta como reincidente. O protocolo voltou para a fila A tratar.",
+                )
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+            return redirect("consulta_protocolo", protocolo=ticket.protocolo)
+        if action == "mensagem" and ticket.status == StatusTicket.AGUARDANDO_PARCEIRO:
             msg_form = MensagemForm(request.POST)
             if msg_form.is_valid():
                 msg = msg_form.save(commit=False)
@@ -821,19 +852,29 @@ def consulta_protocolo(request: HttpRequest, protocolo: str) -> HttpResponse:
                 msg.autor_nome = request.user.get_username()
                 msg.interno = False
                 msg.save()
-                
+
                 ticket.status = StatusTicket.EM_ANALISE
-                ticket.save(update_fields=["status"])
-                messages.success(request, "Sua resposta foi enviada e o ticket está novamente em análise.")
+                ticket.save(update_fields=["status", "atualizado_em"])
+                messages.success(
+                    request,
+                    "Sua resposta foi enviada e o ticket está novamente em análise.",
+                )
                 return redirect("consulta_protocolo", protocolo=ticket.protocolo)
-        else:
-            msg_form = MensagemForm()
+
+    if ticket.status == StatusTicket.AGUARDANDO_PARCEIRO and msg_form is None:
+        msg_form = MensagemForm()
 
     msgs = ticket.mensagens.filter(interno=False)
     return render(
         request,
         "tickets/consulta.html",
-        {"ticket": ticket, "mensagens": msgs, "msg_form": msg_form},
+        {
+            "ticket": ticket,
+            "mensagens": msgs,
+            "msg_form": msg_form,
+            "pode_avaliar": pode_avaliar_retorno(ticket),
+            "pode_reabrir": pode_reabrir_como_reincidente(ticket),
+        },
     )
 
 

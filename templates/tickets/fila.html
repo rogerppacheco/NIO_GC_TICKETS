@@ -100,7 +100,11 @@
               <div class="osab-dt">{{ t.osab_atualizacao|date:"d/m/y H:i" }}</div>
             {% endif %}
           </td>
-          <td><span class="pill {{ t.status }}">{{ t.get_status_display }}</span></td>
+          <td>
+            <span class="pill {{ t.status }}">{{ t.get_status_display }}</span>
+            {% if t.reincidente %}<span class="pill reincidente">Reincidente</span>{% endif %}
+            {% if t.avaliacao_retorno %}<span class="pill csat">{{ t.avaliacao_retorno }}/5</span>{% endif %}
+          </td>
           <td class="cell-clip" title="{{ t.resultado_status }}">{{ t.resultado_status|default:"—" }}</td>
           <td>{{ t.tempo_retorno_tratamento }}</td>
           <td>{{ t.criado_em|date:"d/m/y H:i" }}</td>

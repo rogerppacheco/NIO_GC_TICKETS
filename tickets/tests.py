@@ -3216,3 +3216,135 @@ class ReparoDemandaTests(TestCase):
         nomes = [i["name"] for i in itens]
         self.assertIn("documento_cliente", nomes)
 
+
+@override_settings(STORAGES=STORAGES_TESTE)
+class AvaliacaoReincidenteTests(TestCase):
+    def setUp(self):
+        from .models import ContatoParceiro
+        from .seguranca import garantir_conta_parceiro
+
+        User = get_user_model()
+        self.spec = User.objects.create_user(
+            "spec_csat", "sc@x.com", "senha-spec-ok1", first_name="Spec", is_staff=True
+        )
+        PerfilStaff.objects.create(
+            user=self.spec, papel=PerfilStaff.Papel.ESPECIALISTA, gerencia="PP"
+        )
+        self.pdv = Parceiro.objects.create(
+            codigo_pdv="9101", nome="PDV CSAT", especialista=self.spec, token_acesso="tok-csat"
+        )
+        self.pdv_outro = Parceiro.objects.create(
+            codigo_pdv="9102", nome="PDV Outro", token_acesso="tok-outro"
+        )
+        ContatoParceiro.objects.create(parceiro=self.pdv, nome="Contato", cargo="Empresário")
+        self.user_pdv, _, _ = garantir_conta_parceiro(
+            self.pdv, senha="tok-csat", must_change=False
+        )
+        self.user_outro, _, _ = garantir_conta_parceiro(
+            self.pdv_outro, senha="tok-outro", must_change=False
+        )
+        self.ticket = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.RESET_SENHA,
+            tt="TT-CSAT",
+            status=StatusTicket.RESOLVIDO,
+            resultado_status="SENHA RESETADA",
+            resposta_publica="Senha enviada ao cliente.",
+            resolvido_em=timezone.now(),
+        )
+        self.ticket_sem_retorno = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.STATUS_PEDIDO,
+            pedido="99",
+            status=StatusTicket.RESOLVIDO,
+            resolvido_em=timezone.now(),
+        )
+
+    def test_avaliar_retorno_1_a_5(self):
+        from django.core.exceptions import ValidationError
+        from .services import avaliar_retorno
+
+        avaliar_retorno(self.ticket, 4)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.avaliacao_retorno, 4)
+        self.assertIsNotNone(self.ticket.avaliacao_retorno_em)
+
+        with self.assertRaises(ValidationError):
+            avaliar_retorno(self.ticket, 0)
+        with self.assertRaises(ValidationError):
+            avaliar_retorno(self.ticket, 6)
+        with self.assertRaises(ValidationError):
+            avaliar_retorno(self.ticket_sem_retorno, 5)
+
+        aberto = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.RESET_SENHA,
+            status=StatusTicket.EM_ANALISE,
+            resposta_publica="x",
+        )
+        with self.assertRaises(ValidationError):
+            avaliar_retorno(aberto, 3)
+
+    def test_reabrir_como_reincidente(self):
+        from django.core.exceptions import ValidationError
+        from .services import reabrir_como_reincidente
+
+        with self.assertRaises(ValidationError):
+            reabrir_como_reincidente(self.ticket, motivo="")
+
+        reabrir_como_reincidente(
+            self.ticket, motivo="Cliente ainda sem acesso", autor=self.user_pdv
+        )
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, StatusTicket.NOVO)
+        self.assertTrue(self.ticket.reincidente)
+        self.assertIsNone(self.ticket.resolvido_em)
+        self.assertIsNotNone(self.ticket.reaberto_em)
+        msg = self.ticket.mensagens.filter(interno=False).latest("criado_em")
+        self.assertIn("reincidente", msg.corpo.lower())
+        self.assertIn("Cliente ainda sem acesso", msg.corpo)
+
+        cancelado = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.RESET_SENHA,
+            status=StatusTicket.CANCELADO,
+            resposta_publica="x",
+        )
+        with self.assertRaises(ValidationError):
+            reabrir_como_reincidente(cancelado, motivo="tentar")
+
+    def test_consulta_post_avaliar_e_reabrir(self):
+        self.client.force_login(self.user_pdv)
+        url = reverse("consulta_protocolo", args=[self.ticket.protocolo])
+        r = self.client.get(url)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Reabrir como reincidente")
+        self.assertContains(r, 'name="nota"')
+
+        r = self.client.post(url, {"action": "avaliar", "nota": "5"})
+        self.assertEqual(r.status_code, 302)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.avaliacao_retorno, 5)
+
+        r = self.client.post(url, {"action": "reabrir", "motivo": "Problema voltou"})
+        self.assertEqual(r.status_code, 302)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, StatusTicket.NOVO)
+        self.assertTrue(self.ticket.reincidente)
+
+        self.client.force_login(self.spec)
+        fila = self.client.get(reverse("fila"), {"status": StatusTicket.NOVO})
+        self.assertEqual(fila.status_code, 200)
+        self.assertContains(fila, self.ticket.protocolo)
+        self.assertContains(fila, "Reincidente")
+
+    def test_outro_pdv_nao_avalia_nem_reabre(self):
+        self.client.force_login(self.user_outro)
+        url = reverse("consulta_protocolo", args=[self.ticket.protocolo])
+        r = self.client.get(url)
+        self.assertEqual(r.status_code, 404)
+        r = self.client.post(url, {"action": "avaliar", "nota": "1"})
+        self.assertEqual(r.status_code, 404)
+        self.ticket.refresh_from_db()
+        self.assertIsNone(self.ticket.avaliacao_retorno)
+
