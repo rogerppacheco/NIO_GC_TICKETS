@@ -68,10 +68,23 @@ def listar_abas(arquivo, nome: str = "") -> list[str]:
 
 
 def chave_coluna(nome) -> str:
-    """Compara colunas ignorando acento, caixa, espaços e pontuação."""
+    """Compara colunas ignorando acento, caixa, espaços e pontuação.
+
+    Preserva `%` como `pct` para não colidir "Plano Dia" com "% Plano Dia"
+    (export do BI da parcial).
+    """
     texto = unicodedata.normalize("NFKD", str(nome or ""))
     texto = "".join(c for c in texto if not unicodedata.combining(c))
-    return re.sub(r"[^a-z0-9]+", "", texto.casefold())
+    texto = texto.casefold().replace("%", " pct ")
+    return re.sub(r"[^a-z0-9]+", "", texto)
+
+
+def _coluna_parece_percentual(nome) -> bool:
+    bruto = str(nome or "").strip()
+    if bruto.startswith("%"):
+        return True
+    chave = chave_coluna(bruto)
+    return chave.startswith("pct") or "percent" in chave
 
 
 def resolver_coluna(df: pd.DataFrame, opcoes: list[str]) -> str | None:
@@ -84,11 +97,19 @@ def resolver_coluna(df: pd.DataFrame, opcoes: list[str]) -> str | None:
         achou = mapa_cf.get(str(nome).casefold())
         if achou is not None:
             return achou
-    mapa_chave = {chave_coluna(c): c for c in colunas}
+    # Em colisão de chave, preferir a coluna alinhada ao alias (% vs absoluto).
+    mapa_chave: dict[str, list] = {}
+    for c in colunas:
+        mapa_chave.setdefault(chave_coluna(c), []).append(c)
     for nome in opcoes:
-        achou = mapa_chave.get(chave_coluna(nome))
-        if achou is not None:
-            return achou
+        candidatos = mapa_chave.get(chave_coluna(nome)) or []
+        if not candidatos:
+            continue
+        if len(candidatos) == 1:
+            return candidatos[0]
+        quer_pct = _coluna_parece_percentual(nome)
+        alinhados = [c for c in candidatos if _coluna_parece_percentual(c) == quer_pct]
+        return (alinhados or candidatos)[0]
     return None
 
 

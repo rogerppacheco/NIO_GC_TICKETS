@@ -4398,6 +4398,49 @@ class ResultadosTests(TestCase):
         self.assertAlmostEqual(cfg.plano_dia, 12.3)
         self.assertTrue(cfg.plano_dia_fixo)
 
+    def test_parcial_excel_ignora_coluna_pct_plano_dia(self):
+        """Export do BI traz 'Plano Dia' e '% Plano Dia' — não pode colidir na chave."""
+        from gestao.excel import aplicar_aliases, chave_coluna, ler_planilha, resolver_coluna
+        from gestao.models import ConfiguracaoOSAB
+        from gestao.pipelines.parcial_vendas import (
+            ALIASES_PARCIAL,
+            processar_parcial_excel,
+            sincronizar_planos_dia_metas,
+        )
+
+        self.assertNotEqual(chave_coluna("Plano Dia"), chave_coluna("% Plano Dia"))
+        self.assertEqual(chave_coluna("% Plano Dia"), "pctplanodia")
+
+        arquivo = _xlsx(
+            [["INOVA MG", 16, 15.729182034999988, 1.017217549164184]],
+            ["Parceiro", "Vendas", "Plano Dia", "% Plano Dia"],
+        )
+        df = ler_planilha(arquivo, "bi.xlsx")
+        df = aplicar_aliases(df, ALIASES_PARCIAL)
+        self.assertEqual(resolver_coluna(df, ALIASES_PARCIAL["plano_dia"]), "plano_dia")
+        self.assertAlmostEqual(float(df["plano_dia"].iloc[0]), 15.729182034999988)
+
+        ConfiguracaoOSAB.objects.create(
+            parceiro=self.pdv,
+            ano=2026,
+            mes=9,
+            plano_dia=1.0,
+            plano_dia_fixo=False,
+        )
+        arquivo.seek(0)
+        resumo = processar_parcial_excel(
+            arquivo, "bi.xlsx", [self.pdv], turno=15, ano=2026, mes=9
+        )
+        linha = resumo["linhas"][0]
+        self.assertEqual(linha["vendas"], 16)
+        self.assertEqual(linha["plano"], 16)  # ceil(15.73), não ceil(1.017)=2
+        n = sincronizar_planos_dia_metas(resumo)
+        self.assertEqual(n, 1)
+        cfg = ConfiguracaoOSAB.objects.get(parceiro=self.pdv, ano=2026, mes=9)
+        # Metas recebe o plano já arredondado (ceil) usado na parcial.
+        self.assertAlmostEqual(cfg.plano_dia, 16.0)
+        self.assertFalse(cfg.plano_dia_fixo)
+
     def test_forecast_nov_pp_atualiza_planos_e_lote(self):
         from django.apps import apps
         from importlib import import_module
