@@ -132,6 +132,17 @@ class ParceiroMatchTests(TestCase):
         classif = classificar_parceiros_osab(["DSC CELULARES", "UMUFIBRA", "NEXA", "FIBRA FACIL"])
         self.assertEqual(classif["faltando"], [])
 
+    def test_alias_acm_comercio_para_suporte_smart(self):
+        suporte = Parceiro.objects.create(codigo_pdv="sup", nome="SUPORTE SMART")
+        self.assertEqual(resolver_parceiro_id("SUPORTE SMART"), suporte.id)
+        self.assertEqual(resolver_parceiro_id("ACM COMERCIO"), suporte.id)
+        self.assertEqual(
+            resolver_parceiro_id(
+                "ACM COMERCIO VAREJISTA ESPECIALIZADO DE EQUIPAMENTOS DE TELEFONIA E COMUNICACAO LTDA"
+            ),
+            suporte.id,
+        )
+
 
 class SysmapImportTests(TestCase):
     def setUp(self):
