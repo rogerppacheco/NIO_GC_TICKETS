@@ -1800,3 +1800,69 @@ def enviar_parcial_pdv(
         parceiro=parceiro,
         user=user,
     )
+
+
+def enviar_clima_operacional_grupo(
+    user: AbstractBaseUser | None,
+    *,
+    mensagem: str,
+    destinatario_id: int | None = None,
+    parceiros: list[Parceiro] | None = None,
+) -> ResumoEnvio:
+    """Texto livre para o mesmo grupo usado na parcial (envio_resultados)."""
+    texto = (mensagem or "").strip()
+    if not texto:
+        return ResumoEnvio(ignorados=1, detalhes=["Informe a mensagem."])
+    if not destinatario_id:
+        return ResumoEnvio(erros=1, detalhes=["Escolha o grupo."])
+    destinos = _destino_grupo(destinatario_id, parceiros, user)
+    if not destinos:
+        return ResumoEnvio(erros=1, detalhes=["Grupo inválido ou sem flag Resultados."])
+    return _enviar_para_lista(
+        tipo=EnvioWhatsApp.Tipo.CLIMA,
+        mensagem=texto,
+        destinos=destinos,
+        parceiro=None,
+        user=user,
+    )
+
+
+def enviar_clima_operacional_destinatarios(
+    user: AbstractBaseUser | None,
+    *,
+    mensagem: str,
+    destinatario_ids: list[int] | None = None,
+) -> ResumoEnvio:
+    """Texto livre só para Destinatários do owner logado (grupo + individual)."""
+    texto = (mensagem or "").strip()
+    if not texto:
+        return ResumoEnvio(ignorados=1, detalhes=["Informe a mensagem."])
+    if user is None or not getattr(user, "pk", None):
+        return ResumoEnvio(erros=1, detalhes=["Usuário sem permissão para este envio."])
+    ids = [int(x) for x in (destinatario_ids or []) if str(x).isdigit() or isinstance(x, int)]
+    if not ids:
+        return ResumoEnvio(erros=1, detalhes=["Selecione ao menos um destinatário."])
+    destinos = list(
+        Destinatario.objects.filter(
+            pk__in=ids,
+            owner=user,
+            ativo=True,
+        )
+        .select_related("parceiro")
+        .order_by("tipo", "nome")
+    )
+    if not destinos:
+        return ResumoEnvio(
+            erros=1,
+            detalhes=["Nenhum destinatário válido na sua lista (individual/grupo)."],
+        )
+    if len(destinos) < len(set(ids)):
+        # IDs de outro owner ou inexistentes foram filtrados
+        pass
+    return _enviar_para_lista(
+        tipo=EnvioWhatsApp.Tipo.CLIMA,
+        mensagem=texto,
+        destinos=destinos,
+        parceiro=None,
+        user=user,
+    )

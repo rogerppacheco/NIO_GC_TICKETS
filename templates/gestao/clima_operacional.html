@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Clima operacional · NIO{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Clima operacional</h1>
+    <p>Envie texto livre no WhatsApp — grupo da parcial ou seus destinatários cadastrados.</p>
+  </div>
+</div>
+
+{% if not syncwa_ok %}
+  <p class="help warn">WhatsApp (Evolution) não está configurado neste ambiente.</p>
+{% endif %}
+
+<div class="clima-layout">
+  <div class="clima-forms">
+    {% if pode_painel_grupo or grupos %}
+    <form method="post" class="panel">
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+      <input type="hidden" name="action" value="enviar_clima_grupo">
+      <div class="panel-h"><h2>Grupo da parcial</h2></div>
+      <div class="panel-b">
+        <p class="help">Mesmo destino usado no envio da parcial (flag Resultados).</p>
+        <label for="clima-grupo">Grupo</label>
+        <select id="clima-grupo" name="destinatario" required {% if not pode_painel_grupo %}disabled{% endif %}>
+          <option value="">Grupo…</option>
+          {% for g in grupos %}
+            <option value="{{ g.id }}"{% if grupo_padrao and g.id == grupo_padrao.id %} selected{% endif %}>
+              {% if g.ranking_consolidado %}{{ g.nome }}{% else %}{{ g.parceiro.nome }} — {{ g.nome }}{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+        <label for="clima-msg-grupo" style="margin-top:0.75rem;display:block">Mensagem</label>
+        <textarea id="clima-msg-grupo" name="mensagem" rows="8" required
+                  placeholder="Digite o clima operacional…"
+                  {% if not pode_painel_grupo %}disabled{% endif %}></textarea>
+        <div class="form-actions" style="margin-top:0.85rem">
+          <button class="btn btn-primary" type="submit" {% if not pode_painel_grupo %}disabled{% endif %}>
+            Enviar no grupo
+          </button>
+        </div>
+        {% if not pode_enviar %}
+          <p class="help warn">Sem permissão de envio ou WhatsApp indisponível.</p>
+        {% elif not grupos %}
+          <p class="help warn">Nenhum grupo com Resultados cadastrado. Configure em Destinatários.</p>
+        {% endif %}
+      </div>
+    </form>
+    {% endif %}
+
+    <form method="post" class="panel">
+      {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+      <input type="hidden" name="action" value="enviar_clima_destinatarios">
+      <div class="panel-h"><h2>Meus destinatários</h2></div>
+      <div class="panel-b">
+        <p class="help">Somente grupos e contatos da sua lista em Destinatários (empresário, BO, etc.).</p>
+        {% if meus_destinos %}
+          <div class="clima-destinos" role="group" aria-label="Destinatários">
+            {% for d in meus_destinos %}
+              <label class="clima-destino-item">
+                <input type="checkbox" name="destinatarios" value="{{ d.id }}"
+                       {% if not syncwa_ok %}disabled{% endif %}>
+                <span>
+                  <strong>{{ d.nome }}</strong>
+                  <span class="help">
+                    {% if d.tipo == "grupo" %}Grupo{% else %}Individual{% endif %}
+                    {% if d.parceiro %} · {{ d.parceiro.nome }}{% endif %}
+                  </span>
+                </span>
+              </label>
+            {% endfor %}
+          </div>
+          <label for="clima-msg-meus" style="margin-top:0.75rem;display:block">Mensagem</label>
+          <textarea id="clima-msg-meus" name="mensagem" rows="8" required
+                    placeholder="Digite a mensagem…"
+                    {% if not syncwa_ok %}disabled{% endif %}></textarea>
+          <div class="form-actions" style="margin-top:0.85rem">
+            <button class="btn btn-primary" type="submit" {% if not pode_painel_meus %}disabled{% endif %}>
+              Enviar aos selecionados
+            </button>
+            <a class="btn btn-secondary" href="{% url 'gestao_destinatarios' %}?escopo={{ gestao_escopo|default:'meus' }}">
+              Gerenciar destinatários
+            </a>
+          </div>
+        {% else %}
+          <p class="help">Você ainda não tem destinatários pessoais cadastrados.</p>
+          <a class="btn btn-secondary" href="{% url 'gestao_destinatarios' %}?escopo={{ gestao_escopo|default:'meus' }}">
+            Cadastrar destinatários
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <section class="panel" aria-label="Envios recentes">
+    <div class="panel-h"><h2>Enviados</h2></div>
+    <div class="panel-b">
+      {% if historico %}
+        <div class="reuniao-lista">
+          {% for item in historico %}
+          <article class="reuniao-item">
+            <div class="reuniao-item-top">
+              <strong>{{ item.destino_nome|default:item.destino_jid }}</strong>
+              <span class="pill {% if item.status == 'enviado' %}resolvido{% else %}cancelado{% endif %}">
+                {{ item.get_status_display }}
+              </span>
+            </div>
+            <p class="help">{{ item.criado_em|date:"d/m/Y H:i" }}</p>
+            <div class="long-text clima-msg-preview">{{ item.mensagem|truncatechars:180 }}</div>
+            {% if item.erro %}<p class="help warn">{{ item.erro|truncatechars:120 }}</p>{% endif %}
+          </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="reuniao-vazio">
+          <strong>Nenhum clima enviado ainda</strong>
+          <p class="help">O histórico desta conta aparece aqui.</p>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}

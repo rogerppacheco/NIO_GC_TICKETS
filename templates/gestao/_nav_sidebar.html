@@ -26,7 +26,7 @@
       </div>
     </details>
 
-    <details class="app-acc-item" data-acc {% if name == "gestao_resultados" or name == "gestao_configs" or name == "gestao_comissionamento" %}open{% endif %}>
+    <details class="app-acc-item" data-acc {% if name == "gestao_resultados" or name == "gestao_configs" or name == "gestao_comissionamento" or name == "gestao_clima" %}open{% endif %}>
       <summary>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M7 16l4-5 3 3 5-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Resultados e metas
@@ -34,6 +34,7 @@
       <div class="app-acc-panel">
         <a href="{% url 'gestao_resultados' %}?escopo={{ esc }}" {% if name == "gestao_resultados" and request.GET.aba and request.GET.aba != "parcial" %}class="is-on"{% endif %}>Resultados</a>
         <a href="{% url 'gestao_resultados' %}?escopo={{ esc }}&aba=parcial" {% if name == "gestao_resultados" and request.GET.aba != "acumulado" and request.GET.aba != "ranking" %}class="is-on"{% endif %}>Parcial de vendas</a>
+        <a href="{% url 'gestao_clima' %}?escopo={{ esc }}" {% if name == "gestao_clima" %}class="is-on"{% endif %}>Clima operacional</a>
         <a href="{% url 'gestao_configs' %}?escopo={{ esc }}" {% if name == "gestao_configs" %}class="is-on"{% endif %}>Metas</a>
         <a href="{% url 'gestao_comissionamento' %}?escopo={{ esc }}" {% if name == "gestao_comissionamento" %}class="is-on"{% endif %}>Comissionamento</a>
       </div>

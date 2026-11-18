@@ -5381,5 +5381,184 @@ class CalendarioDuTests(TestCase):
         self.assertEqual(dia.peso_gross, 1.2)
 
 
+@override_settings(
+    EVOLUTION_API_URL="https://evo.test",
+    EVOLUTION_API_KEY="evo.key",
+    EVOLUTION_INSTANCE_NAME="nio_gc_tickets",
+    N8N_OUTBOUND_WEBHOOK_URL="",
+    SYNCWA_MODO_TESTE=False,
+)
+class ClimaOperacionalTests(TestCase):
+    def setUp(self):
+        from gestao.models import Destinatario
+
+        User = get_user_model()
+        self.gestor = User.objects.create_superuser("climadir", "cd@x.com", "x")
+        PerfilStaff.objects.create(user=self.gestor, papel=PerfilStaff.Papel.GESTOR)
+        self.spec = User.objects.create_user(
+            "climaspec", "cs@x.com", "x", is_staff=True, first_name="Spec"
+        )
+        PerfilStaff.objects.create(
+            user=self.spec, papel=PerfilStaff.Papel.ESPECIALISTA, gerencia="PP"
+        )
+        self.outro = User.objects.create_user(
+            "climaoutro", "co@x.com", "x", is_staff=True, first_name="Outro"
+        )
+        PerfilStaff.objects.create(
+            user=self.outro, papel=PerfilStaff.Papel.ESPECIALISTA, gerencia="PP"
+        )
+        self.pdv = Parceiro.objects.create(
+            codigo_pdv="clima1", nome="PDV CLIMA", especialista=self.spec
+        )
+        self.grupo = Destinatario.objects.create(
+            nome="Parceiros_PP_Nio",
+            jid="120363pp@g.us",
+            tipo=Destinatario.TipoDestino.GRUPO,
+            ativo=True,
+            ranking_consolidado=True,
+            envio_resultados=True,
+            owner=None,
+        )
+        self.meu_grupo = Destinatario.objects.create(
+            nome="Grupo carteira Spec",
+            jid="120363spec@g.us",
+            tipo=Destinatario.TipoDestino.GRUPO,
+            ativo=True,
+            envio_resultados=True,
+            owner=self.spec,
+            parceiro=self.pdv,
+        )
+        self.meu_contato = Destinatario.objects.create(
+            nome="Empresário PDV",
+            jid="5531999887766",
+            tipo=Destinatario.TipoDestino.INDIVIDUAL,
+            ativo=True,
+            envio_resultados=True,
+            owner=self.spec,
+            parceiro=self.pdv,
+        )
+        self.contato_outro = Destinatario.objects.create(
+            nome="BO Outro",
+            jid="5531888776655",
+            tipo=Destinatario.TipoDestino.INDIVIDUAL,
+            ativo=True,
+            owner=self.outro,
+        )
+
+    def _fake_post(self):
+        from unittest.mock import MagicMock
+
+        fake = MagicMock()
+        fake.status_code = 200
+        fake.json.return_value = {"key": {"id": "ml-clima"}}
+        return fake
+
+    def test_pagina_clima_ok(self):
+        self.client.force_login(self.gestor)
+        r = self.client.get(reverse("gestao_clima"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Clima operacional")
+        self.assertContains(r, "Grupo da parcial")
+        self.assertContains(r, self.grupo.nome)
+
+    def test_enviar_grupo_parcial(self):
+        from unittest.mock import patch
+
+        from gestao.models import EnvioWhatsApp
+
+        self.client.force_login(self.gestor)
+        with patch("gestao.messaging.syncwa.requests.post", return_value=self._fake_post()):
+            r = self.client.post(
+                reverse("gestao_clima"),
+                {
+                    "action": "enviar_clima_grupo",
+                    "destinatario": str(self.grupo.id),
+                    "mensagem": "Clima: foco em recuperação hoje.",
+                },
+            )
+        self.assertEqual(r.status_code, 302)
+        envio = EnvioWhatsApp.objects.get(tipo=EnvioWhatsApp.Tipo.CLIMA)
+        self.assertEqual(envio.status, EnvioWhatsApp.Status.ENVIADO)
+        self.assertEqual(envio.destino_jid, "120363pp@g.us")
+        self.assertIn("recuperação", envio.mensagem)
+        self.assertEqual(envio.criado_por_id, self.gestor.id)
+
+    def test_texto_vazio_nao_envia(self):
+        from gestao.models import EnvioWhatsApp
+
+        self.client.force_login(self.gestor)
+        r = self.client.post(
+            reverse("gestao_clima"),
+            {
+                "action": "enviar_clima_grupo",
+                "destinatario": str(self.grupo.id),
+                "mensagem": "   ",
+            },
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(EnvioWhatsApp.objects.filter(tipo=EnvioWhatsApp.Tipo.CLIMA).count(), 0)
+
+    def test_especialista_envia_somente_seus_destinatarios(self):
+        from unittest.mock import patch
+
+        from gestao.models import EnvioWhatsApp
+
+        self.client.force_login(self.spec)
+        with patch("gestao.messaging.syncwa.requests.post", return_value=self._fake_post()):
+            r = self.client.post(
+                reverse("gestao_clima"),
+                {
+                    "action": "enviar_clima_destinatarios",
+                    "destinatarios": [str(self.meu_contato.id), str(self.contato_outro.id)],
+                    "mensagem": "Bom dia, equipe.",
+                },
+            )
+        self.assertEqual(r.status_code, 302)
+        envios = list(EnvioWhatsApp.objects.filter(tipo=EnvioWhatsApp.Tipo.CLIMA))
+        self.assertEqual(len(envios), 1)
+        self.assertTrue(envios[0].destino_jid.startswith("5531999887766"))
+        self.assertEqual(envios[0].criado_por_id, self.spec.id)
+
+    @override_settings(EVOLUTION_API_URL="", EVOLUTION_API_KEY="")
+    def test_sem_permissao_nao_envia_grupo(self):
+        from gestao.models import EnvioWhatsApp
+
+        self.client.force_login(self.gestor)
+        r = self.client.post(
+            reverse("gestao_clima"),
+            {
+                "action": "enviar_clima_grupo",
+                "destinatario": str(self.grupo.id),
+                "mensagem": "Não deve sair.",
+            },
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(EnvioWhatsApp.objects.filter(tipo=EnvioWhatsApp.Tipo.CLIMA).count(), 0)
+
+    def test_historico_so_do_usuario(self):
+        from gestao.models import EnvioWhatsApp
+
+        EnvioWhatsApp.objects.create(
+            tipo=EnvioWhatsApp.Tipo.CLIMA,
+            status=EnvioWhatsApp.Status.ENVIADO,
+            destino_jid="120363pp@g.us",
+            destino_nome="Parceiros_PP_Nio",
+            mensagem="Msg diretor",
+            criado_por=self.gestor,
+        )
+        EnvioWhatsApp.objects.create(
+            tipo=EnvioWhatsApp.Tipo.CLIMA,
+            status=EnvioWhatsApp.Status.ENVIADO,
+            destino_jid="5531999887766",
+            destino_nome="Empresário PDV",
+            mensagem="Msg spec",
+            criado_por=self.spec,
+        )
+        self.client.force_login(self.spec)
+        r = self.client.get(reverse("gestao_clima"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Msg spec")
+        self.assertNotContains(r, "Msg diretor")
+
 
 

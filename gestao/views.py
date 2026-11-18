@@ -68,6 +68,8 @@ from .messaging.envio import (
     enviar_acumulado_pdv,
     enviar_acumulado_todos,
     enviar_ranking,
+    enviar_clima_operacional_grupo,
+    enviar_clima_operacional_destinatarios,
 )
 from .messaging.syncwa import (
     SyncWAError,
@@ -2705,5 +2707,82 @@ def envios_view(request: HttpRequest) -> HttpResponse:
             "logs": logs,
             "qtd_destinatarios": qs_destinatarios_da_lista(request.user).filter(ativo=True).count(),
             "modo_envio": modo_envio_whatsapp(),
+        },
+    )
+
+
+@equipe_required
+def clima_operacional_view(request: HttpRequest) -> HttpResponse:
+    visiveis = list(_parceiros(request))
+    grupos = list(_grupos_parcial(visiveis, request.user))
+    gerencia_atual = _gerencia_lote(request) or "PP"
+    if gerencia_atual == "***":
+        gerencia_atual = "PP"
+    grupo_padrao = _grupo_ranking_padrao(grupos, gerencia_atual)
+    meus_destinos = list(
+        Destinatario.objects.filter(owner=request.user, ativo=True)
+        .select_related("parceiro")
+        .order_by("tipo", "nome")
+    )
+    pode_enviar = _pode_enviar(request)
+    pode_painel_grupo = pode_enviar and bool(grupos)
+    pode_painel_meus = bool(meus_destinos) and syncwa_configurado()
+
+    if request.method == "POST":
+        action = (request.POST.get("action") or "").strip()
+        if action == "enviar_clima_grupo":
+            if not pode_enviar:
+                messages.error(request, "Sem permissão ou WhatsApp não configurado.")
+                return _voltar(request, "gestao_clima")
+            dest_raw = (request.POST.get("destinatario") or "").strip()
+            dest_id = int(dest_raw) if dest_raw.isdigit() else None
+            _flash_resumo(
+                request,
+                "Clima operacional (grupo)",
+                enviar_clima_operacional_grupo(
+                    request.user,
+                    mensagem=request.POST.get("mensagem") or "",
+                    destinatario_id=dest_id,
+                    parceiros=visiveis,
+                ),
+            )
+            return _voltar(request, "gestao_clima")
+        if action == "enviar_clima_destinatarios":
+            if not syncwa_configurado():
+                messages.error(request, "WhatsApp não configurado.")
+                return _voltar(request, "gestao_clima")
+            ids = [int(x) for x in request.POST.getlist("destinatarios") if str(x).isdigit()]
+            _flash_resumo(
+                request,
+                "Clima operacional (meus destinatários)",
+                enviar_clima_operacional_destinatarios(
+                    request.user,
+                    mensagem=request.POST.get("mensagem") or "",
+                    destinatario_ids=ids,
+                ),
+            )
+            return _voltar(request, "gestao_clima")
+
+    historico = (
+        EnvioWhatsApp.objects.filter(
+            tipo=EnvioWhatsApp.Tipo.CLIMA,
+            criado_por=request.user,
+        )
+        .select_related("destinatario", "parceiro")
+        .order_by("-criado_em")[:20]
+    )
+    return render(
+        request,
+        "gestao/clima_operacional.html",
+        {
+            "grupos": grupos,
+            "grupo_padrao": grupo_padrao,
+            "meus_destinos": meus_destinos,
+            "historico": historico,
+            "pode_enviar": pode_enviar,
+            "pode_painel_grupo": pode_painel_grupo,
+            "pode_painel_meus": pode_painel_meus,
+            "syncwa_ok": syncwa_configurado(),
+            "gerencia_atual": gerencia_atual,
         },
     )

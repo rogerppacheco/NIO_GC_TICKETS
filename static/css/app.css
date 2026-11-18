@@ -2885,6 +2885,47 @@ body.page-fpd .gestao-escopo + .help { display: none; }
 
 .form-actions-sticky { position: sticky; bottom: 0; background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(8px); padding: 0.85rem 1.5rem; border-top: 1px solid var(--line); margin: 1.5rem -1.5rem -1.5rem; border-bottom-left-radius: inherit; border-bottom-right-radius: inherit; display: flex; justify-content: flex-end; gap: 0.65rem; z-index: 20; }
 
+.clima-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: 1rem;
+  align-items: start;
+}
+.clima-forms {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.clima-destinos {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: 14rem;
+  overflow: auto;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fafbfc;
+}
+.clima-destino-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 0;
+  cursor: pointer;
+}
+.clima-destino-item strong { display: block; }
+.clima-destino-item .help { display: block; margin-top: 0.05rem; }
+.clima-msg-preview {
+  margin-top: 0.35rem;
+  white-space: pre-wrap;
+  max-height: 6rem;
+  overflow: hidden;
+}
+@media (max-width: 900px) {
+  .clima-layout { grid-template-columns: 1fr; }
+}
+
 .reuniao-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);

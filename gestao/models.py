@@ -708,6 +708,7 @@ class EnvioWhatsApp(models.Model):
         RESUMO = "resumo", "Resumo geral"
         MASCARA = "mascara", "Máscara de atendimento"
         COMUNICADO = "comunicado", "Comunicado"
+        CLIMA = "clima", "Clima operacional"
         TESTE = "teste", "Teste WhatsApp"
 
     class Status(models.TextChoices):
