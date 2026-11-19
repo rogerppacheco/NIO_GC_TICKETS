@@ -278,6 +278,98 @@ def listar_grupos(timeout: float | None = None, *, instance: str | None = None) 
     return {"ok": True, "count": len(groups), "groups": groups}
 
 
+def chave_conversa(jid: str) -> str:
+    """Identidade estável de um chat já aberto (grupo, contato ou LID)."""
+    bruto = (jid or "").strip()
+    if not bruto:
+        return ""
+    if any(marca in bruto for marca in ("@g.us", "@lid", "@broadcast", "@newsletter")):
+        return bruto
+    if "@" in bruto:
+        return bruto.split("@", 1)[0]
+    return re.sub(r"\D", "", bruto)
+
+
+def _jid_conversa(item: dict) -> str:
+    for chave in ("remoteJid", "jid", "id"):
+        valor = item.get(chave)
+        if isinstance(valor, dict):
+            valor = valor.get("_serialized") or valor.get("remoteJid") or ""
+        if isinstance(valor, str) and "@" in valor:
+            return valor.strip()
+    return ""
+
+
+def _nome_conversa(item: dict, jid: str, grupo: bool) -> str:
+    for chave in ("name", "pushName", "subject", "verifiedName", "notify"):
+        valor = item.get(chave)
+        if isinstance(valor, str) and valor.strip():
+            return valor.strip()[:150]
+    if grupo:
+        return "Grupo"
+    digitos = re.sub(r"\D", "", jid.split("@", 1)[0])
+    return digitos or jid
+
+
+def _conversa_aberta(jid: str) -> bool:
+    if not jid or "@" not in jid:
+        return False
+    baixo = jid.lower()
+    if "broadcast" in baixo or "@newsletter" in baixo or baixo.startswith("status@"):
+        return False
+    return "@g.us" in baixo or "@s.whatsapp.net" in baixo or "@c.us" in baixo or "@lid" in baixo
+
+
+def _lista_bruta(data: object) -> list:
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        for chave in ("chats", "data", "response", "messages"):
+            inner = data.get(chave)
+            if isinstance(inner, list):
+                return inner
+            if isinstance(inner, dict):
+                return list(inner.values())
+    return []
+
+
+def listar_conversas(timeout: float | None = None, *, instance: str | None = None) -> dict:
+    """Conversas já abertas no WhatsApp pareado. Não inclui número sem chat."""
+    if not syncwa_configurado():
+        return {"ok": False, "error": "Evolution não configurada.", "conversas": []}
+    timeout = timeout if timeout is not None else _timeout()
+    url = f"{_evo_url()}/chat/findChats/{_evo_instance(instance)}"
+    try:
+        status, body = _post_json(url, {}, _evo_headers(), timeout)
+    except requests.RequestException as exc:
+        return {"ok": False, "error": f"Falha de rede: {exc}", "conversas": []}
+    if status >= 400:
+        return {"ok": False, "error": f"HTTP {status}: {body}", "conversas": []}
+
+    conversas: list[dict] = []
+    vistos: set[str] = set()
+    for item in _lista_bruta(body):
+        if not isinstance(item, dict):
+            continue
+        jid = _jid_conversa(item)
+        if not _conversa_aberta(jid):
+            continue
+        chave = chave_conversa(jid)
+        if not chave or chave in vistos:
+            continue
+        vistos.add(chave)
+        grupo = "@g.us" in jid
+        conversas.append(
+            {
+                "jid": jid,
+                "nome": _nome_conversa(item, jid, grupo),
+                "grupo": grupo,
+            }
+        )
+    conversas.sort(key=lambda c: (not c["grupo"], c["nome"].casefold()))
+    return {"ok": True, "count": len(conversas), "conversas": conversas}
+
+
 def _post_json(url: str, payload: dict, headers: dict[str, str], timeout: float) -> tuple[int, object]:
     r = requests.post(url, headers=headers, json=payload, timeout=timeout)
     try:

@@ -86,6 +86,27 @@ def instancia_conectada_do_usuario(user) -> str | None:
     return inst.nome if status.get("connected") else None
 
 
+def instancia_da_sessao(user) -> str:
+    """WhatsApp logado de quem envia a mensagem livre.
+
+    O gestor usa o chip da gestão. Especialista e gerência usam só a própria
+    instância, mesmo quando os outros envios saem do chip central.
+    """
+    if user is None or not getattr(user, "pk", None):
+        raise SyncWAError(MSG_SEM_INSTANCIA)
+    if eh_gestor(user):
+        return instancia_global()
+    try:
+        inst = user.instancia_whatsapp
+    except (ObjectDoesNotExist, AttributeError):
+        raise SyncWAError(MSG_SEM_INSTANCIA)
+    status = EvolutionConnectionService(instance_name=inst.nome).get_status()
+    gravar_status(user, status)
+    if not status.get("connected"):
+        raise SyncWAError(MSG_SEM_INSTANCIA)
+    return inst.nome
+
+
 def instancia_para_envio(user) -> str:
     """Nome da instância Evolution que dispara o envio.
 

@@ -12,6 +12,7 @@ urlpatterns = [
     path("resultados/parcial-preview/", views.parcial_preview, name="gestao_parcial_preview"),
     path("resultados/vb-sem-municipio.xlsx", views.exportar_vb_sem_municipio, name="gestao_vb_sem_municipio"),
     path("clima-operacional/", views.clima_operacional_view, name="gestao_clima"),
+    path("mensagem-livre/", views.mensagem_livre_view, name="gestao_mensagem_livre"),
     path("modo-teste/", views.toggle_modo_teste_view, name="gestao_modo_teste"),
     path("capilaridade/", views.capilaridade_view, name="gestao_capilaridade"),
     path("fpd/", views.fpd_view, name="gestao_fpd"),

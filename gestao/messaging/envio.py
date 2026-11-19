@@ -34,8 +34,17 @@ from ..planilhas import (
 )
 from ..relatorios import montar_mascara_pdv, resumo_geral
 from .email_smtp import enviar_email_com_anexos, smtp_configurado
-from .instancia import instancia_para_envio
-from .syncwa import SyncWAError, SyncWAResult, enviar_documento, enviar_texto, modo_teste_ativo, syncwa_configurado
+from .instancia import instancia_da_sessao, instancia_para_envio
+from .syncwa import (
+    SyncWAError,
+    SyncWAResult,
+    chave_conversa,
+    enviar_documento,
+    enviar_texto,
+    listar_conversas,
+    modo_teste_ativo,
+    syncwa_configurado,
+)
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 FLAG_EMAIL = {
@@ -822,7 +831,7 @@ def _enviar_com_anexo(
     email_corpo_html: str = "",
     email_destinos: list[str] | None = None,
 ) -> ResumoEnvio:
-    """Envia documento (+ texto se caption/mensagem > 900 chars)."""
+    """Envia documento com texto na legenda; sem arquivo, só texto."""
     resumo = ResumoEnvio()
     if not syncwa_configurado():
         return ResumoEnvio(erros=1, detalhes=["WhatsApp (Evolution) não configurado."])
@@ -841,7 +850,7 @@ def _enviar_com_anexo(
 
     teste = modo_teste_ativo()
     msg = (mensagem or "").strip() or caption
-    texto_extra = bool(msg) and (not arquivo_bytes or len(msg) > 900)
+    legenda = ((mensagem or "").strip() or caption or "")[:1024]
 
     for dest in lista:
         if arquivo_bytes:
@@ -849,12 +858,12 @@ def _enviar_com_anexo(
                 dest.jid,
                 conteudo=arquivo_bytes,
                 file_name=nome_arquivo,
-                caption=caption if texto_extra else msg[:1024],
+                caption=legenda,
                 instance=inst,
             )
             _registrar(
                 tipo=tipo,
-                mensagem=f"[anexo] {nome_arquivo}\n{caption}",
+                mensagem=f"[anexo] {nome_arquivo}\n{legenda}",
                 destinatario=dest.destinatario,
                 parceiro=parceiro or dest.parceiro,
                 user=user,
@@ -868,26 +877,25 @@ def _enviar_com_anexo(
             else:
                 resumo.erros += 1
                 resumo.detalhes.append(f"ERRO anexo → {dest.nome}: {result_doc.error}")
-                continue
+            continue
 
-        if texto_extra or not arquivo_bytes:
-            result_txt = enviar_texto(dest.jid, msg, instance=inst)
-            _registrar(
-                tipo=tipo,
-                mensagem=msg,
-                destinatario=dest.destinatario,
-                parceiro=parceiro or dest.parceiro,
-                user=user,
-                result=result_txt,
-                modo_teste=teste,
-                destino_nome=dest.nome,
-            )
-            if result_txt.ok:
-                resumo.enviados += 1
-                resumo.detalhes.append(f"OK texto → {dest.nome}")
-            else:
-                resumo.erros += 1
-                resumo.detalhes.append(f"ERRO texto → {dest.nome}: {result_txt.error}")
+        result_txt = enviar_texto(dest.jid, msg, instance=inst)
+        _registrar(
+            tipo=tipo,
+            mensagem=msg,
+            destinatario=dest.destinatario,
+            parceiro=parceiro or dest.parceiro,
+            user=user,
+            result=result_txt,
+            modo_teste=teste,
+            destino_nome=dest.nome,
+        )
+        if result_txt.ok:
+            resumo.enviados += 1
+            resumo.detalhes.append(f"OK texto → {dest.nome}")
+        else:
+            resumo.erros += 1
+            resumo.detalhes.append(f"ERRO texto → {dest.nome}: {result_txt.error}")
     if flag:
         _talvez_email(
             flag=flag,
@@ -1866,3 +1874,120 @@ def enviar_clima_operacional_destinatarios(
         parceiro=None,
         user=user,
     )
+
+
+def _numero_exibicao(numero: str) -> str:
+    digitos = "".join(ch for ch in (numero or "") if ch.isdigit())
+    if len(digitos) == 13 and digitos.startswith("55"):
+        return f"+{digitos[:2]} ({digitos[2:4]}) {digitos[4:9]}-{digitos[9:]}"
+    if len(digitos) == 12 and digitos.startswith("55"):
+        return f"+{digitos[:2]} ({digitos[2:4]}) {digitos[4:8]}-{digitos[8:]}"
+    return (numero or "").strip()
+
+
+def preparar_mensagem_livre(user: AbstractBaseUser | None) -> dict:
+    """Sessão do WhatsApp logado e as conversas já abertas nele."""
+    from django.core.exceptions import ObjectDoesNotExist
+
+    from .evolution_connection import EvolutionConnectionService
+    from .instancia import MSG_SEM_INSTANCIA, gravar_status, instancia_global
+
+    sessao = {
+        "connected": False,
+        "numero": "",
+        "numero_exibicao": "",
+        "erro": "",
+        "instance": "",
+    }
+    vazio = {"sessao": sessao, "grupos": [], "individuais": []}
+    if user is None or not getattr(user, "pk", None):
+        sessao["erro"] = MSG_SEM_INSTANCIA
+        return vazio
+    if not syncwa_configurado():
+        sessao["erro"] = "WhatsApp (Evolution) não está configurado neste ambiente."
+        return vazio
+    from tickets.acesso import eh_gestor
+
+    if eh_gestor(user):
+        inst = instancia_global()
+    else:
+        try:
+            inst = user.instancia_whatsapp.nome
+        except (ObjectDoesNotExist, AttributeError):
+            sessao["erro"] = MSG_SEM_INSTANCIA
+            return vazio
+    sessao["instance"] = inst
+    status = EvolutionConnectionService(instance_name=inst).get_status()
+    if not eh_gestor(user):
+        gravar_status(user, status)
+    sessao["connected"] = bool(status.get("connected"))
+    sessao["numero"] = str(status.get("owner") or "")
+    sessao["numero_exibicao"] = _numero_exibicao(sessao["numero"])
+    if not sessao["connected"]:
+        sessao["erro"] = "Conecte o WhatsApp para ver as conversas abertas."
+        return vazio
+    lista = listar_conversas(instance=inst)
+    if not lista.get("ok"):
+        sessao["erro"] = str(lista.get("error") or "Não foi possível ler as conversas.")
+        return vazio
+    conversas = lista.get("conversas") or []
+    return {
+        "sessao": sessao,
+        "grupos": [c for c in conversas if c["grupo"]],
+        "individuais": [c for c in conversas if not c["grupo"]],
+    }
+
+
+def enviar_mensagem_livre(
+    user: AbstractBaseUser | None,
+    *,
+    jid: str,
+    mensagem: str,
+) -> ResumoEnvio:
+    """Texto livre só para uma conversa que já existe no WhatsApp logado."""
+    texto = (mensagem or "").strip()
+    if not texto:
+        return ResumoEnvio(ignorados=1, detalhes=["Informe a mensagem."])
+    if not (jid or "").strip():
+        return ResumoEnvio(erros=1, detalhes=["Escolha uma conversa."])
+    if not syncwa_configurado():
+        return ResumoEnvio(erros=1, detalhes=["WhatsApp (Evolution) não configurado."])
+    try:
+        inst = instancia_da_sessao(user)
+    except SyncWAError as exc:
+        return ResumoEnvio(erros=1, detalhes=[str(exc)])
+    lista = listar_conversas(instance=inst)
+    if not lista.get("ok"):
+        return ResumoEnvio(
+            erros=1,
+            detalhes=[str(lista.get("error") or "Não foi possível ler as conversas.")],
+        )
+    chave = chave_conversa(jid)
+    conversa = next(
+        (c for c in lista.get("conversas") or [] if chave_conversa(c["jid"]) == chave),
+        None,
+    )
+    if not conversa:
+        return ResumoEnvio(
+            erros=1,
+            detalhes=["Essa conversa não está aberta neste WhatsApp."],
+        )
+    result = enviar_texto(conversa["jid"], texto, instance=inst)
+    _registrar(
+        tipo=EnvioWhatsApp.Tipo.LIVRE,
+        mensagem=texto,
+        destinatario=None,
+        parceiro=None,
+        user=user,
+        result=result,
+        modo_teste=modo_teste_ativo(),
+        destino_nome=conversa["nome"],
+    )
+    resumo = ResumoEnvio()
+    if result.ok:
+        resumo.enviados = 1
+        resumo.detalhes.append(f"OK → {conversa['nome']}")
+    else:
+        resumo.erros = 1
+        resumo.detalhes.append(f"ERRO → {conversa['nome']}: {result.error}")
+    return resumo

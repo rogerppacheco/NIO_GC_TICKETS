@@ -87,6 +87,9 @@
           <td>
             <div>{{ e.destino_nome|default:"—" }}</div>
             <div class="help mono">{{ e.destino_jid }}</div>
+            {% if e.tipo == "livre" and e.mensagem %}
+              <div class="help">{{ e.mensagem|truncatechars:160 }}</div>
+            {% endif %}
             {% if e.erro %}<div class="help" style="color:var(--danger)">{{ e.erro|truncatechars:120 }}</div>{% endif %}
           </td>
           <td>

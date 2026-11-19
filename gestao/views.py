@@ -70,6 +70,8 @@ from .messaging.envio import (
     enviar_ranking,
     enviar_clima_operacional_grupo,
     enviar_clima_operacional_destinatarios,
+    enviar_mensagem_livre,
+    preparar_mensagem_livre,
 )
 from .messaging.syncwa import (
     SyncWAError,
@@ -2689,12 +2691,18 @@ def envios_view(request: HttpRequest) -> HttpResponse:
     else:
         health = {"ok": False, "error": "não configurado"}
     _, filtro_logs = _filtro_relatorios(request)
-    logs = EnvioWhatsApp.objects.select_related("parceiro__especialista", "destinatario").filter(
-        filtro_logs
-    )
     if not eh_gestor(request.user):
-        logs = logs.filter(criado_por=request.user)
-    logs = logs[:60]
+        filtro_logs = filtro_logs & Q(criado_por=request.user)
+    # Mensagem livre não tem PDV; mesmo assim entra no histórico de quem enviou.
+    filtro_logs = filtro_logs | Q(
+        tipo=EnvioWhatsApp.Tipo.LIVRE,
+        criado_por=request.user,
+    )
+    logs = (
+        EnvioWhatsApp.objects.select_related("parceiro__especialista", "destinatario")
+        .filter(filtro_logs)
+        .order_by("-criado_em")[:60]
+    )
     return render(
         request,
         "gestao/envios.html",
@@ -2784,5 +2792,32 @@ def clima_operacional_view(request: HttpRequest) -> HttpResponse:
             "pode_painel_meus": pode_painel_meus,
             "syncwa_ok": syncwa_configurado(),
             "gerencia_atual": gerencia_atual,
+        },
+    )
+
+
+@equipe_required
+def mensagem_livre_view(request: HttpRequest) -> HttpResponse:
+    if request.method == "POST":
+        _flash_resumo(
+            request,
+            "Mensagem livre",
+            enviar_mensagem_livre(
+                request.user,
+                jid=request.POST.get("conversa") or "",
+                mensagem=request.POST.get("mensagem") or "",
+            ),
+        )
+        return _voltar(request, "gestao_mensagem_livre")
+
+    painel = preparar_mensagem_livre(request.user)
+    return render(
+        request,
+        "gestao/mensagem_livre.html",
+        {
+            "sessao": painel["sessao"],
+            "grupos": painel["grupos"],
+            "individuais": painel["individuais"],
+            "syncwa_ok": syncwa_configurado(),
         },
     )

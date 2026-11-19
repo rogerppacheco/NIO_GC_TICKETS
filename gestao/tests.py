@@ -2376,6 +2376,60 @@ class InstanciaEnvioTests(TestCase):
 
 
 @override_settings(
+    EVOLUTION_API_URL="https://evo.test",
+    EVOLUTION_API_KEY="evo.key",
+    EVOLUTION_INSTANCE_NAME="nio_gc_tickets",
+    N8N_OUTBOUND_WEBHOOK_URL="",
+    SYNCWA_MODO_TESTE=False,
+)
+class EnvioAnexoLegendaTests(TestCase):
+    def setUp(self):
+        from gestao.models import Destinatario
+
+        User = get_user_model()
+        self.gestor = User.objects.create_superuser("gleg", "gl@x.com", "x")
+        PerfilStaff.objects.create(user=self.gestor, papel=PerfilStaff.Papel.GESTOR)
+        self.pdv = Parceiro.objects.create(codigo_pdv="leg1", nome="PDV LEGENDA")
+        self.dest = Destinatario.objects.create(
+            parceiro=self.pdv,
+            nome="Contato Legenda",
+            jid="5531999111222",
+            envio_osab=True,
+        )
+
+    def test_mensagem_longa_vai_na_legenda_sem_texto_separado(self):
+        from unittest.mock import MagicMock, patch
+
+        from gestao.messaging.envio import _enviar_com_anexo
+        from gestao.models import EnvioWhatsApp
+
+        fake = MagicMock()
+        fake.status_code = 200
+        fake.json.return_value = {"key": {"id": "ml-leg"}}
+        msg = "A" * 950
+        with patch("gestao.messaging.syncwa.requests.post", return_value=fake) as post:
+            resumo = _enviar_com_anexo(
+                tipo=EnvioWhatsApp.Tipo.OSAB,
+                mensagem=msg,
+                caption="📁 OSAB curto",
+                destinos=[self.dest],
+                parceiro=self.pdv,
+                user=self.gestor,
+                arquivo_bytes=b"xlsx-bytes",
+                nome_arquivo="osab.xlsx",
+            )
+        self.assertEqual(resumo.enviados, 1)
+        self.assertEqual(resumo.erros, 0)
+        self.assertEqual(post.call_count, 1)
+        url = post.call_args.args[0]
+        self.assertIn("/message/sendMedia/", url)
+        self.assertNotIn("/message/sendText/", url)
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(payload["caption"], msg[:1024])
+        self.assertTrue(payload["caption"].startswith("A" * 100))
+
+
+@override_settings(
     STORAGES={
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
         "staticfiles": {
@@ -5559,6 +5613,184 @@ class ClimaOperacionalTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "Msg spec")
         self.assertNotContains(r, "Msg diretor")
+
+
+@override_settings(
+    EVOLUTION_API_URL="https://evo.test",
+    EVOLUTION_API_KEY="evo.key",
+    EVOLUTION_INSTANCE_NAME="nio_gc_tickets",
+    N8N_OUTBOUND_WEBHOOK_URL="",
+    SYNCWA_MODO_TESTE=False,
+)
+class MensagemLivreTests(TestCase):
+    def setUp(self):
+        from gestao.models import InstanciaWhatsApp
+
+        User = get_user_model()
+        self.gestor = User.objects.create_superuser("livredir", "ld@x.com", "x")
+        PerfilStaff.objects.create(user=self.gestor, papel=PerfilStaff.Papel.GESTOR)
+        self.spec = User.objects.create_user(
+            "livrespec", "ls@x.com", "x", is_staff=True, first_name="Ricardo"
+        )
+        PerfilStaff.objects.create(
+            user=self.spec, papel=PerfilStaff.Papel.ESPECIALISTA, gerencia="PP"
+        )
+        self.inst = InstanciaWhatsApp.objects.create(
+            user=self.spec, nome=f"nio_u{self.spec.pk}", estado="open", numero="5531988776655"
+        )
+
+    def _chats(self):
+        return [
+            {"remoteJid": "120363pp@g.us", "name": "Parceiros PP", "updatedAt": "2026-11-19"},
+            {"remoteJid": "5531999887766@s.whatsapp.net", "pushName": "Empresário"},
+            {"id": "status@broadcast", "name": "Status"},
+            {"remoteJid": "120363@newsletter", "name": "Canal"},
+        ]
+
+    def _post(self, url, **kwargs):
+        from unittest.mock import MagicMock
+
+        fake = MagicMock()
+        fake.status_code = 200
+        fake.content = b"{}"
+        if "findChats" in url:
+            fake.json.return_value = self._chats()
+        else:
+            fake.json.return_value = {"key": {"id": "ml-livre"}}
+        return fake
+
+    def _status(self, connected=True):
+        return {
+            "connected": connected,
+            "state": "open" if connected else "close",
+            "owner": "5531988776655",
+        }
+
+    def test_pagina_lista_so_conversas_abertas_do_proprio_whatsapp(self):
+        from unittest.mock import patch
+
+        self.client.force_login(self.spec)
+        with (
+            patch(
+                "gestao.messaging.evolution_connection.EvolutionConnectionService.get_status",
+                return_value=self._status(),
+            ),
+            patch("gestao.messaging.syncwa.requests.post", side_effect=self._post) as post,
+        ):
+            r = self.client.get(reverse("gestao_mensagem_livre"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Mensagem livre")
+        self.assertContains(r, "+55 (31) 98877-6655")
+        self.assertContains(r, "Parceiros PP")
+        self.assertContains(r, "Empresário")
+        self.assertNotContains(r, "Status")
+        self.assertNotContains(r, "Canal")
+        url = post.call_args.args[0]
+        self.assertIn(f"/chat/findChats/{self.inst.nome}", url)
+        self.assertNotIn("/chat/findChats/nio_gc_tickets", url)
+
+    def test_gestor_le_o_chip_central(self):
+        from unittest.mock import patch
+
+        self.client.force_login(self.gestor)
+        with (
+            patch(
+                "gestao.messaging.evolution_connection.EvolutionConnectionService.get_status",
+                return_value=self._status(),
+            ),
+            patch("gestao.messaging.syncwa.requests.post", side_effect=self._post) as post,
+        ):
+            r = self.client.get(reverse("gestao_mensagem_livre"))
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("/chat/findChats/nio_gc_tickets", post.call_args.args[0])
+
+    def test_envia_e_aparece_nos_envios(self):
+        from unittest.mock import patch
+
+        from gestao.models import EnvioWhatsApp
+
+        self.client.force_login(self.spec)
+        with (
+            patch(
+                "gestao.messaging.evolution_connection.EvolutionConnectionService.get_status",
+                return_value=self._status(),
+            ),
+            patch("gestao.messaging.syncwa.requests.post", side_effect=self._post) as post,
+            patch("gestao.messaging.syncwa.requests.get") as get,
+        ):
+            get.return_value.status_code = 200
+            get.return_value.json.return_value = {"instance": {"state": "open"}}
+            r = self.client.post(
+                reverse("gestao_mensagem_livre"),
+                {"conversa": "5531999887766@s.whatsapp.net", "mensagem": "Bom dia, fechamos às 18h."},
+            )
+            self.assertEqual(r.status_code, 302)
+            envio = EnvioWhatsApp.objects.get(tipo=EnvioWhatsApp.Tipo.LIVRE)
+            self.assertEqual(envio.status, EnvioWhatsApp.Status.ENVIADO)
+            self.assertEqual(envio.destino_nome, "Empresário")
+            self.assertEqual(envio.destino_jid, "5531999887766@s.whatsapp.net")
+            self.assertEqual(envio.criado_por_id, self.spec.id)
+            self.assertIn("fechamos", envio.mensagem)
+            send_urls = [c.args[0] for c in post.call_args_list if "sendText" in c.args[0]]
+            self.assertEqual(len(send_urls), 1)
+            self.assertIn(f"/message/sendText/{self.inst.nome}", send_urls[0])
+            lista = self.client.get(reverse("gestao_envios"))
+        self.assertContains(lista, "Mensagem livre")
+        self.assertContains(lista, "Empresário")
+        self.assertContains(lista, "fechamos às 18h")
+
+    def test_recusa_destino_sem_conversa_aberta(self):
+        from unittest.mock import patch
+
+        from gestao.models import EnvioWhatsApp
+
+        self.client.force_login(self.spec)
+        with (
+            patch(
+                "gestao.messaging.evolution_connection.EvolutionConnectionService.get_status",
+                return_value=self._status(),
+            ),
+            patch("gestao.messaging.syncwa.requests.post", side_effect=self._post) as post,
+        ):
+            r = self.client.post(
+                reverse("gestao_mensagem_livre"),
+                {"conversa": "5531911112222@s.whatsapp.net", "mensagem": "Oi, número novo."},
+            )
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(EnvioWhatsApp.objects.filter(tipo=EnvioWhatsApp.Tipo.LIVRE).count(), 0)
+        self.assertFalse(any("sendText" in c.args[0] for c in post.call_args_list))
+
+    def test_mensagem_vazia_nao_envia(self):
+        from unittest.mock import patch
+
+        from gestao.models import EnvioWhatsApp
+
+        self.client.force_login(self.spec)
+        with patch("gestao.messaging.syncwa.requests.post") as post:
+            r = self.client.post(
+                reverse("gestao_mensagem_livre"),
+                {"conversa": "120363pp@g.us", "mensagem": "   "},
+            )
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(EnvioWhatsApp.objects.filter(tipo=EnvioWhatsApp.Tipo.LIVRE).count(), 0)
+        post.assert_not_called()
+
+    def test_desconectado_nao_lista_conversas(self):
+        from unittest.mock import patch
+
+        self.client.force_login(self.spec)
+        with (
+            patch(
+                "gestao.messaging.evolution_connection.EvolutionConnectionService.get_status",
+                return_value=self._status(connected=False),
+            ),
+            patch("gestao.messaging.syncwa.requests.post") as post,
+        ):
+            r = self.client.get(reverse("gestao_mensagem_livre"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Conecte o WhatsApp")
+        self.assertNotContains(r, "Parceiros PP")
+        post.assert_not_called()
 
 
 

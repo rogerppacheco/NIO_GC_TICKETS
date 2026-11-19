@@ -2925,6 +2925,10 @@ body.page-fpd .gestao-escopo + .help { display: none; }
 @media (max-width: 900px) {
   .clima-layout { grid-template-columns: 1fr; }
 }
+.msg-livre-lista {
+  width: 100%;
+  min-height: 16rem;
+}
 
 .reuniao-layout {
   display: grid;

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Mensagem livre · NIO{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <h1>Mensagem livre</h1>
+    <p>Texto solto no WhatsApp logado desta conta. Não é comunicado. Só entra conversa que já está aberta nesse número.</p>
+  </div>
+  <a class="btn btn-secondary" href="{% url 'gestao_envios' %}?escopo={{ gestao_escopo|default:'meus' }}">Ver envios</a>
+</div>
+
+<section class="reuniao-destino" aria-label="WhatsApp logado">
+  <div class="reuniao-quem">
+    <div class="reuniao-quem-top">
+      <strong>WhatsApp logado</strong>
+      {% if sessao.connected %}
+        <span class="pill resolvido">Conectado</span>
+      {% else %}
+        <span class="pill cancelado">Desconectado</span>
+      {% endif %}
+    </div>
+    {% if sessao.numero_exibicao %}
+      <p class="help">{{ sessao.numero_exibicao }}</p>
+    {% elif sessao.connected %}
+      <p class="help">Sessão aberta, número ainda não identificado.</p>
+    {% endif %}
+    {% if sessao.erro %}<p class="help warn">{{ sessao.erro }}</p>{% endif %}
+  </div>
+  <a class="btn btn-secondary" href="{% url 'gestao_whatsapp' %}">Parear WhatsApp</a>
+</section>
+
+<form method="post" class="panel">
+  {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
+  <div class="panel-h"><h2>Enviar</h2></div>
+  <div class="panel-b">
+    {% if grupos or individuais %}
+      <label for="busca-conversa">Buscar</label>
+      <input id="busca-conversa" type="search" placeholder="Nome do grupo ou do contato" autocomplete="off">
+      <label for="conversa" style="margin-top:0.75rem;display:block">Conversa</label>
+      <select id="conversa" name="conversa" class="msg-livre-lista" size="12" required>
+        {% if grupos %}
+          <optgroup label="Grupos">
+            {% for c in grupos %}
+              <option value="{{ c.jid }}">{{ c.nome }}</option>
+            {% endfor %}
+          </optgroup>
+        {% endif %}
+        {% if individuais %}
+          <optgroup label="Individuais">
+            {% for c in individuais %}
+              <option value="{{ c.jid }}">{{ c.nome }}</option>
+            {% endfor %}
+          </optgroup>
+        {% endif %}
+      </select>
+      <p class="help">{{ grupos|length }} grupo(s) e {{ individuais|length }} conversa(s) individual(is) já abertas. Não dá para digitar um número novo.</p>
+      <label for="mensagem" style="margin-top:0.75rem;display:block">Mensagem</label>
+      <textarea id="mensagem" name="mensagem" rows="8" required placeholder="Digite a mensagem…"></textarea>
+      <div class="form-actions" style="margin-top:0.85rem">
+        <button class="btn btn-primary" type="submit">Enviar</button>
+      </div>
+    {% else %}
+      <p class="help">Nenhuma conversa aberta para listar. Conecte o WhatsApp desta conta e abra o chat no celular antes de enviar por aqui.</p>
+    {% endif %}
+  </div>
+</form>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  var busca = document.getElementById("busca-conversa");
+  var lista = document.getElementById("conversa");
+  if (!busca || !lista) return;
+  busca.addEventListener("input", function () {
+    var termo = busca.value.trim().toLowerCase();
+    Array.prototype.forEach.call(lista.options, function (opt) {
+      opt.hidden = termo !== "" && opt.textContent.toLowerCase().indexOf(termo) === -1;
+    });
+  });
+})();
+</script>
+{% endblock %}
