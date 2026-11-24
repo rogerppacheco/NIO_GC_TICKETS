@@ -439,6 +439,10 @@ def importar_sysmap_view(request: HttpRequest) -> HttpResponse:
     form = None
     if _pode_importar(request):
         form = UploadBaseForm(request.POST or None, request.FILES or None, extensoes=[".xlsx", ".xls", ".xlsb"])
+        form.fields["arquivo"].help_text = (
+            "Prefira .xlsx. Se o DLP bloquear CPF, remova só essa coluna e Salvar como .xlsx "
+            "(não edite/salve o .xls HTML — quebra a tabela)."
+        )
         if request.method == "POST" and form.is_valid():
             arquivo = form.cleaned_data["arquivo"]
             try:
@@ -457,8 +461,10 @@ def importar_sysmap_view(request: HttpRequest) -> HttpResponse:
                     )
                 return _voltar_sysmap(request)
             except Exception as exc:
+                tamanho = getattr(arquivo, "size", None)
+                rotulo = f"{arquivo.name}" + (f" ({tamanho} bytes)" if tamanho is not None else "")
                 _lote(request, LoteImportacao.Tipo.SYSMAP, arquivo.name, False, {}, str(exc))
-                messages.error(request, f"Falha ao importar Sysmap: {exc}")
+                messages.error(request, f"Falha ao importar Sysmap ({rotulo}): {exc}")
     _, filtro = _filtro_cadastro_sysmap(request)
     terceiros = (
         CadastroTerceiro.objects.select_related("parceiro", "parceiro__especialista")

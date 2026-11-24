@@ -271,6 +271,30 @@ class SysmapImportTests(TestCase):
         df = ler_planilha(BytesIO(bom), "Relatorio.xls")
         self.assertGreaterEqual(len(df), 1)
 
+    def test_xlsx_zip_nunca_vai_para_html(self):
+        """PK/ZIP real não entra no parser HTML mesmo com nome .xls."""
+        from gestao.excel import _parece_html, ler_planilha
+
+        arquivo = _xlsx(
+            [["ACME", "ANA", "TT9"]],
+            ["Razão Social", "Terceiro", "Chave de Acesso"],
+        )
+        conteudo = arquivo.getvalue()
+        self.assertTrue(conteudo.startswith(b"PK"))
+        self.assertFalse(_parece_html(conteudo))
+        df = ler_planilha(BytesIO(conteudo), "falso.xls")
+        self.assertGreaterEqual(len(df), 1)
+
+    def test_html_sem_table_mensagem_clara(self):
+        from gestao.excel import ler_planilha
+
+        quebrado = b"<!DOCTYPE html><html><body><div>sem tabela</div></body></html>"
+        with self.assertRaises(ValueError) as ctx:
+            ler_planilha(BytesIO(quebrado), "editado.xls")
+        msg = str(ctx.exception)
+        self.assertIn("editado.xls", msg)
+        self.assertIn("sem tag <table>", msg)
+
     def test_importa_sem_coluna_cpf(self):
         """DLP: coluna CPF pode ser removida; demais campos bastam."""
         arquivo = _xlsx(

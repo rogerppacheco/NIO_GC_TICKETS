@@ -26,8 +26,19 @@ def _engine_excel(sufixo: str) -> str | None:
     return None
 
 
+def _eh_zip_office(conteudo: bytes) -> bool:
+    """True para .xlsx/.xlsb (PK zip) — nunca tratar como HTML."""
+    return conteudo[:2] == b"PK"
+
+
 def _parece_html(conteudo: bytes) -> bool:
-    """Detecta HTML/Excel-HTML mesmo com BOM ou DOCTYPE em caixa mista."""
+    """Detecta HTML/Excel-HTML mesmo com BOM ou DOCTYPE em caixa mista.
+
+    Arquivos Office reais (ZIP/PK) nunca entram no caminho HTML, mesmo se
+    o nome terminar em .xls ou o conteúdo tiver strings parecidas.
+    """
+    if not conteudo or _eh_zip_office(conteudo):
+        return False
     amostra = conteudo[:8192].lstrip()
     if amostra.startswith(b"\xef\xbb\xbf"):
         amostra = amostra[3:].lstrip()
@@ -49,9 +60,18 @@ def _decodificar_html(conteudo: bytes) -> str:
     return conteudo.decode("utf-8", errors="replace")
 
 
-def _ler_html_tabela(conteudo: bytes) -> pd.DataFrame:
+def _ler_html_tabela(conteudo: bytes, nome: str = "") -> pd.DataFrame:
     """Lê a primeira tabela de um .xls que na verdade é HTML (export Sysmap)."""
+    nome = nome or "arquivo"
+    tamanho = len(conteudo)
     texto = _decodificar_html(conteudo)
+    if "<table" not in texto.casefold():
+        raise ValueError(
+            f"'{nome}' ({tamanho} bytes) parece HTML sem tag <table> "
+            "(arquivo editado/quebrado ou truncado pelo DLP). "
+            "Não edite o .xls HTML: use um .xlsx real (Salvar como .xlsx) "
+            "ou remova só a coluna CPF mantendo o restante."
+        )
     erros: list[str] = []
     for flavor in ("html5lib", "lxml", "bs4"):
         try:
@@ -64,20 +84,32 @@ def _ler_html_tabela(conteudo: bytes) -> pd.DataFrame:
         erros.append(f"{flavor}: no tables found")
     detalhe = "; ".join(erros[:3]) if erros else "sem parsers"
     raise ValueError(
-        "Nenhuma tabela encontrada no HTML. "
-        "Abra no Excel e Salvar como .xlsx (ou esvazie o CPF sem apagar a coluna). "
+        f"Nenhuma tabela parseável em '{nome}' ({tamanho} bytes). "
+        "O .xls HTML editado (ex.: coluna CPF apagada) costuma quebrar. "
+        "Use .xlsx (Salvar como) sem a coluna CPF. "
         f"Detalhe: {detalhe}"
     )
+
+
+def _sufixo_leitura(nome: str, conteudo: bytes) -> str:
+    """Escolhe sufixo de arquivo temporário/engine a partir do conteúdo real."""
+    sufixo = Path(nome).suffix.lower()
+    if _eh_zip_office(conteudo):
+        # .xlsb também é ZIP; se o nome já diz xlsb, respeita.
+        if sufixo == ".xlsb":
+            return ".xlsb"
+        return ".xlsx"
+    return sufixo or ".xlsx"
 
 
 def ler_planilha(arquivo, nome: str = "", sheet_name=0, **kwargs) -> pd.DataFrame:
     """Lê .xlsx, .xlsb, .xls e HTML exportado como .xls."""
     conteudo, nome = _bytes_planilha(arquivo, nome)
-    sufixo = Path(nome).suffix.lower()
     if _parece_html(conteudo):
-        return _ler_html_tabela(conteudo)
+        return _ler_html_tabela(conteudo, nome)
 
-    with tempfile.NamedTemporaryFile(suffix=sufixo or ".xlsx", delete=False) as tmp:
+    sufixo = _sufixo_leitura(nome, conteudo)
+    with tempfile.NamedTemporaryFile(suffix=sufixo, delete=False) as tmp:
         tmp.write(conteudo)
         caminho = tmp.name
     try:
@@ -92,8 +124,8 @@ def ler_planilha(arquivo, nome: str = "", sheet_name=0, **kwargs) -> pd.DataFram
 
 def listar_abas(arquivo, nome: str = "") -> list[str]:
     conteudo, nome = _bytes_planilha(arquivo, nome)
-    sufixo = Path(nome).suffix.lower()
-    with tempfile.NamedTemporaryFile(suffix=sufixo or ".xlsx", delete=False) as tmp:
+    sufixo = _sufixo_leitura(nome, conteudo)
+    with tempfile.NamedTemporaryFile(suffix=sufixo, delete=False) as tmp:
         tmp.write(conteudo)
         caminho = tmp.name
     try:
