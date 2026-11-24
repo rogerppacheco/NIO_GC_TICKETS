@@ -1909,6 +1909,77 @@ class SyncWAClientTests(TestCase):
         self.assertTrue(result.ok)
         self.assertEqual(post.call_args.kwargs["json"]["number"], "5531888888888")
 
+    def test_eh_erro_rate_limit_detecta_marcadores(self):
+        from gestao.messaging.syncwa import eh_erro_rate_limit
+
+        self.assertTrue(eh_erro_rate_limit(429))
+        self.assertTrue(
+            eh_erro_rate_limit(400, {"response": {"message": "rate-overlimit"}})
+        )
+        self.assertTrue(eh_erro_rate_limit(400, {"message": "[object Object]"}))
+        self.assertFalse(eh_erro_rate_limit(400, {"message": "number not in WhatsApp"}))
+        self.assertFalse(eh_erro_rate_limit(500, {"error": "internal"}))
+
+    @override_settings(
+        EVOLUTION_API_URL="https://evo.test",
+        EVOLUTION_API_KEY="evo.key",
+        EVOLUTION_INSTANCE_NAME="nio_gc_tickets",
+        N8N_OUTBOUND_WEBHOOK_URL="",
+        SYNCWA_MODO_TESTE=False,
+        SYNCWA_RATE_LIMIT_RETRIES=2,
+        SYNCWA_RATE_LIMIT_BACKOFF_SEG=0.01,
+    )
+    def test_enviar_texto_retry_em_rate_overlimit(self):
+        from unittest.mock import MagicMock, patch
+
+        from gestao.messaging.syncwa import enviar_texto
+
+        ruim = MagicMock()
+        ruim.status_code = 400
+        ruim.json.return_value = {
+            "status": 400,
+            "error": "Bad Request",
+            "response": {"message": [{"message": "rate-overlimit"}]},
+        }
+        bom = MagicMock()
+        bom.status_code = 200
+        bom.json.return_value = {"key": {"id": "ml-retry"}}
+        with (
+            patch("gestao.messaging.syncwa.requests.post", side_effect=[ruim, bom]) as post,
+            patch("gestao.messaging.syncwa.time.sleep") as sleep,
+        ):
+            result = enviar_texto("5531999999999", "oi motivacional")
+        self.assertTrue(result.ok)
+        self.assertEqual(result.message_log_id, "ml-retry")
+        self.assertEqual(post.call_count, 2)
+        sleep.assert_called()
+
+    @override_settings(
+        EVOLUTION_API_URL="https://evo.test",
+        EVOLUTION_API_KEY="evo.key",
+        EVOLUTION_INSTANCE_NAME="nio_gc_tickets",
+        N8N_OUTBOUND_WEBHOOK_URL="",
+        SYNCWA_MODO_TESTE=False,
+        SYNCWA_RATE_LIMIT_RETRIES=1,
+        SYNCWA_RATE_LIMIT_BACKOFF_SEG=0.01,
+    )
+    def test_enviar_texto_nao_retry_erro_comum(self):
+        from unittest.mock import MagicMock, patch
+
+        from gestao.messaging.syncwa import enviar_texto
+
+        ruim = MagicMock()
+        ruim.status_code = 400
+        ruim.json.return_value = {"message": "number not in WhatsApp"}
+        with (
+            patch("gestao.messaging.syncwa.requests.post", return_value=ruim) as post,
+            patch("gestao.messaging.syncwa.time.sleep") as sleep,
+        ):
+            result = enviar_texto("5531999999999", "oi")
+        self.assertFalse(result.ok)
+        self.assertEqual(post.call_count, 1)
+        sleep.assert_not_called()
+
 
 @override_settings(
     STORAGES={
@@ -2803,6 +2874,39 @@ class DestinatarioEnvioTests(TestCase):
         logs = EnvioWhatsApp.objects.filter(tipo=EnvioWhatsApp.Tipo.CAPILARIDADE)
         self.assertTrue(logs.exists())
         self.assertFalse(any("time " + self.pdv.nome in l.mensagem for l in logs))
+
+    @override_settings(CAPILARIDADE_LOTE_DELAY_SEG=1.5)
+    def test_enviar_capilaridade_todos_throttle_entre_pdvs(self):
+        from unittest.mock import MagicMock, patch
+
+        from gestao.messaging.envio import enviar_capilaridade_todos
+        from gestao.models import Destinatario
+
+        pdv2 = Parceiro.objects.create(codigo_pdv="88", nome="VISION TESTE")
+        for p in (self.pdv, pdv2):
+            Destinatario.objects.create(
+                parceiro=p,
+                nome=f"Contato {p.nome}",
+                jid="5531999999999",
+                envio_capilaridade=True,
+            )
+        fake = MagicMock()
+        fake.status_code = 200
+        fake.json.return_value = {"key": {"id": "ml-lote"}}
+        with (
+            patch("gestao.messaging.syncwa.requests.post", return_value=fake),
+            patch("time.sleep") as sleep,
+            patch("gestao.messaging.envio.planilha_capilaridade", return_value=(b"xlsx", "c.xlsx")),
+            patch("gestao.messaging.envio.montar_mascara_pdv", return_value="mascara"),
+        ):
+            resumo = enviar_capilaridade_todos(
+                [self.pdv, pdv2], self.gestor, enviar_motivacional=True
+            )
+        self.assertGreaterEqual(resumo.enviados, 2)
+        # Pausa entre PDVs (1.5) + pausa motivacional→planilha por PDV (max(1, 1.5*0.6)=1.0) x2
+        sleeps = [c.args[0] for c in sleep.call_args_list if c.args]
+        self.assertIn(1.5, sleeps)
+        self.assertGreaterEqual(sleeps.count(1.0), 2)
 
     def test_motivacional_capilaridade(self):
         from datetime import date, datetime

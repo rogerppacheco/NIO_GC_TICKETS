@@ -535,6 +535,7 @@ def enviar_capilaridade_pdv(
     filtros: dict | None = None,
     *,
     enviar_motivacional: bool = True,
+    pausa_apos_motivacional: float | None = None,
 ) -> ResumoEnvio:
     import time
 
@@ -546,6 +547,8 @@ def enviar_capilaridade_pdv(
         return ResumoEnvio(ignorados=1, detalhes=[_msg_sem_destino(user)])
 
     resumo_total = ResumoEnvio()
+    if pausa_apos_motivacional is None:
+        pausa_apos_motivacional = 1.0
 
     # 1. Envia a saudação do horário com frase motivacional antes do relatório
     if enviar_motivacional:
@@ -562,8 +565,9 @@ def enviar_capilaridade_pdv(
         resumo_total.erros += resumo_mot.erros
         resumo_total.ignorados += resumo_mot.ignorados
         resumo_total.detalhes.extend(resumo_mot.detalhes)
-        # Breve pausa para garantir ordem cronológica no WhatsApp
-        time.sleep(1)
+        # Breve pausa para ordem no WhatsApp e aliviar rate-limit entre motivacional e planilha
+        if pausa_apos_motivacional > 0:
+            time.sleep(pausa_apos_motivacional)
 
     # 2. Envia o relatório de capilaridade (planilha + máscara) conforme a regra atual
     mensagem = montar_mascara_pdv(parceiro, ano, mes, filtros)
@@ -623,18 +627,34 @@ def enviar_capilaridade_todos(
     filtros: dict | None = None,
     enviar_motivacional: bool = True,
 ) -> ResumoEnvio:
+    import time
+
+    from django.conf import settings
+
     total = ResumoEnvio()
+    delay_pdv = max(0.0, float(getattr(settings, "CAPILARIDADE_LOTE_DELAY_SEG", 2.5)))
+    # No lote, pausa um pouco maior entre motivacional e planilha do mesmo PDV.
+    pausa_mot = max(1.0, delay_pdv * 0.6)
+
     if incluir_resumo:
         parte = enviar_resumo_capilaridade(parceiros, user, filtros)
         total.enviados += parte.enviados
         total.erros += parte.erros
         total.ignorados += parte.ignorados
         total.detalhes.extend(parte.detalhes)
+        if parceiros and delay_pdv > 0:
+            time.sleep(delay_pdv)
 
-    for p in parceiros:
+    for idx, p in enumerate(parceiros):
+        if idx > 0 and delay_pdv > 0:
+            time.sleep(delay_pdv)
         try:
             parte = enviar_capilaridade_pdv(
-                p, user, filtros, enviar_motivacional=enviar_motivacional
+                p,
+                user,
+                filtros,
+                enviar_motivacional=enviar_motivacional,
+                pausa_apos_motivacional=pausa_mot if enviar_motivacional else 0.0,
             )
         except Exception as exc:
             parte = ResumoEnvio(erros=1, detalhes=[f"{p.nome}: {exc}"])

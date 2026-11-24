@@ -135,7 +135,7 @@ def notificar_demanda_comunicado(ticket: Ticket, ator=None) -> None:
 def enviar_comunicado_whatsapp(
     comunicado: Comunicado, *, jid: str, nome: str, user, request=None
 ) -> tuple[bool, str]:
-    """Envia o texto e os anexos do comunicado para um número ou grupo."""
+    """Envia o comunicado: texto puro ou arquivo com o texto na legenda."""
     from django.urls import reverse
 
     from gestao.messaging.instancia import instancia_para_envio
@@ -165,40 +165,79 @@ def enviar_comunicado_whatsapp(
         )
         texto = f"{texto}\n\nAbra no portal: {link}"
 
-    resposta = enviar_texto(destino, texto, instance=instancia)
-    if not resposta.ok:
+    anexos_prontos: list[tuple[str, bytes]] = []
+    falhas_leitura: list[str] = []
+    for anexo in comunicado.anexos.all():
+        try:
+            with anexo.arquivo.open("rb") as handle:
+                conteudo = handle.read()
+        except Exception:
+            falhas_leitura.append(anexo.nome_exibicao)
+            continue
+        if not conteudo:
+            falhas_leitura.append(anexo.nome_exibicao)
+            continue
+        anexos_prontos.append((anexo.nome_exibicao, conteudo))
+
+    if not anexos_prontos:
+        resposta = enviar_texto(destino, texto, instance=instancia)
+        if not resposta.ok:
+            _registrar_envio_comunicado(
+                EnvioWhatsApp,
+                jid=destino,
+                nome=rotulo,
+                mensagem=texto,
+                user=user,
+                ok=False,
+                erro=resposta.error or "Falha no envio.",
+                message_id=resposta.message_log_id,
+            )
+            return False, resposta.error or f"Não foi possível enviar para {rotulo}."
+        detalhe = ""
+        if falhas_leitura:
+            detalhe = " Não enviei estes arquivos: " + ", ".join(falhas_leitura) + "."
         _registrar_envio_comunicado(
             EnvioWhatsApp,
             jid=destino,
             nome=rotulo,
             mensagem=texto,
             user=user,
-            ok=False,
-            erro=resposta.error or "Falha no envio.",
+            ok=True,
+            erro=detalhe.strip(),
             message_id=resposta.message_log_id,
         )
-        return False, resposta.error or f"Não foi possível enviar para {rotulo}."
+        return True, f"Enviado para {rotulo}.{detalhe}"
 
-    falhas: list[str] = []
-    for anexo in comunicado.anexos.all():
-        try:
-            with anexo.arquivo.open("rb") as handle:
-                conteudo = handle.read()
-        except Exception:
-            falhas.append(anexo.nome_exibicao)
-            continue
-        if not conteudo:
-            falhas.append(anexo.nome_exibicao)
-            continue
+    falhas: list[str] = list(falhas_leitura)
+    message_id = ""
+    for idx, (nome_arquivo, conteudo) in enumerate(anexos_prontos):
         arquivo = enviar_documento(
             destino,
             conteudo=conteudo,
-            file_name=anexo.nome_exibicao,
-            caption=anexo.nome_exibicao,
+            file_name=nome_arquivo,
+            caption=texto if idx == 0 else "",
             instance=instancia,
         )
         if not arquivo.ok:
-            falhas.append(anexo.nome_exibicao)
+            if idx == 0:
+                _registrar_envio_comunicado(
+                    EnvioWhatsApp,
+                    jid=destino,
+                    nome=rotulo,
+                    mensagem=texto,
+                    user=user,
+                    ok=False,
+                    erro=arquivo.error or "Falha no envio do anexo.",
+                    message_id=arquivo.message_log_id,
+                )
+                return (
+                    False,
+                    arquivo.error or f"Não foi possível enviar o anexo para {rotulo}.",
+                )
+            falhas.append(nome_arquivo)
+            continue
+        if idx == 0:
+            message_id = arquivo.message_log_id or ""
 
     detalhe = ""
     if falhas:
@@ -211,7 +250,7 @@ def enviar_comunicado_whatsapp(
         user=user,
         ok=True,
         erro=detalhe.strip(),
-        message_id=resposta.message_log_id,
+        message_id=message_id,
     )
     return True, f"Enviado para {rotulo}.{detalhe}"
 

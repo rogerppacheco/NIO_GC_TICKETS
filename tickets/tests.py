@@ -429,6 +429,88 @@ class MatrizOperacaoDemandaTests(TestCase):
         self.assertIn("solicitante_contato", form.errors)
         self.assertIn("documento_cliente", form.errors)
 
+    def test_mascara_ti_sem_login_duplicado(self):
+        from tickets.management.commands.seed_nio import MASCARAS
+        from tickets.services import render_mascara
+
+        template = next(
+            m["template"]
+            for m in MASCARAS
+            if m["tipos"] == TipoDemanda.ABRIR_CHAMADO_TI
+        )
+        self.assertNotIn("Login BO", template)
+        self.assertNotIn("Login vendedor", template)
+        self.assertIn("TT do vendedor", template)
+        self.assertIn("TT do backoffice de cadastro", template)
+        ticket = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.ABRIR_CHAMADO_TI,
+            tt_vendedor="TT837725",
+            tt_backoffice="TT838203",
+            documento_cliente="14507396603",
+            solicitante_contato="32999952706",
+            observacoes="Erro no pagamento",
+            descricao="Falha ao inputar venda",
+        )
+        texto = render_mascara(Mascara(template=template), ticket)
+        self.assertNotIn("LOGIN BO", texto)
+        self.assertNotIn("LOGIN VENDEDOR", texto)
+        self.assertIn("TT837725", texto)
+        self.assertIn("TT838203", texto)
+
+    def test_mobilidade_5g_exige_endereco_entrega(self):
+        cfg = schema_tipo(TipoDemanda.MOBILIDADE_5G_CHIP)
+        self.assertIn("endereco_completo", cfg["campos"])
+        self.assertIn("cep", cfg["obrigatorios"])
+        self.assertIn("numero_fachada", cfg["obrigatorios"])
+        form = TicketCreateForm(
+            data={
+                "parceiro": str(self.pdv.pk),
+                "tipo": TipoDemanda.MOBILIDADE_5G_CHIP,
+                "tt_vendedor": "TT1",
+                "tt_backoffice": "TT2",
+                "documento_cliente": "12345678901",
+                "solicitante_contato": "61988887777",
+                "observacoes": "Chip não chegou",
+                "descricao": "Solicitar reenvio do chip",
+            },
+            files=MultiValueDict(
+                {
+                    "evidencias": [
+                        SimpleUploadedFile("e.jpeg", b"x", content_type="image/jpeg")
+                    ]
+                }
+            ),
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("cep", form.errors)
+        self.assertIn("numero_fachada", form.errors)
+
+    def test_mascara_mobilidade_inclui_endereco_chip(self):
+        from tickets.management.commands.seed_nio import MASCARAS
+        from tickets.services import render_mascara
+
+        template = next(
+            m["template"]
+            for m in MASCARAS
+            if m["tipos"] == TipoDemanda.MOBILIDADE_5G_CHIP
+        )
+        self.assertIn("Endereço de entrega do chip", template)
+        self.assertNotIn("Login BO", template)
+        ticket = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.MOBILIDADE_5G_CHIP,
+            tt_vendedor="TT1",
+            tt_backoffice="TT2",
+            endereco_completo="Rua A, 10, Centro, Juiz de Fora - MG, 36000-000",
+            solicitante_contato="32999952706",
+            observacoes="Etapa entrega",
+            descricao="Chip não recebido",
+        )
+        texto = render_mascara(Mascara(template=template), ticket)
+        self.assertIn("RUA A, 10", texto)
+        self.assertIn("MOBILIDADE 5G", texto)
+
     def test_schema_js_sem_slot_tem_variacao_e_labels(self):
         js = schema_para_js()[TipoDemanda.SEM_SLOT]
         self.assertEqual(
@@ -527,11 +609,8 @@ class MatrizOperacaoDemandaTests(TestCase):
         from tickets.management.commands.seed_nio import MASCARAS
         from tickets.services import render_mascara
 
-        template = next(
-            m["template"]
-            for m in MASCARAS
-            if m["nome"].startswith("Kit operação")
-        )
+        kit = next(m for m in MASCARAS if m["nome"].startswith("Kit operação"))
+        self.assertIn(TipoDemanda.PENDENCIA_TECNICA, kit["tipos"])
         ticket = Ticket.objects.create(
             parceiro=self.pdv,
             tipo=TipoDemanda.AGENDA_NAO_CUMPRIDA,
@@ -546,10 +625,44 @@ class MatrizOperacaoDemandaTests(TestCase):
             recorrencia=Recorrencia.SIM,
             descricao="Técnico não compareceu.",
         )
-        texto = render_mascara(Mascara(template=template), ticket)
+        texto = render_mascara(Mascara(template=kit["template"]), ticket)
         self.assertIn("SA-9001", texto)
-        self.assertIn("Agenda não cumprida", texto)
-        self.assertIn("Sim", texto)
+        self.assertIn("AGENDA NÃO CUMPRIDA", texto)
+        self.assertIn("SIM", texto)
+
+    def test_pendencia_tecnica_segue_kit_operacao(self):
+        from tickets.services import render_mascara
+
+        self.assertIn(TipoDemanda.PENDENCIA_TECNICA, TIPOS_KIT_OPERACAO)
+        cfg = schema_tipo(TipoDemanda.PENDENCIA_TECNICA)
+        self.assertEqual(
+            cfg["titulo"],
+            "OS, SA, cliente, endereço, data e detalhe da pendência técnica",
+        )
+        form = TicketCreateForm(data=self._kit(tipo=TipoDemanda.PENDENCIA_TECNICA))
+        self.assertTrue(form.is_valid(), form.errors)
+        ticket = Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.PENDENCIA_TECNICA,
+            pedido="11260099",
+            sa="SA-77",
+            nome_cliente="Cliente Técnico",
+            solicitante_nome="Contato",
+            solicitante_contato="61988887777",
+            cidade="Brasília",
+            data_desejada="2026-09-20",
+            tipo_pendencia="Rede externa",
+            recorrencia=Recorrencia.NAO,
+            descricao="Pendência técnica na instalação.",
+        )
+        from tickets.management.commands.seed_nio import MASCARAS
+
+        template = next(
+            m["template"] for m in MASCARAS if m["nome"].startswith("Kit operação")
+        )
+        texto = render_mascara(Mascara(template=template), ticket)
+        self.assertIn("PENDÊNCIA TÉCNICA", texto)
+        self.assertIn("SA-77", texto)
 
     @override_settings(
         STORAGES={
@@ -569,6 +682,8 @@ class MatrizOperacaoDemandaTests(TestCase):
         corpo = resp.content.decode("utf-8")
         self.assertIn("Orientações de pendências", corpo)
         self.assertIn("Pendência indevida", corpo)
+        self.assertIn("Pendência técnica", corpo)
+        self.assertIn("Problema Mobilidade 5G", corpo)
         self.assertIn("Vazamento de dados", corpo)
         self.assertIn("Apoio gestão de acessos", corpo)
         self.assertIn("Situação do pedido", corpo)
@@ -3139,8 +3254,81 @@ class ComunicadoTests(TestCase):
             )
         self.assertTrue(ok)
         self.assertIn("Parceiros Nio", msg)
-        self.assertIn("*Com arquivo*", texto.call_args.args[1])
+        texto.assert_not_called()
+        self.assertEqual(documento.call_count, 1)
         self.assertEqual(documento.call_args.kwargs["file_name"], "aviso.pdf")
+        self.assertIn("*Com arquivo*", documento.call_args.kwargs["caption"])
+        self.assertIn("Segue o PDF.", documento.call_args.kwargs["caption"])
+
+    def test_comunicado_sem_anexo_envia_texto(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.syncwa import SyncWAResult
+        from .comunicados import enviar_comunicado_whatsapp
+        from .models import Comunicado
+
+        aviso = Comunicado.objects.create(
+            titulo="Só texto",
+            corpo="Sem arquivo.",
+            ativo=True,
+            publico="parceiros",
+        )
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), patch(
+            "gestao.messaging.instancia.instancia_para_envio", return_value="inst-teste"
+        ), patch("gestao.messaging.syncwa.enviar_texto") as texto, patch(
+            "gestao.messaging.syncwa.enviar_documento"
+        ) as documento:
+            texto.return_value = SyncWAResult(ok=True, destino="120363999@g.us")
+            ok, msg = enviar_comunicado_whatsapp(
+                aviso,
+                jid="120363999@g.us",
+                nome="Parceiros Nio",
+                user=self.spec,
+            )
+        self.assertTrue(ok)
+        documento.assert_not_called()
+        self.assertIn("*Só texto*", texto.call_args.args[1])
+
+    def test_comunicado_varios_anexos_legenda_so_no_primeiro(self):
+        from unittest.mock import patch
+
+        from gestao.messaging.syncwa import SyncWAResult
+        from .comunicados import enviar_comunicado_whatsapp
+        from .models import Comunicado, ComunicadoAnexo
+
+        aviso = Comunicado.objects.create(
+            titulo="Dois arquivos",
+            corpo="Legenda única.",
+            ativo=True,
+            publico="parceiros",
+        )
+        ComunicadoAnexo.objects.create(
+            comunicado=aviso,
+            arquivo=SimpleUploadedFile("a.pdf", b"%PDF-a", content_type="application/pdf"),
+            nome_original="a.pdf",
+        )
+        ComunicadoAnexo.objects.create(
+            comunicado=aviso,
+            arquivo=SimpleUploadedFile("b.png", b"\x89PNG", content_type="image/png"),
+            nome_original="b.png",
+        )
+        with patch("gestao.messaging.syncwa.syncwa_configurado", return_value=True), patch(
+            "gestao.messaging.instancia.instancia_para_envio", return_value="inst-teste"
+        ), patch("gestao.messaging.syncwa.enviar_texto") as texto, patch(
+            "gestao.messaging.syncwa.enviar_documento"
+        ) as documento:
+            documento.return_value = SyncWAResult(ok=True, destino="120363999@g.us")
+            ok, _ = enviar_comunicado_whatsapp(
+                aviso,
+                jid="120363999@g.us",
+                nome="Parceiros Nio",
+                user=self.spec,
+            )
+        self.assertTrue(ok)
+        texto.assert_not_called()
+        self.assertEqual(documento.call_count, 2)
+        self.assertIn("*Dois arquivos*", documento.call_args_list[0].kwargs["caption"])
+        self.assertEqual(documento.call_args_list[1].kwargs["caption"], "")
 
 
 class ReparoDemandaTests(TestCase):

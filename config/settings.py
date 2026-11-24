@@ -261,6 +261,11 @@ SYNCWA_MODO_TESTE = (
     os.environ.get("WHATSAPP_MODO_TESTE") or os.environ.get("SYNCWA_MODO_TESTE") or "False"
 ).lower() in {"1", "true", "yes", "on"}
 SYNCWA_TIMEOUT = int(os.environ.get("SYNCWA_TIMEOUT", "60"))
+# Retry só em rate-limit Evolution/WhatsApp (rate-overlimit / HTTP 429 / 400 típicos).
+SYNCWA_RATE_LIMIT_RETRIES = int(os.environ.get("SYNCWA_RATE_LIMIT_RETRIES", "3"))
+SYNCWA_RATE_LIMIT_BACKOFF_SEG = float(os.environ.get("SYNCWA_RATE_LIMIT_BACKOFF_SEG", "2"))
+# Pausa entre PDVs no lote Capilaridade (todos) para não disparar motivacionais em rajada.
+CAPILARIDADE_LOTE_DELAY_SEG = float(os.environ.get("CAPILARIDADE_LOTE_DELAY_SEG", "2.5"))
 FPD_PERCENTUAL_CRITICO = float(os.environ.get("FPD_PERCENTUAL_CRITICO", "30"))
 
 # SMTP — mesmo padrão do sistema de auditorias (Office 365 / sysr)

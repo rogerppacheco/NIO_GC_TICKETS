@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import mimetypes
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,6 +26,43 @@ class SyncWAResult:
 
 def _timeout() -> float:
     return float(getattr(settings, "SYNCWA_TIMEOUT", 60))
+
+
+def _rate_limit_retries() -> int:
+    return max(0, int(getattr(settings, "SYNCWA_RATE_LIMIT_RETRIES", 3)))
+
+
+def _rate_limit_backoff_seg() -> float:
+    return max(0.1, float(getattr(settings, "SYNCWA_RATE_LIMIT_BACKOFF_SEG", 2)))
+
+
+_RATE_LIMIT_MARKERS = (
+    "rate-overlimit",
+    "rate_overlimit",
+    "rate overlimit",
+    "ratelimit",
+    "rate limit",
+    "too many requests",
+    "overlimit",
+)
+
+
+def eh_erro_rate_limit(status: int | None = None, body: object = None, error: str = "") -> bool:
+    """Detecta rate-limit Evolution/WhatsApp (429, rate-overlimit, 400 típicos)."""
+    if status == 429:
+        return True
+    blob = f"{error} {body}".lower()
+    if any(m in blob for m in _RATE_LIMIT_MARKERS):
+        return True
+    # Evolution às vezes serializa o payload de rate-limit como [object Object] em HTTP 400.
+    if status == 400 and "[object object]" in blob:
+        return True
+    return False
+
+
+def _aguardar_backoff_rate_limit(tentativa: int) -> None:
+    """Backoff exponencial: base, 2x, 4x… conforme o índice da tentativa (0-based)."""
+    time.sleep(_rate_limit_backoff_seg() * (2**tentativa))
 
 
 def _evo_url() -> str:
@@ -420,25 +458,37 @@ def _enviar_texto_evolution(
     *,
     instance: str,
 ) -> SyncWAResult:
-    try:
-        status, body = _post_json(
-            f"{_evo_url()}/message/sendText/{instance}",
-            {"number": number, "text": text},
-            _evo_headers(),
-            timeout,
+    tentativas = _rate_limit_retries() + 1
+    ultimo = SyncWAResult(ok=False, destino=destino)
+    for tentativa in range(tentativas):
+        try:
+            status, body = _post_json(
+                f"{_evo_url()}/message/sendText/{instance}",
+                {"number": number, "text": text},
+                _evo_headers(),
+                timeout,
+            )
+        except requests.RequestException as exc:
+            return SyncWAResult(ok=False, error=f"Falha de rede: {exc}", destino=destino)
+        if status >= 400:
+            ultimo = SyncWAResult(ok=False, error=f"HTTP {status}: {body}", destino=destino)
+            if eh_erro_rate_limit(status, body, ultimo.error) and tentativa + 1 < tentativas:
+                _aguardar_backoff_rate_limit(tentativa)
+                continue
+            return ultimo
+        if isinstance(body, dict) and body.get("error"):
+            ultimo = SyncWAResult(ok=False, error=str(body.get("error")), destino=destino)
+            if eh_erro_rate_limit(status, body, ultimo.error) and tentativa + 1 < tentativas:
+                _aguardar_backoff_rate_limit(tentativa)
+                continue
+            return ultimo
+        return SyncWAResult(
+            ok=True,
+            message_log_id=_message_id(body),
+            status="SENT",
+            destino=destino,
         )
-    except requests.RequestException as exc:
-        return SyncWAResult(ok=False, error=f"Falha de rede: {exc}", destino=destino)
-    if status >= 400:
-        return SyncWAResult(ok=False, error=f"HTTP {status}: {body}", destino=destino)
-    if isinstance(body, dict) and body.get("error"):
-        return SyncWAResult(ok=False, error=str(body.get("error")), destino=destino)
-    return SyncWAResult(
-        ok=True,
-        message_log_id=_message_id(body),
-        status="SENT",
-        destino=destino,
-    )
+    return ultimo
 
 
 def enviar_texto(
@@ -537,25 +587,37 @@ def enviar_documento(
     number = numero_para_evolution(destino)
     mediatype = "image" if mime.startswith("image/") else "document"
     url = f"{_evo_url()}/message/sendMedia/{_evo_instance(instance)}"
+    formatos = (b64, f"data:{mime};base64,{b64}")
     ultimo = SyncWAResult(ok=False, destino=destino)
-    for media in (b64, f"data:{mime};base64,{b64}"):
-        payload = {
-            "number": number,
-            "mediatype": mediatype,
-            "mimetype": mime,
-            "media": media,
-            "fileName": nome,
-            "caption": (caption or "")[:1024],
-        }
-        try:
-            status, body = _post_json(url, payload, _evo_headers(), max(timeout, 60.0))
-        except requests.RequestException as exc:
-            return SyncWAResult(ok=False, error=f"Falha de rede: {exc}", destino=destino)
-        if status < 400 and not (isinstance(body, dict) and body.get("error")):
-            return SyncWAResult(
-                ok=True, message_log_id=_message_id(body), status="SENT", destino=destino
-            )
-        ultimo = SyncWAResult(ok=False, error=f"HTTP {status}: {body}", destino=destino)
-        if not _media_formato_rejeitado(body):
+    tentativas = _rate_limit_retries() + 1
+    for tentativa in range(tentativas):
+        rate_limit = False
+        for media in formatos:
+            payload = {
+                "number": number,
+                "mediatype": mediatype,
+                "mimetype": mime,
+                "media": media,
+                "fileName": nome,
+                "caption": (caption or "")[:1024],
+            }
+            try:
+                status, body = _post_json(url, payload, _evo_headers(), max(timeout, 60.0))
+            except requests.RequestException as exc:
+                return SyncWAResult(ok=False, error=f"Falha de rede: {exc}", destino=destino)
+            if status < 400 and not (isinstance(body, dict) and body.get("error")):
+                return SyncWAResult(
+                    ok=True, message_log_id=_message_id(body), status="SENT", destino=destino
+                )
+            ultimo = SyncWAResult(ok=False, error=f"HTTP {status}: {body}", destino=destino)
+            if _media_formato_rejeitado(body):
+                continue
+            if eh_erro_rate_limit(status, body, ultimo.error) and tentativa + 1 < tentativas:
+                rate_limit = True
+                _aguardar_backoff_rate_limit(tentativa)
+                break
             return ultimo
+        if rate_limit:
+            continue
+        return ultimo
     return ultimo
