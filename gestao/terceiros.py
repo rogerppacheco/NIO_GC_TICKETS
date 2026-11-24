@@ -33,6 +33,9 @@ COLUNAS_ALVO = {
     "data_inativacao": r"data\s*inativa",
 }
 
+# CPF pode ser removido/esvaziado para passar em DLP corporativo.
+COLUNAS_OPCIONAIS = frozenset({"cpf"})
+
 
 def normalizar_chave_tt(valor) -> str | None:
     if valor is None or (isinstance(valor, float) and pd.isna(valor)):
@@ -221,7 +224,7 @@ def _mapear_colunas(df: pd.DataFrame) -> dict[str, str]:
                 continue
             if re.search(padrao, norm, re.IGNORECASE):
                 mapa[campo] = col
-    faltando = [c for c in COLUNAS_ALVO if c not in mapa]
+    faltando = [c for c in COLUNAS_ALVO if c not in mapa and c not in COLUNAS_OPCIONAIS]
     if faltando:
         raise ValueError("Colunas obrigatórias não encontradas: " + ", ".join(faltando))
     return mapa
@@ -230,7 +233,9 @@ def _mapear_colunas(df: pd.DataFrame) -> dict[str, str]:
 def _parece_cabecalho(linha) -> bool:
     valores = [str(v).strip().lower() for v in linha.values if pd.notna(v)]
     texto = " ".join(valores)
-    return "terceiro" in texto and ("cpf" in texto or "chave" in texto)
+    return "terceiro" in texto and (
+        "cpf" in texto or "chave" in texto or "passaporte" in texto or "email" in texto
+    )
 
 
 def _promover_cabecalho(df: pd.DataFrame) -> pd.DataFrame:
@@ -390,9 +395,10 @@ def importar_sysmap(arquivo, nome_arquivo: str = "") -> dict:
         funcional = _limpar_texto(linha.get(mapa["situacao_funcional"]))
         contrato = _limpar_texto(linha.get(mapa["situacao_contrato"]))
         razao = _limpar_texto(linha.get(mapa["razao_social"]))
+        col_cpf = mapa.get("cpf")
         dados = {
             "nome_terceiro": _limpar_texto(linha.get(mapa["nome_terceiro"]))[:200],
-            "cpf": _limpar_texto(linha.get(mapa["cpf"]))[:30],
+            "cpf": (_limpar_texto(linha.get(col_cpf))[:30] if col_cpf else ""),
             "email": _limpar_texto(linha.get(mapa["email"]))[:200],
             "razao_social": razao[:200],
             "vinculo": _limpar_texto(linha.get(mapa["vinculo"]))[:50],

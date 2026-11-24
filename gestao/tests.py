@@ -257,6 +257,60 @@ class SysmapImportTests(TestCase):
         self.assertIsNone(t.data_desalocacao)
         self.assertIsNone(t.data_inativacao)
 
+    def test_html_as_xls_com_bom(self):
+        from gestao.excel import ler_planilha
+
+        html = (
+            "\ufeff<!DOCTYPE html><html><body>"
+            "<table><tr><th>Razão Social</th><th>Terceiro</th><th>Chave de Acesso</th></tr>"
+            "<tr><td>ACME</td><td>ANA</td><td>TT9</td></tr>"
+            "</table></body></html>"
+        ).encode("utf-8")
+        # utf-8-sig BOM
+        bom = b"\xef\xbb\xbf" + html.lstrip(b"\xef\xbb\xbf")
+        df = ler_planilha(BytesIO(bom), "Relatorio.xls")
+        self.assertGreaterEqual(len(df), 1)
+
+    def test_importa_sem_coluna_cpf(self):
+        """DLP: coluna CPF pode ser removida; demais campos bastam."""
+        arquivo = _xlsx(
+            [
+                [
+                    "LUISA SERVICOS DE TELEFONIA MOVEL",
+                    "ANA",
+                    "a@x.com",
+                    "TT1",
+                    "CLT",
+                    "VENDEDOR",
+                    "Ativo",
+                    "Ativo",
+                    "Alocado",
+                    "01/01/2025",
+                    "",
+                    "",
+                ]
+            ],
+            [
+                "Razão Social",
+                "Terceiro",
+                "Email",
+                "Chave de Acesso",
+                "Vínculo",
+                "Cargo/Função",
+                "Situação Terceiro Empresa",
+                "Situação Funcional",
+                "Situação Terceiro Contrato",
+                "Data Alocação",
+                "Data Desalocação",
+                "Data Inativação",
+            ],
+        )
+        resumo = importar_sysmap(arquivo, "terceiros_sem_cpf.xlsx")
+        self.assertEqual(resumo["inseridos"], 1)
+        t = CadastroTerceiro.objects.get(chave_acesso="TT1")
+        self.assertEqual(t.cpf, "")
+        self.assertEqual(t.nome_terceiro, "ANA")
+
     def test_desativado_nao_elegivel_capilaridade(self):
         from gestao.terceiros import terceiro_elegivel_capilaridade
 

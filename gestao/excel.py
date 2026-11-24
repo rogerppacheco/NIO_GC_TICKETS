@@ -26,16 +26,56 @@ def _engine_excel(sufixo: str) -> str | None:
     return None
 
 
+def _parece_html(conteudo: bytes) -> bool:
+    """Detecta HTML/Excel-HTML mesmo com BOM ou DOCTYPE em caixa mista."""
+    amostra = conteudo[:8192].lstrip()
+    if amostra.startswith(b"\xef\xbb\xbf"):
+        amostra = amostra[3:].lstrip()
+    head = amostra[:64].lower()
+    if head.startswith(b"<!doctype") or head.startswith(b"<html"):
+        return True
+    lower = amostra.lower()
+    return b"<table" in lower and (
+        b"<html" in lower or b"<body" in lower or b"excel.sheet" in lower or b"progid" in lower
+    )
+
+
+def _decodificar_html(conteudo: bytes) -> str:
+    for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
+        try:
+            return conteudo.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return conteudo.decode("utf-8", errors="replace")
+
+
+def _ler_html_tabela(conteudo: bytes) -> pd.DataFrame:
+    """Lê a primeira tabela de um .xls que na verdade é HTML (export Sysmap)."""
+    texto = _decodificar_html(conteudo)
+    erros: list[str] = []
+    for flavor in ("html5lib", "lxml", "bs4"):
+        try:
+            tabelas = pd.read_html(io.StringIO(texto), flavor=flavor)
+        except Exception as exc:  # noqa: BLE001 — tenta próximo parser
+            erros.append(f"{flavor}: {exc}")
+            continue
+        if tabelas:
+            return tabelas[0]
+        erros.append(f"{flavor}: no tables found")
+    detalhe = "; ".join(erros[:3]) if erros else "sem parsers"
+    raise ValueError(
+        "Nenhuma tabela encontrada no HTML. "
+        "Abra no Excel e Salvar como .xlsx (ou esvazie o CPF sem apagar a coluna). "
+        f"Detalhe: {detalhe}"
+    )
+
+
 def ler_planilha(arquivo, nome: str = "", sheet_name=0, **kwargs) -> pd.DataFrame:
     """Lê .xlsx, .xlsb, .xls e HTML exportado como .xls."""
     conteudo, nome = _bytes_planilha(arquivo, nome)
     sufixo = Path(nome).suffix.lower()
-    inicio = conteudo[:200].lstrip()
-    if inicio.startswith(b"<!DOCTYPE") or inicio.startswith(b"<html"):
-        tabelas = pd.read_html(io.BytesIO(conteudo), encoding="utf-8")
-        if not tabelas:
-            raise ValueError("Nenhuma tabela encontrada no arquivo HTML.")
-        return tabelas[0]
+    if _parece_html(conteudo):
+        return _ler_html_tabela(conteudo)
 
     with tempfile.NamedTemporaryFile(suffix=sufixo or ".xlsx", delete=False) as tmp:
         tmp.write(conteudo)
