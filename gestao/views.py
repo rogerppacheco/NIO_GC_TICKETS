@@ -440,9 +440,9 @@ def importar_sysmap_view(request: HttpRequest) -> HttpResponse:
     if _pode_importar(request):
         form = UploadBaseForm(request.POST or None, request.FILES or None, extensoes=[".xlsx", ".xls", ".xlsb"])
         form.fields["arquivo"].help_text = (
-            "Use o .xls nativo do Sysmap (HTML). No envio, a coluna CPF é esvaziada no "
-            "navegador para passar no DLP — não edite o arquivo no Excel. "
-            "Offline: python manage.py sysmap_sem_cpf <arquivo.xls>"
+            "Prefira o .xls nativo do Sysmap: no envio, o CPF é esvaziado no navegador (DLP). "
+            "Offline: python manage.py sysmap_sem_cpf <arquivo.xls>. "
+            "Se editar no Excel: Salvar como → Excel 97-2003 (*.xls); não use só Salvar."
         )
         if request.method == "POST" and form.is_valid():
             arquivo = form.cleaned_data["arquivo"]

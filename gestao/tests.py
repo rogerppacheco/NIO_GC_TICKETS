@@ -295,6 +295,55 @@ class SysmapImportTests(TestCase):
         self.assertIn("editado.xls", msg)
         self.assertIn("sem tag <table>", msg)
 
+    def test_html_stub_excel_mensagem_clara(self):
+        """Excel 'Salvar' (formato 44) gera stub ~10KB com pasta *_arquivos."""
+        from gestao.excel import _eh_html_stub_excel, ler_planilha
+
+        stub = (
+            b'<html xmlns:v="urn:schemas-microsoft-com:vml"\r\n'
+            b'xmlns:o="urn:schemas-microsoft-com:office:office"\r\n'
+            b'xmlns:x="urn:schemas-microsoft-com:office:excel">\r\n'
+            b"<head><meta charset=utf-8></head><body>\r\n"
+            b'<a href="resave_save_arquivos/sheet001.htm">Planilha</a>\r\n'
+            b"<table><tr><td>x</td></tr></table></body></html>"
+        )
+        self.assertTrue(_eh_html_stub_excel(stub))
+        with self.assertRaises(ValueError) as ctx:
+            ler_planilha(BytesIO(stub), "resave_save.xls")
+        msg = str(ctx.exception)
+        self.assertIn("HTML stub", msg)
+        self.assertIn("97-2003", msg)
+
+    def test_ole_biff_nao_parece_html(self):
+        from pathlib import Path
+
+        from gestao.excel import _eh_ole_compound, _parece_html, ler_planilha
+        from gestao.terceiros import _flatten_columns, _promover_cabecalho, _mapear_colunas
+
+        fixture = Path(__file__).resolve().parent / "testdata" / "sysmap_biff_sem_cpf.xls"
+        self.assertTrue(fixture.is_file())
+        bruto = fixture.read_bytes()
+        self.assertTrue(_eh_ole_compound(bruto))
+        self.assertFalse(_parece_html(bruto))
+        df = ler_planilha(BytesIO(bruto), "sysmap_biff_sem_cpf.xls")
+        df = _promover_cabecalho(_flatten_columns(df))
+        mapa = _mapear_colunas(df)
+        self.assertIn("chave_acesso", mapa)
+        self.assertEqual(
+            str(df.iloc[0][mapa["chave_acesso"]]).strip().upper().replace(".0", ""),
+            "TT1",
+        )
+
+    def test_importar_sysmap_biff_sem_cpf(self):
+        from pathlib import Path
+
+        fixture = Path(__file__).resolve().parent / "testdata" / "sysmap_biff_sem_cpf.xls"
+        resumo = importar_sysmap(BytesIO(fixture.read_bytes()), "sysmap_biff_sem_cpf.xls")
+        self.assertEqual(resumo["inseridos"], 1)
+        t = CadastroTerceiro.objects.get(chave_acesso="TT1")
+        self.assertEqual(t.cpf, "")
+        self.assertEqual(t.nome_terceiro, "ANA")
+
     def test_esvaziar_cpf_html_preserva_tabela(self):
         from gestao.sysmap_sanitize import esvaziar_cpf_html
         from gestao.excel import ler_planilha

@@ -31,13 +31,18 @@ def _eh_zip_office(conteudo: bytes) -> bool:
     return conteudo[:2] == b"PK"
 
 
+def _eh_ole_compound(conteudo: bytes) -> bool:
+    """True para Excel 97-2003 real (BIFF/OLE) — caminho xlrd."""
+    return conteudo[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+
+
 def _parece_html(conteudo: bytes) -> bool:
     """Detecta HTML/Excel-HTML mesmo com BOM ou DOCTYPE em caixa mista.
 
-    Arquivos Office reais (ZIP/PK) nunca entram no caminho HTML, mesmo se
-    o nome terminar em .xls ou o conteúdo tiver strings parecidas.
+    Arquivos Office reais (ZIP/PK ou OLE/BIFF) nunca entram no caminho HTML,
+    mesmo se o nome terminar em .xls ou o conteúdo tiver strings parecidas.
     """
-    if not conteudo or _eh_zip_office(conteudo):
+    if not conteudo or _eh_zip_office(conteudo) or _eh_ole_compound(conteudo):
         return False
     amostra = conteudo[:8192].lstrip()
     if amostra.startswith(b"\xef\xbb\xbf"):
@@ -51,6 +56,28 @@ def _parece_html(conteudo: bytes) -> bool:
     )
 
 
+def _eh_html_stub_excel(conteudo: bytes) -> bool:
+    """Detecta stub HTML gerado pelo Excel ao 'Salvar' (não Salvar como 97-2003).
+
+    Esse arquivo (~10 KB) aponta para pasta ``*_arquivos/`` e não carrega a tabela
+    completa — típico após editar o HTML-as-xls e só salvar.
+    """
+    if not conteudo or len(conteudo) > 80_000:
+        return False
+    lower = conteudo.lower()
+    microsoft_ns = (
+        b"urn:schemas-microsoft-com:office:excel" in lower
+        or b"xmlns:x=" in lower[:2000]
+        or b"progid=\"excel.sheet\"" in lower[:2000]
+    )
+    if not microsoft_ns:
+        return False
+    if b"_arquivos/" in lower or b"_files/" in lower or b"filelist.xml" in lower:
+        return True
+    # Stub sem pasta embutida: pouquíssimas linhas de tabela.
+    return lower.count(b"<tr") < 8
+
+
 def _decodificar_html(conteudo: bytes) -> str:
     for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
         try:
@@ -60,17 +87,28 @@ def _decodificar_html(conteudo: bytes) -> str:
     return conteudo.decode("utf-8", errors="replace")
 
 
+_MSG_SYSMAP_XLS = (
+    "Use o .xls nativo do Sysmap (a página esvazia o CPF no envio) "
+    "ou: python manage.py sysmap_sem_cpf <arquivo.xls>. "
+    "Se editar no Excel: Salvar como → 'Excel 97-2003 (*.xls)' "
+    "(não use só Salvar — gera HTML stub sem dados)."
+)
+
+
 def _ler_html_tabela(conteudo: bytes, nome: str = "") -> pd.DataFrame:
     """Lê a primeira tabela de um .xls que na verdade é HTML (export Sysmap)."""
     nome = nome or "arquivo"
     tamanho = len(conteudo)
+    if _eh_html_stub_excel(conteudo):
+        raise ValueError(
+            f"'{nome}' ({tamanho} bytes) é o HTML stub do Excel (Salvar), "
+            f"sem a planilha completa. {_MSG_SYSMAP_XLS}"
+        )
     texto = _decodificar_html(conteudo)
     if "<table" not in texto.casefold():
         raise ValueError(
             f"'{nome}' ({tamanho} bytes) parece HTML sem tag <table> "
-            "(arquivo editado no Excel ou truncado pelo DLP). "
-            "Suba o .xls original do Sysmap — a página esvazia o CPF no navegador. "
-            "Alternativa: python manage.py sysmap_sem_cpf <arquivo.xls>"
+            f"(editado/truncado). {_MSG_SYSMAP_XLS}"
         )
     erros: list[str] = []
     for flavor in ("html5lib", "lxml", "bs4"):
@@ -85,9 +123,7 @@ def _ler_html_tabela(conteudo: bytes, nome: str = "") -> pd.DataFrame:
     detalhe = "; ".join(erros[:3]) if erros else "sem parsers"
     raise ValueError(
         f"Nenhuma tabela parseável em '{nome}' ({tamanho} bytes). "
-        "Não edite o .xls no Excel (quebra o HTML). "
-        "Suba o .xls nativo do Sysmap ou rode: python manage.py sysmap_sem_cpf <arquivo.xls>. "
-        f"Detalhe: {detalhe}"
+        f"{_MSG_SYSMAP_XLS} Detalhe: {detalhe}"
     )
 
 
@@ -99,11 +135,13 @@ def _sufixo_leitura(nome: str, conteudo: bytes) -> str:
         if sufixo == ".xlsb":
             return ".xlsb"
         return ".xlsx"
+    if _eh_ole_compound(conteudo):
+        return ".xls"
     return sufixo or ".xlsx"
 
 
 def ler_planilha(arquivo, nome: str = "", sheet_name=0, **kwargs) -> pd.DataFrame:
-    """Lê .xlsx, .xlsb, .xls e HTML exportado como .xls."""
+    """Lê .xlsx, .xlsb, .xls BIFF (Excel 97-2003) e HTML exportado como .xls."""
     conteudo, nome = _bytes_planilha(arquivo, nome)
     if _parece_html(conteudo):
         return _ler_html_tabela(conteudo, nome)
@@ -117,7 +155,15 @@ def ler_planilha(arquivo, nome: str = "", sheet_name=0, **kwargs) -> pd.DataFram
         engine = _engine_excel(sufixo)
         if engine:
             read_kwargs["engine"] = engine
-        return pd.read_excel(caminho, **read_kwargs)
+        try:
+            return pd.read_excel(caminho, **read_kwargs)
+        except ImportError as exc:
+            if engine == "xlrd" or "xlrd" in str(exc).casefold():
+                raise ValueError(
+                    f"'{nome}' é Excel 97-2003 (BIFF), mas xlrd não está instalado. "
+                    "Instale xlrd>=2.0 ou exporte/suba o .xls HTML nativo do Sysmap."
+                ) from exc
+            raise
     finally:
         Path(caminho).unlink(missing_ok=True)
 
