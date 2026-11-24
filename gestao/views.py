@@ -630,13 +630,29 @@ def osab_view(request: HttpRequest) -> HttpResponse:
                         mes,
                         gerencia=_gerencia_lote(request),
                     )
-                    _lote(request, LoteImportacao.Tipo.OSAB, arquivo.name, True, resumo)
                     vendas = resumo["vendas"]
                     cad = resumo.get("parceiros") or {}
-                    msg = (
-                        f"OSAB atualizada ({mes:02d}/{ano}): {vendas['inseridos']} inseridos, "
-                        f"{vendas['atualizados']} atualizados. Capilaridade: {resumo['capilaridade']['linhas']} TTs."
+                    aviso = (resumo.get("aviso") or "").strip()
+                    _lote(
+                        request,
+                        LoteImportacao.Tipo.OSAB,
+                        arquivo.name,
+                        True,
+                        resumo,
+                        erro=aviso[:2000] if aviso else "",
                     )
+                    if vendas["inseridos"] == 0 and vendas["atualizados"] == 0:
+                        msg = (
+                            f"OSAB já estava na base ({mes:02d}/{ano}): "
+                            f"nenhuma venda nova ({vendas.get('ignorados', 0)} pedido(s) já existentes). "
+                            f"Capilaridade: {resumo['capilaridade']['linhas']} TTs."
+                        )
+                    else:
+                        msg = (
+                            f"OSAB atualizada ({mes:02d}/{ano}): {vendas['inseridos']} inseridos, "
+                            f"{vendas['atualizados']} atualizados. "
+                            f"Capilaridade: {resumo['capilaridade']['linhas']} TTs."
+                        )
                     if vendas.get("tickets_resolvidos"):
                         msg = f"{msg} Tickets resolvidos automaticamente (OSAB Concluído): {vendas['tickets_resolvidos']}."
                     if vendas.get("tickets_fechados"):
@@ -644,10 +660,21 @@ def osab_view(request: HttpRequest) -> HttpResponse:
                     if cad:
                         msg = f"{msg} {_msg_cadastro_osab(cad)}"
                     messages.success(request, msg)
+                    if aviso:
+                        messages.warning(
+                            request,
+                            "Vendas gravadas, mas o recálculo de relatórios/capilaridade "
+                            f"falhou no final: {aviso}. Use o botão Recalcular OSAB.",
+                        )
                     return _voltar(request, "gestao_osab")
                 except Exception as exc:
                     _lote(request, LoteImportacao.Tipo.OSAB, arquivo.name, False, {}, str(exc))
-                    messages.error(request, f"Falha ao importar OSAB: {exc}")
+                    messages.error(
+                        request,
+                        f"Falha ao importar OSAB: {exc}. "
+                        "Se a base já tinha sido gravada antes do erro, "
+                        "a próxima importação pode mostrar 0 inseridos — use Recalcular OSAB.",
+                    )
             else:
                 messages.error(request, "Selecione um arquivo OSAB válido (.xlsb ou .xlsx).")
     return render(

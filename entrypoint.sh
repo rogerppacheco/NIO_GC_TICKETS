@@ -23,4 +23,6 @@ python manage.py collectstatic --noinput
 python manage.py seed_nio || true
 
 PORT=${PORT:-8000}
-exec gunicorn config.wsgi:application --bind 0.0.0.0:${PORT} --workers 2 --timeout 120 --access-logfile - --error-logfile -
+# Timeout 180s: import OSAB ainda pode ser pesado; a causa principal do 500
+# (full-scan Sysmap por PDV) foi corrigida no código — isto é só folga.
+exec gunicorn config.wsgi:application --bind 0.0.0.0:${PORT} --workers 2 --timeout 180 --access-logfile - --error-logfile -

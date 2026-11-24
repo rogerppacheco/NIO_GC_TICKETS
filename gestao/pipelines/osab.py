@@ -26,6 +26,7 @@ from ..periodo import anomes, hoje
 from ..terceiros import (
     CARGOS_AUDITORIA_DEDICADOS,
     cargo_elegivel_capilaridade,
+    carregar_indices_terceiros,
     chaves_elegiveis_capilaridade,
     classificar_cargo_auditoria,
     listar_terceiros_do_parceiro,
@@ -194,14 +195,22 @@ def persistir_vendas_osab(df: pd.DataFrame, indice=None) -> dict:
         resolver_tickets_osab_concluido,
     )
 
-    tickets_resolvidos = resolver_tickets_osab_concluido()
-    tickets_fechados = fechar_tickets_osab_cancelado()
+    # Vendas já estão gravadas; falha no sync de tickets não pode parecer
+    # "importação zerada" na próxima tentativa.
+    tickets_resolvidos = tickets_fechados = 0
+    aviso_tickets = ""
+    try:
+        tickets_resolvidos = resolver_tickets_osab_concluido()
+        tickets_fechados = fechar_tickets_osab_cancelado()
+    except Exception as exc:
+        aviso_tickets = str(exc)
     return {
         "inseridos": inseridos,
         "atualizados": atualizados,
         "ignorados": ignorados,
         "tickets_resolvidos": tickets_resolvidos,
         "tickets_fechados": tickets_fechados,
+        "aviso_tickets": aviso_tickets,
     }
 
 
@@ -213,31 +222,47 @@ def _dias_desde(ultima, ref: datetime) -> int | None:
 
 
 def ultimas_vendas_pdv(pdv_nome: str) -> dict[str, datetime]:
-    mapa: dict[str, datetime] = {}
+    return ultimas_vendas_multiplos_pdvs([pdv_nome]).get(pdv_nome, {})
+
+
+def ultimas_vendas_multiplos_pdvs(pdv_nomes: list[str]) -> dict[str, dict[str, datetime]]:
+    """Última venda por TT, agrupada por PDV — uma query para o lote."""
+    resultado: dict[str, dict[str, datetime]] = {nome: {} for nome in pdv_nomes}
+    if not pdv_nomes:
+        return resultado
     qs = (
-        VendaOSAB.objects.filter(pdv_nome=pdv_nome, data_abertura__isnull=False)
+        VendaOSAB.objects.filter(pdv_nome__in=pdv_nomes, data_abertura__isnull=False)
         .exclude(matricula_vendedor="")
-        .values("matricula_vendedor")
+        .values("pdv_nome", "matricula_vendedor")
         .annotate(ultima=Max("data_abertura"))
     )
     for row in qs:
         chave = normalizar_chave_tt(row["matricula_vendedor"])
         if chave and row["ultima"]:
-            mapa[chave] = row["ultima"]
-    return mapa
+            resultado.setdefault(row["pdv_nome"], {})[chave] = row["ultima"]
+    return resultado
 
 
-def listar_terceiros_capilaridade_pdv(parceiro: Parceiro) -> list:
+def listar_terceiros_capilaridade_pdv(
+    parceiro: Parceiro,
+    *,
+    mapa: dict | None = None,
+    por_parceiro: dict | None = None,
+    ultimas: dict[str, datetime] | None = None,
+) -> list:
     """Terceiros do PDV: razão social (Sysmap) + TT com venda OSAB no PDV."""
     vistos: set[int] = set()
     resultado = []
-    for terceiro in listar_terceiros_do_parceiro(parceiro.id):
+    for terceiro in listar_terceiros_do_parceiro(parceiro.id, por_parceiro=por_parceiro):
         if terceiro.id in vistos:
             continue
         vistos.add(terceiro.id)
         resultado.append(terceiro)
-    mapa = mapa_terceiros_por_chave()
-    for chave in ultimas_vendas_pdv(parceiro.nome):
+    if mapa is None:
+        mapa = mapa_terceiros_por_chave()
+    if ultimas is None:
+        ultimas = ultimas_vendas_pdv(parceiro.nome)
+    for chave in ultimas:
         terceiro = mapa.get(chave)
         if terceiro and terceiro.id not in vistos:
             vistos.add(terceiro.id)
@@ -274,14 +299,26 @@ def _filtros_ativos(filtros: dict | None) -> bool:
     return any((filtros.get(k) or "").strip() for k in ("tt", "nome", "cargo", "situacao", "pdv"))
 
 
-def linhas_capilaridade_pdv(parceiro: Parceiro, filtros: dict | None = None) -> list[dict]:
-    data_ref = data_ref_capilaridade()
-    ultimas = ultimas_vendas_pdv(parceiro.nome)
+def linhas_capilaridade_pdv(
+    parceiro: Parceiro,
+    filtros: dict | None = None,
+    *,
+    mapa: dict | None = None,
+    por_parceiro: dict | None = None,
+    ultimas: dict[str, datetime] | None = None,
+    data_ref: datetime | None = None,
+) -> list[dict]:
+    if data_ref is None:
+        data_ref = data_ref_capilaridade()
+    if ultimas is None:
+        ultimas = ultimas_vendas_pdv(parceiro.nome)
     linhas: list[dict] = []
     vistos: set[str] = set()
     cargo_filtro = (filtros or {}).get("cargo") or ""
     situacao_filtro = (filtros or {}).get("situacao") or ""
-    for terceiro in listar_terceiros_capilaridade_pdv(parceiro):
+    for terceiro in listar_terceiros_capilaridade_pdv(
+        parceiro, mapa=mapa, por_parceiro=por_parceiro, ultimas=ultimas
+    ):
         if not _terceiro_passa_filtro(terceiro, filtros):
             continue
         if not situacao_filtro and not terceiro_elegivel_capilaridade(
@@ -331,10 +368,19 @@ def linhas_capilaridade_pdv(parceiro: Parceiro, filtros: dict | None = None) -> 
     return linhas
 
 
-def contar_operadores_ativos(parceiro: Parceiro) -> int:
-    data_ref = data_ref_capilaridade()
-    mapa = mapa_terceiros_por_chave()
-    ultimas = ultimas_vendas_pdv(parceiro.nome)
+def contar_operadores_ativos(
+    parceiro: Parceiro,
+    *,
+    mapa: dict | None = None,
+    ultimas: dict[str, datetime] | None = None,
+    data_ref: datetime | None = None,
+) -> int:
+    if data_ref is None:
+        data_ref = data_ref_capilaridade()
+    if mapa is None:
+        mapa = mapa_terceiros_por_chave()
+    if ultimas is None:
+        ultimas = ultimas_vendas_pdv(parceiro.nome)
     total = 0
     for chave, ultima in ultimas.items():
         terceiro = mapa.get(chave)
@@ -353,19 +399,33 @@ def contar_ativos_pdv(
     parceiro: Parceiro,
     linhas: list[dict] | None = None,
     filtros: dict | None = None,
+    *,
+    mapa: dict | None = None,
+    ultimas: dict[str, datetime] | None = None,
+    data_ref: datetime | None = None,
 ) -> int:
     if linhas is None:
-        linhas = linhas_capilaridade_pdv(parceiro, filtros)
+        linhas = linhas_capilaridade_pdv(
+            parceiro,
+            filtros,
+            mapa=mapa,
+            ultimas=ultimas,
+            data_ref=data_ref,
+        )
     base = sum(1 for l in linhas if l["status"] == "Ativo")
     if _filtros_ativos(filtros) and any(
         (filtros or {}).get(k) for k in ("tt", "nome", "cargo", "situacao")
     ):
         return base
-    return base + contar_operadores_ativos(parceiro)
+    return base + contar_operadores_ativos(
+        parceiro, mapa=mapa, ultimas=ultimas, data_ref=data_ref
+    )
 
 
 def persistir_capilaridade(ano: int, mes: int, parceiros=None) -> dict:
+    """Persiste análise de capilaridade em lote (1 scan Sysmap + 1 query de vendas)."""
     data_analise = hoje()
+    data_ref = data_ref_capilaridade()
     qs_pdv = Parceiro.objects.filter(ativo=True)
     if parceiros is not None:
         ids = [getattr(p, "pk", p) for p in parceiros]
@@ -375,26 +435,47 @@ def persistir_capilaridade(ano: int, mes: int, parceiros=None) -> dict:
         ).delete()
     else:
         AnaliseCapilaridade.objects.filter(ano_referencia=ano, mes_referencia=mes).delete()
+
+    pdvs = list(qs_pdv)
+    if not pdvs:
+        return {"linhas": 0, "ativos": 0, "ano": ano, "mes": mes}
+
+    indice = indice_parceiros()
+    mapa, por_parceiro = carregar_indices_terceiros(indice)
+    ultimas_por_pdv = ultimas_vendas_multiplos_pdvs([p.nome for p in pdvs])
+
+    a_criar: list[AnaliseCapilaridade] = []
     total = 0
     ativos = 0
-    for parceiro in qs_pdv:
-        for linha in linhas_capilaridade_pdv(parceiro):
-            AnaliseCapilaridade.objects.create(
-                data_analise=data_analise,
-                ano_referencia=ano,
-                mes_referencia=mes,
-                matricula_vendedor=linha["matricula_vendedor"],
-                nome_vendedor=linha["nome_vendedor"] or "",
-                pdv_nome=linha["pdv_nome"],
-                parceiro_id=linha["parceiro_id"],
-                dias_sem_vender=linha["dias_sem_vender"],
-                status=linha["status"],
-                ultima_venda=linha["ultima_venda"],
-                sem_venda_osab=linha["sem_venda_osab"],
+    for parceiro in pdvs:
+        for linha in linhas_capilaridade_pdv(
+            parceiro,
+            mapa=mapa,
+            por_parceiro=por_parceiro,
+            ultimas=ultimas_por_pdv.get(parceiro.nome, {}),
+            data_ref=data_ref,
+        ):
+            a_criar.append(
+                AnaliseCapilaridade(
+                    data_analise=data_analise,
+                    ano_referencia=ano,
+                    mes_referencia=mes,
+                    matricula_vendedor=linha["matricula_vendedor"],
+                    nome_vendedor=linha["nome_vendedor"] or "",
+                    pdv_nome=linha["pdv_nome"],
+                    parceiro_id=linha["parceiro_id"],
+                    dias_sem_vender=linha["dias_sem_vender"],
+                    status=linha["status"],
+                    ultima_venda=linha["ultima_venda"],
+                    sem_venda_osab=linha["sem_venda_osab"],
+                )
             )
             total += 1
             if linha["status"] == "Ativo":
                 ativos += 1
+
+    if a_criar:
+        AnaliseCapilaridade.objects.bulk_create(a_criar, batch_size=500)
     return {"linhas": total, "ativos": ativos, "ano": ano, "mes": mes}
 
 
@@ -629,6 +710,22 @@ def calcular_osab(ano: int, mes: int, parceiros=None) -> dict:
     if nomes:
         HistoricoOSAB.objects.filter(descricao_pdv__in=nomes).delete()
     indice = indice_parceiros()
+    # Pré-carrega Sysmap/últimas vendas uma vez — calcular_osab não pode
+    # reabrir o cadastro inteiro por PDV (mesmo gargalo do timeout no upload).
+    mapa_tt, por_parceiro = carregar_indices_terceiros(indice)
+    ultimas_por_pdv = ultimas_vendas_multiplos_pdvs(nomes)
+    data_ref_cap = data_ref_capilaridade()
+    metas_cap = {
+        m.parceiro_id: m
+        for m in MetaCapilaridade.objects.filter(ano=ano, mes=mes).select_related("parceiro")
+    }
+    configs_osab = {
+        c.parceiro_id: c
+        for c in ConfiguracaoOSAB.objects.filter(ano=ano, mes=mes).select_related("parceiro")
+    }
+    parceiros_por_id = {
+        p.id: p for p in Parceiro.objects.filter(ativo=True)
+    }
     gerados = 0
     sem_parceiro = []
 
@@ -639,8 +736,14 @@ def calcular_osab(ano: int, mes: int, parceiros=None) -> dict:
         if not parceiro_id:
             sem_parceiro.append(pdv_nome)
             continue
-        parceiro = Parceiro.objects.get(pk=parceiro_id)
-        config = ConfiguracaoOSAB.objects.filter(parceiro=parceiro, ano=ano, mes=mes).first()
+        parceiro = parceiros_por_id.get(parceiro_id)
+        if parceiro is None:
+            try:
+                parceiro = Parceiro.objects.get(pk=parceiro_id)
+            except Parceiro.DoesNotExist:
+                sem_parceiro.append(pdv_nome)
+                continue
+        config = configs_osab.get(parceiro.id)
 
         vls = [
             v
@@ -669,10 +772,23 @@ def calcular_osab(ano: int, mes: int, parceiros=None) -> dict:
         status = "Ok"
         atingimento_vl = atingimento_gross = comissao_proj = None
         capilaridade = None
-        meta_cap = MetaCapilaridade.objects.filter(parceiro=parceiro, ano=ano, mes=mes).first()
+        meta_cap = metas_cap.get(parceiro.id)
         if meta_cap and meta_cap.meta_vendedores:
-            linhas = linhas_capilaridade_pdv(parceiro)
-            ativos = contar_ativos_pdv(parceiro, linhas)
+            ultimas_pdv = ultimas_por_pdv.get(parceiro.nome, {})
+            linhas = linhas_capilaridade_pdv(
+                parceiro,
+                mapa=mapa_tt,
+                por_parceiro=por_parceiro,
+                ultimas=ultimas_pdv,
+                data_ref=data_ref_cap,
+            )
+            ativos = contar_ativos_pdv(
+                parceiro,
+                linhas,
+                mapa=mapa_tt,
+                ultimas=ultimas_pdv,
+                data_ref=data_ref_cap,
+            )
             inativos = sum(1 for l in linhas if l["status"] == "Inativo")
             pct = (ativos / meta_cap.meta_vendedores * 100) if meta_cap.meta_vendedores else 0
             capilaridade = {
@@ -810,12 +926,28 @@ def processar_osab(arquivo, nome_arquivo: str, ano: int, mes: int, gerencia: str
     for col in ("DATA_ABERTURA", "DATA_FECHAMENTO"):
         if col in df.columns:
             df[col] = converter_data_robusto(df[col])
+    # Gravação das vendas é o passo crítico. Capilaridade/relatório vêm depois;
+    # se estourarem (timeout/memória), a base já ficou salva e a reimportação
+    # corretamente mostra 0 inseridos — por isso o pós-processamento não pode
+    # derrubar o lote inteiro como falha.
     vendas = persistir_vendas_osab(df)
     cadastro = sincronizar_parceiros_osab()
     recorte = None
     gerencia = (gerencia or "").strip()
     if gerencia:
         recorte = ids_parceiros_da_gerencia(gerencia)
-    cap = persistir_capilaridade(ano, mes, parceiros=recorte)
-    osab = calcular_osab(ano, mes, parceiros=recorte)
-    return {"vendas": vendas, "capilaridade": cap, "osab": osab, "parceiros": cadastro}
+    aviso = (vendas.get("aviso_tickets") or "").strip()
+    try:
+        cap = persistir_capilaridade(ano, mes, parceiros=recorte)
+        osab = calcular_osab(ano, mes, parceiros=recorte)
+    except Exception as exc:
+        aviso = f"{aviso}; {exc}".strip("; ").strip() if aviso else str(exc)
+        cap = {"linhas": 0, "ativos": 0, "ano": ano, "mes": mes}
+        osab = {"pdvs": 0, "sem_parceiro": []}
+    return {
+        "vendas": vendas,
+        "capilaridade": cap,
+        "osab": osab,
+        "parceiros": cadastro,
+        "aviso": aviso,
+    }

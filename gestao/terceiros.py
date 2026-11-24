@@ -95,18 +95,70 @@ def classificar_cargo_auditoria(cargo_norm: str) -> str | None:
     return "nao_vendedor"
 
 
+_CAMPOS_TERCEIRO_CAP = (
+    "id",
+    "chave_acesso",
+    "nome_terceiro",
+    "cargo_funcao",
+    "situacao_empresa",
+    "situacao_funcional",
+    "situacao_contrato",
+    "razao_social",
+    "parceiro_id",
+    "ativo",
+)
+
+
+def _qs_terceiros_capilaridade():
+    return CadastroTerceiro.objects.only(*_CAMPOS_TERCEIRO_CAP)
+
+
 def mapa_terceiros_por_chave() -> dict[str, CadastroTerceiro]:
+    """Uma passagem leve no cadastro Sysmap → TT normalizada."""
     mapa: dict[str, CadastroTerceiro] = {}
-    for registro in CadastroTerceiro.objects.all():
+    for registro in _qs_terceiros_capilaridade().iterator(chunk_size=2000):
         chave = normalizar_chave_tt(registro.chave_acesso)
         if chave and chave not in mapa:
             mapa[chave] = registro
     return mapa
 
 
+def carregar_indices_terceiros(
+    indice: list[tuple[int, str, str, str]] | None = None,
+) -> tuple[dict[str, CadastroTerceiro], dict[int, list[CadastroTerceiro]]]:
+    """
+    Carrega o cadastro Sysmap uma única vez (mapa TT + agrupamento por PDV).
+
+    Preferir este helper em loops de capilaridade/importação; evita N full-scans.
+    """
+    if indice is None:
+        indice = indice_parceiros()
+    mapa: dict[str, CadastroTerceiro] = {}
+    grupos: dict[int, list[CadastroTerceiro]] = {}
+    vistos: dict[int, set[int]] = {}
+
+    for registro in _qs_terceiros_capilaridade().iterator(chunk_size=2000):
+        chave = normalizar_chave_tt(registro.chave_acesso)
+        if chave and chave not in mapa:
+            mapa[chave] = registro
+
+        pid = registro.parceiro_id
+        if pid is None:
+            pid = resolver_parceiro_id(registro.razao_social or "", indice)
+        if pid is None:
+            continue
+        ids = vistos.setdefault(pid, set())
+        if registro.id in ids:
+            continue
+        ids.add(registro.id)
+        grupos.setdefault(pid, []).append(registro)
+
+    return mapa, grupos
+
+
 def chaves_elegiveis_capilaridade() -> set[str]:
     chaves: set[str] = set()
-    for registro in CadastroTerceiro.objects.all():
+    for registro in _qs_terceiros_capilaridade().iterator(chunk_size=2000):
         if not terceiro_elegivel_capilaridade(
             registro.situacao_empresa,
             registro.situacao_funcional,
@@ -119,12 +171,22 @@ def chaves_elegiveis_capilaridade() -> set[str]:
     return chaves
 
 
-def listar_terceiros_do_parceiro(parceiro_id: int) -> list[CadastroTerceiro]:
-    indice = indice_parceiros()
-    por_id = list(CadastroTerceiro.objects.filter(parceiro_id=parceiro_id))
+def listar_terceiros_do_parceiro(
+    parceiro_id: int,
+    *,
+    por_parceiro: dict[int, list[CadastroTerceiro]] | None = None,
+    indice: list[tuple[int, str, str, str]] | None = None,
+) -> list[CadastroTerceiro]:
+    if por_parceiro is not None:
+        return list(por_parceiro.get(parceiro_id, []))
+    if indice is None:
+        indice = indice_parceiros()
+    por_id = list(_qs_terceiros_capilaridade().filter(parceiro_id=parceiro_id))
     vistos = {t.id for t in por_id}
     extras = []
-    for terceiro in CadastroTerceiro.objects.filter(parceiro__isnull=True):
+    for terceiro in _qs_terceiros_capilaridade().filter(parceiro__isnull=True).iterator(
+        chunk_size=2000
+    ):
         if terceiro.id in vistos:
             continue
         if resolver_parceiro_id(terceiro.razao_social or "", indice) == parceiro_id:
