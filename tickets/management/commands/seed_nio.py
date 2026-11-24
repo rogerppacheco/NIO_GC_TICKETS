@@ -40,13 +40,31 @@ MASCARAS = [
             "*PEDIDO DE AJUDA — ABRIR CHAMADO COM TI*\n\n"
             "*Nome do Gerente de Contas:* {{nome_gc}}\n"
             "*PDV do usuário:* {{pdv}} - {{parceiro}}\n"
-            "*Login BO (se houver):* {{login_bo}}\n"
-            "*Login vendedor:* {{login_vendedor}}\n"
             "*TT do vendedor:* {{tt_vendedor}}\n"
             "*TT do backoffice de cadastro:* {{tt_backoffice}}\n"
             "*CNPJ/CPF do cliente:* {{documento}}\n"
             "*Número do Pedido (se houver):* {{pedido}}\n"
             "*Contato:* {{contato}}\n"
+            "*Qual etapa do erro:* {{etapa_erro}}\n"
+            "*Detalhar o cenário reportado:* {{detalhe_cenario}}\n"
+            "*Número do registro do atendimento:* {{numero_registro}}\n\n"
+            "*Importante!* É obrigatório anexar as evidências contendo data e hora do erro.\n"
+        ),
+    },
+    {
+        "nome": "Problema Mobilidade 5G — recebimento do Chip",
+        "destino": "GC / TI / Mobilidade 5G",
+        "tipos": TipoDemanda.MOBILIDADE_5G_CHIP,
+        "template": (
+            "*PEDIDO DE AJUDA — PROBLEMA MOBILIDADE 5G — RECEBIMENTO DO CHIP*\n\n"
+            "*Nome do Gerente de Contas:* {{nome_gc}}\n"
+            "*PDV do usuário:* {{pdv}} - {{parceiro}}\n"
+            "*TT do vendedor:* {{tt_vendedor}}\n"
+            "*TT do backoffice de cadastro:* {{tt_backoffice}}\n"
+            "*CNPJ/CPF do cliente:* {{documento}}\n"
+            "*Número do Pedido (se houver):* {{pedido}}\n"
+            "*Contato:* {{contato}}\n"
+            "*Endereço de entrega do chip:* {{endereco}}\n"
             "*Qual etapa do erro:* {{etapa_erro}}\n"
             "*Detalhar o cenário reportado:* {{detalhe_cenario}}\n"
             "*Número do registro do atendimento:* {{numero_registro}}\n\n"

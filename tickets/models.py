@@ -147,10 +147,15 @@ class TipoDemanda(models.TextChoices):
     VIABILIDADE = "viabilidade", "Consulta de viabilidade (sistema fora)"
     ACESSO_APP = "acesso_app", "Chamado acesso App NIO"
     ABRIR_CHAMADO_TI = "abrir_chamado_ti", "Abrir chamado com TI"
+    MOBILIDADE_5G_CHIP = (
+        "mobilidade_5g_chip",
+        "Problema Mobilidade 5G - Solicitação de recebimento do Chip",
+    )
     SEM_SLOT = "sem_slot", "Sinalização — sem slot / liberação de agenda"
     INSTALACAO_FISICA = "instalacao_fisica", "Sinalização — instalação física / pendência"
     REPARO = "reparo", "Reparo — internet pós-instalação (até 14 dias)"
     PENDENCIA_INDEVIDA = "pendencia_indevida", "Pendência indevida"
+    PENDENCIA_TECNICA = "pendencia_tecnica", "Pendência técnica"
     AGENDA_NAO_CUMPRIDA = "agenda_nao_cumprida", "Agenda não cumprida"
     SLOT_ALONGADO = "slot_alongado", "Slot alongado"
     REAGENDAMENTO_NAO_SOLICITADO = "reagendamento_nao_solicitado", "Reagendamento não solicitado"
