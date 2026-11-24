@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
+from io import BytesIO
 
 import pandas as pd
 from django.utils import timezone
 
-from .excel import ler_planilha
+from .excel import _bytes_planilha, _parece_html, ler_planilha
 from .models import CadastroTerceiro
 from .parceiros import indice_parceiros, resolver_parceiro_id
+from .sysmap_sanitize import sanitizar_planilha_sysmap
 
 CARGO_VENDEDOR_CTPS = "VENDEDOR"
 CARGO_OPERADOR_BACKOFFICE_INDICADOR = "OPERADOR BACK-OFFICE INDICADOR"
@@ -375,7 +377,11 @@ def _consolidar(df: pd.DataFrame, mapa: dict[str, str]) -> tuple[pd.DataFrame, i
 
 def importar_sysmap(arquivo, nome_arquivo: str = "") -> dict:
     nome = nome_arquivo or getattr(arquivo, "name", "arquivo")
-    df = ler_planilha(arquivo, nome)
+    conteudo, nome = _bytes_planilha(arquivo, nome)
+    # DLP/LGPD: esvazia CPF no HTML-as-xls preservando <table> antes de ler.
+    if _parece_html(conteudo):
+        conteudo = sanitizar_planilha_sysmap(conteudo, nome).conteudo
+    df = ler_planilha(BytesIO(conteudo), nome)
     df = _flatten_columns(df)
     df = _promover_cabecalho(df)
     mapa = _mapear_colunas(df)

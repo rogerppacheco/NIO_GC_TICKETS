@@ -20,11 +20,12 @@
 <div class="panel" style="margin-bottom:1rem">
   <div class="panel-h"><h2>Importar planilha</h2></div>
   <div class="panel-b">
-    <form method="post" enctype="multipart/form-data">
+    <form method="post" enctype="multipart/form-data" id="form-sysmap-upload">
       {% csrf_token %}{% include "gestao/_escopo_hidden.html" %}
       {{ form.arquivo }}
       <p class="help">{{ form.arquivo.help_text }}</p>
-      <button class="btn btn-primary" type="submit" style="margin-top:0.7rem">Importar Sysmap</button>
+      <p class="help" id="sysmap-sanitize-status" hidden></p>
+      <button class="btn btn-primary" type="submit" style="margin-top:0.7rem" id="btn-sysmap-upload">Importar Sysmap</button>
     </form>
     {% include "gestao/_ultima_importacao.html" %}
   </div>
@@ -61,4 +62,108 @@
     </table>
   </div>
 </div>
+{% endblock %}
+{% block extra_js %}
+{% if form %}
+<script>
+(function () {
+  var form = document.getElementById("form-sysmap-upload");
+  if (!form) return;
+  var input = form.querySelector('input[type="file"]');
+  var btn = document.getElementById("btn-sysmap-upload");
+  var status = document.getElementById("sysmap-sanitize-status");
+  var enviando = false;
+
+  function marcarStatus(texto) {
+    if (!status) return;
+    if (!texto) {
+      status.hidden = true;
+      status.textContent = "";
+      return;
+    }
+    status.hidden = false;
+    status.textContent = texto;
+  }
+
+  /** Esvazia coluna CPF em .xls HTML do Sysmap sem quebrar <table> (anti-DLP). */
+  function esvaziarCpfHtml(texto) {
+    if (!/<html[\s>]/i.test(texto) && !/<table[\s>]/i.test(texto)) {
+      return { texto: texto, alterou: false, n: 0 };
+    }
+    var doc = new DOMParser().parseFromString(texto, "text/html");
+    var table = doc.querySelector("table");
+    if (!table) return { texto: texto, alterou: false, n: 0 };
+    var rows = Array.prototype.slice.call(table.querySelectorAll("tr"));
+    var cpfCol = -1;
+    var hdr = -1;
+    rows.forEach(function (tr, i) {
+      var cells = tr.querySelectorAll("th,td");
+      for (var j = 0; j < cells.length; j++) {
+        if ((cells[j].textContent || "").trim().toLowerCase() === "cpf") {
+          cpfCol = j;
+          hdr = i;
+        }
+      }
+    });
+    if (cpfCol < 0) return { texto: texto, alterou: false, n: 0 };
+    var n = 0;
+    rows.forEach(function (tr, i) {
+      if (i <= hdr) return;
+      var cells = tr.querySelectorAll("th,td");
+      if (cells[cpfCol] && (cells[cpfCol].textContent || "").trim()) {
+        cells[cpfCol].textContent = "";
+        n += 1;
+      }
+    });
+    if (!n) return { texto: texto, alterou: false, n: 0 };
+    var html = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+    return { texto: html, alterou: true, n: n };
+  }
+
+  form.addEventListener("submit", function (ev) {
+    if (enviando) return;
+    if (!input || !input.files || !input.files[0]) return;
+    var file = input.files[0];
+    var nome = (file.name || "").toLowerCase();
+    if (!nome.endsWith(".xls") && !nome.endsWith(".html") && !nome.endsWith(".htm")) {
+      return;
+    }
+    ev.preventDefault();
+    if (btn) btn.disabled = true;
+    marcarStatus("Preparando arquivo (esvaziando CPF no navegador)…");
+    var reader = new FileReader();
+    reader.onerror = function () {
+      marcarStatus("Não foi possível ler o arquivo. Tente novamente.");
+      if (btn) btn.disabled = false;
+    };
+    reader.onload = function () {
+      try {
+        var bruto = String(reader.result || "");
+        var limpo = esvaziarCpfHtml(bruto);
+        if (limpo.alterou) {
+          var blob = new Blob([limpo.texto], { type: file.type || "application/vnd.ms-excel" });
+          var novo = new File([blob], file.name, {
+            type: file.type || "application/vnd.ms-excel",
+            lastModified: Date.now(),
+          });
+          var dt = new DataTransfer();
+          dt.items.add(novo);
+          input.files = dt.files;
+          marcarStatus("CPF esvaziado no navegador (" + limpo.n + " células). Enviando…");
+        } else {
+          marcarStatus("Enviando…");
+        }
+      } catch (err) {
+        marcarStatus("Falha ao preparar o arquivo. Enviando original.");
+      }
+      enviando = true;
+      if (btn) btn.disabled = false;
+      if (typeof form.requestSubmit === "function") form.requestSubmit();
+      else form.submit();
+    };
+    reader.readAsText(file);
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

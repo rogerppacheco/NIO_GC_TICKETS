@@ -295,6 +295,44 @@ class SysmapImportTests(TestCase):
         self.assertIn("editado.xls", msg)
         self.assertIn("sem tag <table>", msg)
 
+    def test_esvaziar_cpf_html_preserva_tabela(self):
+        from gestao.sysmap_sanitize import esvaziar_cpf_html
+        from gestao.excel import ler_planilha
+
+        # CPF fictício (não é PII real) só para validar o strip.
+        html = (
+            "<!DOCTYPE html><html><body><table>"
+            "<tr><th>Razão Social</th><th>Terceiro</th><th>CPF</th><th>Chave de Acesso</th></tr>"
+            "<tr><td>ACME</td><td>ANA</td><td>000.000.000-00</td><td>TT9</td></tr>"
+            "</table></body></html>"
+        ).encode("utf-8")
+        res = esvaziar_cpf_html(html)
+        self.assertTrue(res.alterou)
+        self.assertEqual(res.celulas_esvaziadas, 1)
+        self.assertNotIn(b"000.000.000-00", res.conteudo)
+        self.assertIn(b"<table", res.conteudo.lower())
+        df = ler_planilha(BytesIO(res.conteudo), "limpo.xls")
+        self.assertGreaterEqual(len(df), 1)
+
+    def test_importar_sysmap_html_esvazia_cpf(self):
+        html = (
+            "<!DOCTYPE html><html><body><table>"
+            "<tr><th>Razão Social</th><th>Terceiro</th><th>CPF</th><th>Email</th>"
+            "<th>Chave de Acesso</th><th>Vínculo</th><th>Cargo/Função</th>"
+            "<th>Situação Terceiro Empresa</th><th>Situação Funcional</th>"
+            "<th>Situação Terceiro Contrato</th><th>Data Alocação</th>"
+            "<th>Data Desalocação</th><th>Data Inativação</th></tr>"
+            "<tr><td>LUISA SERVICOS DE TELEFONIA MOVEL</td><td>ANA</td>"
+            "<td>111.444.777-35</td><td>a@x.com</td><td>TT1</td><td>CLT</td>"
+            "<td>VENDEDOR</td><td>Ativo</td><td>Ativo</td><td>Alocado</td>"
+            "<td>01/01/2025</td><td></td><td></td></tr>"
+            "</table></body></html>"
+        ).encode("utf-8")
+        resumo = importar_sysmap(BytesIO(html), "Relatorio.xls")
+        self.assertEqual(resumo["inseridos"], 1)
+        t = CadastroTerceiro.objects.get(chave_acesso="TT1")
+        self.assertEqual(t.cpf, "")
+
     def test_importa_sem_coluna_cpf(self):
         """DLP: coluna CPF pode ser removida; demais campos bastam."""
         arquivo = _xlsx(

@@ -68,9 +68,9 @@ def _ler_html_tabela(conteudo: bytes, nome: str = "") -> pd.DataFrame:
     if "<table" not in texto.casefold():
         raise ValueError(
             f"'{nome}' ({tamanho} bytes) parece HTML sem tag <table> "
-            "(arquivo editado/quebrado ou truncado pelo DLP). "
-            "Não edite o .xls HTML: use um .xlsx real (Salvar como .xlsx) "
-            "ou remova só a coluna CPF mantendo o restante."
+            "(arquivo editado no Excel ou truncado pelo DLP). "
+            "Suba o .xls original do Sysmap — a página esvazia o CPF no navegador. "
+            "Alternativa: python manage.py sysmap_sem_cpf <arquivo.xls>"
         )
     erros: list[str] = []
     for flavor in ("html5lib", "lxml", "bs4"):
@@ -85,8 +85,8 @@ def _ler_html_tabela(conteudo: bytes, nome: str = "") -> pd.DataFrame:
     detalhe = "; ".join(erros[:3]) if erros else "sem parsers"
     raise ValueError(
         f"Nenhuma tabela parseável em '{nome}' ({tamanho} bytes). "
-        "O .xls HTML editado (ex.: coluna CPF apagada) costuma quebrar. "
-        "Use .xlsx (Salvar como) sem a coluna CPF. "
+        "Não edite o .xls no Excel (quebra o HTML). "
+        "Suba o .xls nativo do Sysmap ou rode: python manage.py sysmap_sem_cpf <arquivo.xls>. "
         f"Detalhe: {detalhe}"
     )
 
