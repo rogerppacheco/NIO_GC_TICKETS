@@ -23,7 +23,6 @@ MASCARAS = [
             "*MÁSCARA PADRÃO DE ACIONAMENTO - GRUPO ELITE:*\n\n"
             "- *OS:* {{os}}\n"
             "- *NOME/TITULAR:* {{nome_cliente}}\n"
-            "- *CPF TITULAR:* {{documento}}\n"
             "- *ENDEREÇO COMPLETO:* {{endereco}}\n"
             "- *NOME DO PDV:* {{pdv}} - {{parceiro}}\n"
             "- *DATA AGENDADA NO SISTEMA:* {{data}} - {{turno}}\n"

@@ -267,6 +267,8 @@ class PrioridadeEliteDemandaTests(TestCase):
             "parceiro": str(self.pdv.pk),
             "tipo": TipoDemanda.PRIORIDADE_ELITE,
             "pedido": "11250952",
+            "nome_cliente": "Joao da Silva",
+            "documento_cliente": "12345678901",
             "cep": "72885095",
             "numero_fachada": "16",
             "data_desejada": "2026-09-14",
@@ -284,6 +286,7 @@ class PrioridadeEliteDemandaTests(TestCase):
         cfg = schema_tipo(TipoDemanda.PRIORIDADE_ELITE)
         self.assertIn("solicitante_nome", cfg["campos"])
         self.assertIn("solicitante_contato", cfg["campos"])
+        self.assertIn("documento_cliente", cfg["obrigatorios"])
         self.assertIn("solicitante_nome", cfg["obrigatorios"])
         self.assertIn("solicitante_contato", cfg["obrigatorios"])
         labels = schema_para_js()[TipoDemanda.PRIORIDADE_ELITE]["labels"]
@@ -329,6 +332,8 @@ class PrioridadeEliteDemandaTests(TestCase):
             parceiro=self.pdv,
             tipo=TipoDemanda.PRIORIDADE_ELITE,
             pedido="11250952",
+            nome_cliente="Joao da Silva",
+            documento_cliente="12345678901",
             endereco_completo=(
                 "Quadra 26, 16, apartamento 203, Parque Nápolis A, "
                 "Cidade Ocidental - GO, 72885-095"
@@ -343,9 +348,11 @@ class PrioridadeEliteDemandaTests(TestCase):
         self.assertIn("DATA AGENDADA NO SISTEMA", texto)
         self.assertIn("NOME DE CONTATO DA INSTALAÇÃO", texto)
         self.assertIn("TELEFONE DE CONTATO", texto)
-        self.assertIn("Maria Silva", texto)
+        self.assertIn("MARIA SILVA", texto)
         self.assertIn("61999999999", texto)
         self.assertIn("11250952", texto)
+        self.assertNotIn("CPF TITULAR", texto)
+        self.assertNotIn("12345678901", texto)
 
     @override_settings(
         STORAGES={
