@@ -3061,7 +3061,7 @@ class DestinatarioEnvioTests(TestCase):
         with (
             patch("gestao.messaging.syncwa.requests.post", return_value=fake),
             patch("time.sleep") as sleep,
-            patch("gestao.messaging.envio.planilha_capilaridade", return_value=(b"xlsx", "c.xlsx")),
+            patch("gestao.messaging.envio.planilha_osab", return_value=(b"xlsx", "osab.xlsx")),
             patch("gestao.messaging.envio.montar_mascara_pdv", return_value="mascara"),
         ):
             resumo = enviar_capilaridade_todos(
@@ -4394,6 +4394,50 @@ class PlanilhaGestaoTests(TestCase):
         dados2, nome2 = planilha_osab(self.pdv)
         self.assertTrue(nome2.endswith(".xlsx"))
         self.assertTrue(dados2.startswith(b"PK"))
+        self.assertTrue(nome2.startswith("OSAB_"))
+
+    def test_planilha_osab_colunas_formato_upload(self):
+        from io import BytesIO
+
+        import openpyxl
+        from django.utils import timezone
+
+        from gestao.models import VendaOSAB
+        from gestao.planilhas import planilha_osab
+
+        agora = timezone.now()
+        VendaOSAB.objects.create(
+            pedido="P-OSAB-X",
+            parceiro=self.pdv,
+            pdv_nome="INOVA MG",
+            pdv_sap="1070001",
+            matricula_vendedor="TT1",
+            nome_vendedor="JOAO",
+            data_abertura=agora,
+            data_fechamento=agora,
+            situacao="Concluído",
+            velocidade="500M",
+            meio_pagamento="Boleto",
+            municipio="Uberlândia",
+            oferta="Fibra 500",
+            nm_gc="GC Teste",
+            gerencia="MG",
+            dt_ref=agora,
+        )
+        dados, nome = planilha_osab(self.pdv)
+        self.assertIn("INOVA", nome)
+        wb = openpyxl.load_workbook(BytesIO(dados))
+        ws = wb.active
+        cabecalhos = [c.value for c in next(ws.iter_rows(min_row=1, max_row=1))]
+        self.assertEqual(
+            cabecalhos[:5],
+            ["PEDIDO", "DT_REF", "DESCRICAO", "PDV_SAP", "MATRICULA_VENDEDOR"],
+        )
+        self.assertIn("OFERTA", cabecalhos)
+        self.assertIn("GERENCIA", cabecalhos)
+        valores = [c.value for c in next(ws.iter_rows(min_row=2, max_row=2))]
+        self.assertEqual(valores[0], "P-OSAB-X")
+        self.assertEqual(valores[2], "INOVA MG")
 
 
 @override_settings(

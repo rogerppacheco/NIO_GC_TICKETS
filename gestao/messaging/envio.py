@@ -26,7 +26,6 @@ from ..periodo import periodo_ativo
 from ..planilhas import (
     bytes_arquivo_field,
     planilha_acumulado,
-    planilha_capilaridade,
     planilha_churn,
     planilha_fpd,
     planilha_osab,
@@ -569,13 +568,13 @@ def enviar_capilaridade_pdv(
         if pausa_apos_motivacional > 0:
             time.sleep(pausa_apos_motivacional)
 
-    # 2. Envia o relatório de capilaridade (planilha + máscara) conforme a regra atual
+    # 2. Máscara de capilaridade + Excel OSAB completo só deste parceiro (formato do upload)
     mensagem = montar_mascara_pdv(parceiro, ano, mes, filtros)
-    arquivo_bytes, nome_arquivo = planilha_capilaridade(parceiro, filtros)
+    arquivo_bytes, nome_arquivo = planilha_osab(parceiro)
     resumo_anexo = _enviar_com_anexo(
         tipo=EnvioWhatsApp.Tipo.CAPILARIDADE,
         mensagem=mensagem,
-        caption=f"📁 *Capilaridade* — {parceiro.nome}",
+        caption=f"📁 *OSAB* — {parceiro.nome}",
         destinos=destinos,
         parceiro=parceiro,
         user=user,

@@ -69,27 +69,53 @@ def planilha_capilaridade(parceiro: Parceiro, filtros: dict | None = None) -> tu
     return df_para_xlsx(df, f"Capilaridade_{_tag(parceiro)}.xlsx")
 
 
+# Colunas canônicas do upload OSAB (e-mail / BI), na ordem do relatório.
+_COLUNAS_OSAB = [
+    "PEDIDO",
+    "DT_REF",
+    "DESCRICAO",
+    "PDV_SAP",
+    "MATRICULA_VENDEDOR",
+    "NOME_VENDEDOR",
+    "DATA_ABERTURA",
+    "DATA_FECHAMENTO",
+    "SITUACAO",
+    "VELOCIDADE",
+    "MEIO_PAGAMENTO",
+    "LOCALIDADE",
+    "OFERTA",
+    "NM_GC",
+    "GERENCIA",
+]
+
+
 def planilha_osab(parceiro: Parceiro) -> tuple[bytes, str]:
+    """Excel OSAB do parceiro no período ativo, com colunas no formato do upload."""
     ano, mes = periodo_ativo()
-    qs = VendaOSAB.objects.filter(parceiro=parceiro, data_abertura__year=ano, data_abertura__month=mes)
+    qs = VendaOSAB.objects.filter(
+        parceiro=parceiro, data_abertura__year=ano, data_abertura__month=mes
+    ).order_by("data_abertura", "pedido")
     rows = [
         {
-            "Pedido": v.pedido,
-            "Matrícula": v.matricula_vendedor,
-            "Vendedor": v.nome_vendedor,
-            "PDV": v.pdv_nome,
-            "Abertura": v.data_abertura,
-            "Fechamento": v.data_fechamento,
-            "Situação": v.situacao,
-            "Velocidade": v.velocidade,
-            "Pagamento": v.meio_pagamento,
-            "Município": v.municipio,
+            "PEDIDO": v.pedido,
+            "DT_REF": v.dt_ref,
+            "DESCRICAO": v.pdv_nome,
+            "PDV_SAP": v.pdv_sap,
+            "MATRICULA_VENDEDOR": v.matricula_vendedor,
+            "NOME_VENDEDOR": v.nome_vendedor,
+            "DATA_ABERTURA": v.data_abertura,
+            "DATA_FECHAMENTO": v.data_fechamento,
+            "SITUACAO": v.situacao,
+            "VELOCIDADE": v.velocidade,
+            "MEIO_PAGAMENTO": v.meio_pagamento,
+            "LOCALIDADE": v.municipio,
+            "OFERTA": v.oferta,
+            "NM_GC": v.nm_gc,
+            "GERENCIA": v.gerencia,
         }
         for v in qs
     ]
-    df = pd.DataFrame(rows) if rows else pd.DataFrame(
-        columns=["Pedido", "Matrícula", "Vendedor", "PDV", "Abertura", "Fechamento", "Situação"]
-    )
+    df = pd.DataFrame(rows, columns=_COLUNAS_OSAB) if rows else pd.DataFrame(columns=_COLUNAS_OSAB)
     return df_para_xlsx(df, f"OSAB_{_tag(parceiro)}_{mes:02d}-{ano}.xlsx")
 
 
