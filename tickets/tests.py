@@ -1995,6 +1995,8 @@ class FilaCoberturaTests(TestCase):
         textos = [c for row in wb.active.iter_rows(values_only=True) for c in row]
         self.assertIn("Especialista", textos)
         self.assertIn("Gerência", textos)
+        self.assertIn("ANOMES_CRIACAO", textos)
+        self.assertIn("ANOMES_ATUALIZADO", textos)
         self.assertIn(self.ticket_ana.protocolo, textos)
         self.assertIn(self.ticket_bruno.protocolo, textos)
         self.assertIn(self.ticket_carla.protocolo, textos)

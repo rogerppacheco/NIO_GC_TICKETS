@@ -285,7 +285,10 @@ def _resposta_excel_tickets(tickets, nome_arquivo: str) -> HttpResponse:
         "Descrição", "Observações",
         "STATUS (Resultado)", "Resposta Pública", "Nota Interna", "Destino Encaminhamento",
         "Avaliação", "Reincidente",
-        "Atendente", "Criado Em", "Atualizado Em", "Primeiro Atendimento", "Resolvido Em",
+        "Atendente",
+        "Criado Em", "ANOMES_CRIACAO",
+        "Atualizado Em", "ANOMES_ATUALIZADO",
+        "Primeiro Atendimento", "Resolvido Em",
         "Tempo de Retorno", "Especialista", "Gerência",
     ]
     ws.append(headers)
@@ -295,6 +298,9 @@ def _resposta_excel_tickets(tickets, nome_arquivo: str) -> HttpResponse:
 
     def fmt_date_only(dt):
         return dt.strftime("%d/%m/%Y") if dt else ""
+
+    def fmt_anomes(dt):
+        return dt.strftime("%Y%m") if dt else ""
 
     for t in tickets:
         especialista = t.parceiro.especialista if t.parceiro else None
@@ -346,7 +352,9 @@ def _resposta_excel_tickets(tickets, nome_arquivo: str) -> HttpResponse:
             "Sim" if t.reincidente else "Não",
             t.atendente.get_full_name() or t.atendente.username if t.atendente else "",
             fmt_date(t.criado_em),
+            fmt_anomes(t.criado_em),
             fmt_date(t.atualizado_em),
+            fmt_anomes(t.atualizado_em),
             fmt_date(t.primeiro_atendimento_em),
             fmt_date(t.resolvido_em),
             t.tempo_retorno_tratamento or "",
