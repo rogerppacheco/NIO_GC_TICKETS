@@ -3059,7 +3059,8 @@ body.page-fpd .gestao-escopo + .help { display: none; }
   .reuniao-layout, .reuniao-quando { grid-template-columns: 1fr; }
 }
 
-/* —— Relatório de evolução na fila —— */
+
+/* -- Relatorio de evolucao na fila -- */
 body.evolucao-aberta { overflow: hidden; }
 .evolucao-overlay {
   position: fixed;
