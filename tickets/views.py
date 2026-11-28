@@ -77,6 +77,7 @@ from .models import (
     Ticket,
     TipoDemanda,
 )
+from .evolucao import montar_relatorio_evolucao
 from .services import (
     avaliar_retorno,
     enviar_mascara_whatsapp,
@@ -518,6 +519,7 @@ def fila(request: HttpRequest) -> HttpResponse:
             "lista_limitada": aba_ativa["n"] > len(tickets),
             "mostrar_filtro_especialista": True,
             "filtros_ativos": filtros_ativos,
+            "evolucao": montar_relatorio_evolucao(request.user),
         },
     )
 

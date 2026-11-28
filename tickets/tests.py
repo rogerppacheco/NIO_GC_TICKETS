@@ -1559,6 +1559,46 @@ class FilaOsabTests(TestCase):
         self.assertEqual(len(r.context["tickets"]), 1)
         self.assertEqual(r.context["tickets"][0].pedido, "99999999")
 
+    def test_fila_inclui_modal_evolucao_mensal(self):
+        self.client.force_login(self.gestor)
+        with override_settings(**self.storages):
+            r = self.client.get(reverse("fila"))
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNotNone(r.context.get("evolucao"))
+        self.assertIn("meu", r.context["evolucao"]["visoes"])
+        self.assertIn("gerencia", r.context["evolucao"]["visoes"])
+        self.assertIn("geral", r.context["evolucao"]["visoes"])
+        self.assertContains(r, "modal-evolucao")
+        self.assertContains(r, "Evolução")
+        self.assertContains(r, "Entendi, fechar")
+
+    def test_evolucao_ignora_cancelados_duplicados(self):
+        from tickets.evolucao import montar_relatorio_evolucao
+
+        Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.RESET_SENHA,
+            pedido="dup-1",
+            status=StatusTicket.CANCELADO,
+            resultado_status="DUPLICADO",
+        )
+        Ticket.objects.create(
+            parceiro=self.pdv,
+            tipo=TipoDemanda.RESET_SENHA,
+            pedido="ok-1",
+            status=StatusTicket.NOVO,
+        )
+        rel = montar_relatorio_evolucao(self.gestor)
+        total = rel["visoes"]["geral"]["dados"]["kpis"]["total_periodo"]
+        # self.ticket + ok-1 (duplicado fora)
+        self.assertGreaterEqual(total, 2)
+        self.assertEqual(
+            rel["visoes"]["geral"]["dados"]["kpis"]["total_periodo"],
+            Ticket.objects.exclude(
+                status=StatusTicket.CANCELADO, resultado_status__iexact="DUPLICADO"
+            ).count(),
+        )
+
     def test_fila_abre_em_a_tratar_e_separa_os_outros_status(self):
         self.ticket.status = StatusTicket.EM_ANALISE
         self.ticket.save(update_fields=["status"])

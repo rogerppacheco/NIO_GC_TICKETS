@@ -39,6 +39,11 @@
       </svg>
       Sincronizar OSAB
     </button>
+    {% if evolucao %}
+    <button type="button" class="btn btn-secondary fila-excel" id="btn-abrir-evolucao" title="Relatório de evolução mensal">
+      Evolução
+    </button>
+    {% endif %}
     <button type="submit" name="export" value="excel" class="btn btn-secondary fila-excel" title="{% if aba_ativa.id == 'todos' %}Baixar todas as demandas desta aba em Excel{% else %}Baixar os tickets abertos desta aba em Excel{% endif %}">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -154,6 +159,8 @@
 </div>
 
 <div id="mask-menu" class="mask-menu" hidden></div>
+
+{% include "tickets/_modal_evolucao.html" %}
 
 <!-- Modal Enviar Máscara via WhatsApp -->
 <div class="modal-overlay" id="modal-enviar-mascara" role="presentation" style="display:none">
@@ -588,6 +595,65 @@
       }
     });
   }
+})();
+
+(function () {
+  const modal = document.getElementById("modal-evolucao");
+  if (!modal) return;
+  const btnAbrir = document.getElementById("btn-abrir-evolucao");
+  const btnEntendi = document.getElementById("evolucao-entendi");
+  const btnX = document.getElementById("evolucao-fechar-x");
+  const userId = (btnEntendi && btnEntendi.getAttribute("data-evolucao-user")) || "0";
+
+  function chaveDia() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return "nio_evolucao_visto_" + userId + "_" + y + "-" + m + "-" + day;
+  }
+
+  function abrir() {
+    modal.hidden = false;
+    document.body.classList.add("evolucao-aberta");
+  }
+
+  function fechar(marcarDia) {
+    modal.hidden = true;
+    document.body.classList.remove("evolucao-aberta");
+    if (marcarDia) {
+      try { localStorage.setItem(chaveDia(), "1"); } catch (e) {}
+    }
+  }
+
+  function jaViuHoje() {
+    try { return localStorage.getItem(chaveDia()) === "1"; } catch (e) { return false; }
+  }
+
+  modal.querySelectorAll("[data-evolucao-tab]").forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      const id = tab.getAttribute("data-evolucao-tab");
+      modal.querySelectorAll("[data-evolucao-tab]").forEach(function (t) {
+        const on = t === tab;
+        t.classList.toggle("is-on", on);
+        t.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      modal.querySelectorAll("[data-evolucao-painel]").forEach(function (p) {
+        const on = p.getAttribute("data-evolucao-painel") === id;
+        p.classList.toggle("is-hidden", !on);
+        p.hidden = !on;
+      });
+    });
+  });
+
+  if (btnAbrir) btnAbrir.addEventListener("click", abrir);
+  if (btnEntendi) btnEntendi.addEventListener("click", function () { fechar(true); });
+  if (btnX) btnX.addEventListener("click", function () { fechar(true); });
+  modal.addEventListener("click", function (ev) {
+    if (ev.target === modal) fechar(true);
+  });
+
+  if (!jaViuHoje()) abrir();
 })();
 </script>
 {% endblock %}

@@ -1,0 +1,122 @@
+{% if evolucao %}
+<div class="modal-overlay evolucao-overlay" id="modal-evolucao" role="presentation" hidden>
+  <div class="modal evolucao-modal" role="dialog" aria-modal="true" aria-labelledby="evolucao-titulo">
+    <div class="modal-h evolucao-h">
+      <div>
+        <h2 id="evolucao-titulo">Evolução mensal dos tickets</h2>
+        <p class="help evolucao-sub">
+          Cancelados por duplicidade não entram nas contagens.
+          Atualizado em {{ evolucao.gerado_em|date:"d/m/Y H:i" }}.
+        </p>
+      </div>
+      <button type="button" class="icon-btn" id="evolucao-fechar-x" aria-label="Fechar">✕</button>
+    </div>
+
+    <div class="evolucao-tabs" role="tablist" aria-label="Escopo do relatório">
+      {% for key, visao in evolucao.visoes.items %}
+        <button type="button"
+                class="evolucao-tab{% if forloop.first %} is-on{% endif %}"
+                role="tab"
+                data-evolucao-tab="{{ visao.id }}"
+                aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">
+          {{ visao.titulo }}
+        </button>
+      {% endfor %}
+    </div>
+
+    {% for key, visao in evolucao.visoes.items %}
+    <section class="evolucao-painel{% if not forloop.first %} is-hidden{% endif %}"
+             data-evolucao-painel="{{ visao.id }}"
+             {% if forloop.first %}{% else %}hidden{% endif %}>
+      <p class="evolucao-escopo">{{ visao.subtitulo }}</p>
+
+      <div class="evolucao-kpis">
+        <div class="evolucao-kpi">
+          <span class="evolucao-kpi-l">Período</span>
+          <strong>{{ visao.dados.kpis.periodo }}</strong>
+        </div>
+        <div class="evolucao-kpi">
+          <span class="evolucao-kpi-l">Tickets em {{ visao.dados.kpis.mes_ultimo_label }}</span>
+          <strong>{{ visao.dados.kpis.tickets_ultimo_mes }}</strong>
+        </div>
+        <div class="evolucao-kpi">
+          <span class="evolucao-kpi-l">Variação vs mês anterior</span>
+          <strong>
+            {% if visao.dados.kpis.variacao_pct is None %}
+              —
+            {% else %}
+              {{ visao.dados.kpis.variacao_pct }}%
+            {% endif %}
+          </strong>
+        </div>
+        <div class="evolucao-kpi">
+          <span class="evolucao-kpi-l">Tipos distintos</span>
+          <strong>{{ visao.dados.kpis.tipos_distintos }}</strong>
+        </div>
+      </div>
+
+      {% if visao.dados.serie_total %}
+      <div class="evolucao-serie" aria-label="Total mensal">
+        {% for ponto in visao.dados.serie_total %}
+          <div class="evolucao-serie-item">
+            <span class="evolucao-serie-n">{{ ponto.total }}</span>
+            <span class="evolucao-serie-m">{{ ponto.mes_label }}</span>
+          </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="evolucao-grid">
+        <div class="evolucao-tabela-wrap">
+          <table class="table evolucao-tabela">
+            <thead>
+              <tr>
+                <th>Mês</th>
+                {% for col in visao.dados.tipos_cols %}
+                  <th title="{{ col.label }}">{{ col.label|truncatechars:18 }}</th>
+                {% endfor %}
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for linha in visao.dados.matriz %}
+              <tr>
+                <td>{{ linha.mes_label }}</td>
+                {% for cel in linha.celulas %}
+                  <td>{{ cel.n }}</td>
+                {% endfor %}
+                <td><strong>{{ linha.total }}</strong></td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="12">Sem tickets neste escopo.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="evolucao-ranking">
+          <h3>Top tipos — {{ visao.dados.kpis.mes_ultimo_label }}</h3>
+          <ol>
+            {% for item in visao.dados.ranking_ultimo %}
+              <li>
+                <span class="evolucao-rank-l">{{ item.label }}</span>
+                <span class="evolucao-rank-n">{{ item.n }}</span>
+              </li>
+            {% empty %}
+              <li class="help">Sem dados.</li>
+            {% endfor %}
+          </ol>
+        </div>
+      </div>
+    </section>
+    {% endfor %}
+
+    <div class="evolucao-acoes">
+      <button type="button" class="btn btn-primary" id="evolucao-entendi"
+              data-evolucao-user="{{ evolucao.usuario_id }}">
+        Entendi, fechar
+      </button>
+    </div>
+  </div>
+</div>
+{% endif %}
